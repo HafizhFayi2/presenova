@@ -1,0 +1,45 @@
+Options -Indexes -MultiViews
+DirectoryIndex index.php laravel.php
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+
+    # Handle Authorization Header
+    RewriteCond %{HTTP:Authorization} .
+    RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
+
+    # Handle X-XSRF-Token Header
+    RewriteCond %{HTTP:x-xsrf-token} .
+    RewriteRule .* - [E=HTTP_X_XSRF_TOKEN:%{HTTP:X-XSRF-Token}]
+
+    # Redirect trailing slash if not folder
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteCond %{REQUEST_URI} (.+)/$
+    RewriteRule ^ %1 [L,R=301]
+
+    # Existing files/folders are served directly (legacy scripts still work)
+    RewriteCond %{REQUEST_FILENAME} -f [OR]
+    RewriteCond %{REQUEST_FILENAME} -d
+    RewriteRule ^ - [L]
+
+    # Send non-file requests to Laravel front controller
+    RewriteRule ^ laravel.php [L]
+</IfModule>
+
+ErrorDocument 400 /presenova/404.php
+ErrorDocument 401 /presenova/404.php
+ErrorDocument 403 /presenova/404.php
+ErrorDocument 404 /presenova/404.php
+ErrorDocument 405 /presenova/404.php
+ErrorDocument 408 /presenova/404.php
+ErrorDocument 410 /presenova/404.php
+ErrorDocument 500 /presenova/404.php
+ErrorDocument 502 /presenova/404.php
+ErrorDocument 503 /presenova/404.php
+ErrorDocument 504 /presenova/404.php
+
+<IfModule php_module>
+    php_flag display_errors Off
+    php_flag display_startup_errors Off
+    php_value auto_prepend_file "C:/xampp/htdocs/presenova/public/includes/global_error_handler.php"
+</IfModule>

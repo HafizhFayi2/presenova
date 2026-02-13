@@ -1,33 +1,11 @@
-Options -Indexes -MultiViews
-DirectoryIndex index.php
+Options -Indexes
 
-<IfModule rewrite_module>
+<IfModule mod_rewrite.c>
     RewriteEngine On
-    RewriteBase /presenova/
 
-    # Existing files/directories are served normally
-    RewriteCond %{REQUEST_FILENAME} -f [OR]
-    RewriteCond %{REQUEST_FILENAME} -d
-    RewriteRule ^ - [L]
+    # Avoid rewrite loop when already inside /public.
+    RewriteRule ^public/ - [L]
 
-    # Unknown path is treated as 404
-    RewriteRule ^ - [R=404,L]
-</IfModule>
-
-ErrorDocument 400 /presenova/404.php
-ErrorDocument 401 /presenova/404.php
-ErrorDocument 403 /presenova/404.php
-ErrorDocument 404 /presenova/404.php
-ErrorDocument 405 /presenova/404.php
-ErrorDocument 408 /presenova/404.php
-ErrorDocument 410 /presenova/404.php
-ErrorDocument 500 /presenova/404.php
-ErrorDocument 502 /presenova/404.php
-ErrorDocument 503 /presenova/404.php
-ErrorDocument 504 /presenova/404.php
-
-<IfModule php_module>
-    php_flag display_errors Off
-    php_flag display_startup_errors Off
-    php_value auto_prepend_file "C:/xampp/htdocs/presenova/includes/global_error_handler.php"
+    # Forward all web requests to Laravel public directory.
+    RewriteRule ^(.*)$ public/$1 [L]
 </IfModule>
