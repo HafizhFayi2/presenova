@@ -1,0 +1,10 @@
+﻿{
+  "name": "presenova-webpush",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Web push sender for Presenova",
+  "main": "send.js",
+  "dependencies": {
+    "web-push": "^3.6.6"
+  }
+}

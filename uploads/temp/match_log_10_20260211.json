@@ -1,0 +1,42 @@
+[
+    {
+        "timestamp": "2026-02-11 10:14:02",
+        "student_id": 10,
+        "similarity": 92,
+        "passed": true,
+        "details": {
+            "lbph_similarity": 0,
+            "lbph_confidence": 123.32,
+            "lbph_base_confidence": 0,
+            "lbph_conf_ratio": 1,
+            "hist_similarity": 89.88,
+            "hist_corr": 0.7976,
+            "edge_similarity": 6.93,
+            "edge_corr": 0.0693,
+            "corr_similarity": 85.81,
+            "corr_value": 0.7162,
+            "hog_similarity": 89.49,
+            "hog_value": 0.8949,
+            "baseline_lbph": 100,
+            "baseline_hist": 76.3,
+            "baseline_edge": 84.83,
+            "baseline_corr": 99.89,
+            "baseline_hog": 99.58,
+            "baseline_quality": 89.86,
+            "variant_index": 0,
+            "lighting_diff": 4.78,
+            "aligned_ref": true,
+            "aligned_cand": true,
+            "quality": 83.79,
+            "quality_struct": 83.79,
+            "name_detected": true,
+            "min_lbph": 72.32,
+            "min_corr": 72.87,
+            "min_hist": 47.78,
+            "min_hog": 72.63,
+            "min_quality": 65.2,
+            "source": "python-lbph",
+            "threshold": 89
+        }
+    }
+]

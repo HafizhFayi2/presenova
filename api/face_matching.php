@@ -1,0 +1,93 @@
+﻿<?php
+// api/face_matching.php
+session_start();
+require_once '../includes/config.php';
+require_once '../includes/database.php';
+require_once '../includes/face_matcher.php';
+
+header('Content-Type: application/json');
+
+if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+    echo json_encode(['success' => false, 'message' => 'Method not allowed']);
+    exit;
+}
+
+if (!isset($_SESSION['student_id'])) {
+    echo json_encode(['success' => false, 'message' => 'Unauthorized']);
+    exit;
+}
+
+$captured_image = $_POST['captured_image'] ?? '';
+if (empty($captured_image)) {
+    echo json_encode(['success' => false, 'message' => 'Data tidak lengkap']);
+    exit;
+}
+
+$student_id = $_SESSION['student_id'];
+$student_nisn = $_SESSION['student_nisn'] ?? null;
+$student_name = $_SESSION['student_name'] ?? null;
+
+$db = new Database();
+if (!$student_nisn || !$student_name) {
+    $stmt = $db->query('SELECT student_nisn, student_name FROM student WHERE id = ?', [$student_id]);
+    $student = $stmt ? $stmt->fetch(PDO::FETCH_ASSOC) : null;
+    if ($student) {
+        $student_nisn = $student_nisn ?: $student['student_nisn'];
+        $student_name = $student_name ?: $student['student_name'];
+    }
+}
+
+if (!$student_nisn) {
+    echo json_encode(['success' => false, 'message' => 'NISN tidak ditemukan']);
+    exit;
+}
+
+$faceMatcher = new FaceMatcher();
+$referencePath = $faceMatcher->getReferencePath($student_nisn);
+if (!$referencePath) {
+    echo json_encode(['success' => false, 'message' => 'Foto referensi tidak ditemukan']);
+    exit;
+}
+
+$selfieResult = $faceMatcher->saveSelfie($student_id, $captured_image);
+if (empty($selfieResult['success'])) {
+    echo json_encode(['success' => false, 'message' => 'Gagal menyimpan foto']);
+    exit;
+}
+
+$label = $student_name ?: $student_nisn;
+$matchResult = $faceMatcher->matchFaces($referencePath, $selfieResult['path'], [
+    'label' => $label
+]);
+
+if (!empty($selfieResult['path']) && file_exists($selfieResult['path'])) {
+    unlink($selfieResult['path']);
+}
+
+if (empty($matchResult['success'])) {
+    echo json_encode([
+        'success' => false,
+        'message' => $matchResult['error'] ?? 'Gagal memproses wajah'
+    ]);
+    exit;
+}
+
+$similarity = $matchResult['similarity'] ?? 0;
+$passed = !empty($matchResult['passed']);
+
+$payload = [
+    'success' => true,
+    'passed' => $passed,
+    'similarity' => $similarity,
+    'threshold' => defined('FACE_MATCH_THRESHOLD') ? FACE_MATCH_THRESHOLD : 70,
+    'label' => $label,
+    'details' => $matchResult['details'] ?? []
+];
+
+if (!$passed) {
+    $payload['message'] = 'Verifikasi wajah belum lolos';
+} else {
+    $payload['message'] = 'Verifikasi wajah berhasil';
+}
+
+echo json_encode($payload);

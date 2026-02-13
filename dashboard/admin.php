@@ -1,0 +1,3628 @@
+<?php
+ob_start();
+error_reporting(E_ALL);
+ini_set('display_errors', 1);
+
+// Define base path
+define('BASE_PATH', dirname(__DIR__));
+
+try {
+    require_once BASE_PATH . '/includes/config.php';
+    require_once BASE_PATH . '/includes/auth.php';
+    require_once BASE_PATH . '/includes/database.php';
+    require_once BASE_PATH . '/helpers/jp_time_helper.php';
+    require_once BASE_PATH . '/includes/database_helper.php';
+} catch (Exception $e) {
+    die('Error loading configuration: ' . $e->getMessage());
+}
+
+$auth = new Auth();
+
+// Check if user is logged in
+if (!$auth->isLoggedIn()) {
+    header("Location: login.php");
+    exit();
+}
+
+// ROUTING BERDASARKAN ROLE
+// Jika siswa, redirect ke dashboard siswa
+if (isset($_SESSION['student_id'])) {
+    header("Location: dashboard/siswa.php");
+    exit();
+}
+
+// Jika guru, redirect ke dashboard guru
+if (isset($_SESSION['teacher_id'])) {
+    header("Location: dashboard/guru.php");
+    exit();
+}
+
+// Jika bukan admin, redirect ke login
+if (!isset($_SESSION['level']) || $_SESSION['level'] != 1) {
+    header("Location: login.php");
+    exit();
+}
+
+require_once '../includes/database.php';
+$db = new Database();
+
+// Handle actions
+$action = $_GET['action'] ?? '';
+$table = $_GET['table'] ?? 'dashboard';
+
+// Initialize variables
+$success = '';
+$error = '';
+
+if (!function_exists('getJpDurationMinutes')) {
+    function getJpDurationMinutes($jp) {
+        return ($jp == 5 || $jp == 9) ? 15 : 45;
+    }
+}
+
+if (!function_exists('getTimeToleranceMinutesFromSite')) {
+    function getTimeToleranceMinutesFromSite($db) {
+        try {
+            $row = $db->query("SELECT time_tolerance FROM site LIMIT 1")?->fetch();
+            $minutes = isset($row['time_tolerance']) ? (int) $row['time_tolerance'] : 0;
+            return max(0, $minutes);
+        } catch (Exception $e) {
+            return 0;
+        }
+    }
+}
+
+if (!function_exists('calculateJpTimeRange')) {
+    function calculateJpTimeRange($jp_start, $jp_end, $base_start = '07:00', $pre_minutes = 0, $tolerance_minutes = 0) {
+        $base = DateTime::createFromFormat('H:i', (string) $base_start);
+        if (!$base) {
+            $base = DateTime::createFromFormat('H:i:s', (string) $base_start);
+        }
+        if (!$base) {
+            return null;
+        }
+
+        $pre_minutes = max(0, intval($pre_minutes));
+        if ($pre_minutes > 0) {
+            $base->modify('+' . $pre_minutes . ' minutes');
+        }
+
+        $time_in_obj = clone $base;
+        $minutes_before = 0;
+        for ($jp = 1; $jp < $jp_start; $jp++) {
+            $minutes_before += getJpDurationMinutes($jp);
+        }
+        if ($minutes_before > 0) {
+            $time_in_obj->modify('+' . $minutes_before . ' minutes');
+        }
+
+        $duration_minutes = 0;
+        for ($jp = $jp_start; $jp <= $jp_end; $jp++) {
+            $duration_minutes += getJpDurationMinutes($jp);
+        }
+
+        $time_out_obj = clone $time_in_obj;
+        $time_out_obj->modify('+' . $duration_minutes . ' minutes');
+
+        $tolerance_minutes = max(0, (int) $tolerance_minutes);
+        if ($tolerance_minutes > 0) {
+            $time_out_obj->modify('+' . $tolerance_minutes . ' minutes');
+        }
+
+        return [
+            $time_in_obj->format('H:i:s'),
+            $time_out_obj->format('H:i:s')
+        ];
+    }
+}
+
+if (!function_exists('parseJpRangeFromShift')) {
+    function parseJpRangeFromShift($shift_name) {
+        if (preg_match('/JP(\d+)-JP(\d+)/i', $shift_name, $m)) {
+            return [intval($m[1]), intval($m[2])];
+        }
+        return null;
+    }
+}
+
+if (!function_exists('syncJpShiftTimes')) {
+    function syncJpShiftTimes($db, $shift_id, $shift_name, $base_start = '07:00', $pre_minutes = 0, $tolerance_minutes = 0) {
+        $range = parseJpRangeFromShift($shift_name);
+        if (!$range) return false;
+        [$jp_start, $jp_end] = $range;
+        $times = calculateJpTimeRange($jp_start, $jp_end, $base_start, $pre_minutes, $tolerance_minutes);
+        if (!$times) return false;
+
+        [$expected_in, $expected_out] = $times;
+        $shift_row = $db->query("SELECT time_in, time_out FROM shift WHERE shift_id = ?", [$shift_id])->fetch();
+        if (!$shift_row) return false;
+
+        if ($shift_row['time_in'] !== $expected_in || $shift_row['time_out'] !== $expected_out) {
+            $db->query("UPDATE shift SET time_in = ?, time_out = ? WHERE shift_id = ?", [$expected_in, $expected_out, $shift_id]);
+        }
+
+        return [$expected_in, $expected_out];
+    }
+}
+
+if (!function_exists('syncAllJpShiftTimes')) {
+    function syncAllJpShiftTimes($db, $base_start = '07:00', $pre_minutes = 0, $tolerance_minutes = 0) {
+        $shift_rows = $db->query("SELECT shift_id, shift_name, time_in, time_out FROM shift WHERE shift_name LIKE 'JP%-%'")?->fetchAll();
+        if (!$shift_rows) return;
+        foreach ($shift_rows as $row) {
+            syncJpShiftTimes($db, $row['shift_id'], $row['shift_name'], $base_start, $pre_minutes, $tolerance_minutes);
+        }
+    }
+}
+
+if (!function_exists('hasTeacherScheduleTriggers')) {
+    function hasTeacherScheduleTriggers($db) {
+        try {
+            $schema = defined('DB_NAME') ? DB_NAME : null;
+            if (!$schema) {
+                return false;
+            }
+            $stmt = $db->query(
+                "SELECT COUNT(*) as total
+                 FROM information_schema.TRIGGERS
+                 WHERE TRIGGER_SCHEMA = ?
+                 AND TRIGGER_NAME IN ('after_teacher_schedule_insert', 'after_teacher_schedule_update', 'before_teacher_schedule_delete')",
+                [$schema]
+            );
+            $row = $stmt ? $stmt->fetch() : null;
+            return !empty($row['total']);
+        } catch (Exception $e) {
+            return false;
+        }
+    }
+}
+
+// Handle form submissions
+if ($_SERVER['REQUEST_METHOD'] == 'POST') {
+    if ($table === 'student' && $action === 'delete') {
+        $studentId = isset($_POST['delete_student_id']) ? (int)$_POST['delete_student_id'] : 0;
+        $reason = trim((string)($_POST['delete_reason'] ?? ''));
+
+        if ($studentId <= 0) {
+            $error = "ID siswa tidak valid.";
+            header("Location: admin.php?table=student&error=" . urlencode($error));
+            exit();
+        }
+        if ($reason === '') {
+            $error = "Alasan penghapusan wajib diisi.";
+            header("Location: admin.php?table=student&error=" . urlencode($error));
+            exit();
+        }
+
+        $backupResult = backupStudentData($db, $studentId, $reason);
+        if (empty($backupResult['success'])) {
+            $error = $backupResult['error'] ?? 'Gagal melakukan backup data siswa.';
+            header("Location: admin.php?table=student&error=" . urlencode($error));
+            exit();
+        }
+
+        $db->beginTransaction();
+        $ok = true;
+        $ok = $ok && $db->query("DELETE FROM presence WHERE student_id = ?", [$studentId]);
+        $ok = $ok && $db->query("DELETE FROM student_schedule WHERE student_id = ?", [$studentId]);
+        $ok = $ok && $db->query("DELETE FROM activity_logs WHERE user_type = 'student' AND user_id = ?", [$studentId]);
+        $ok = $ok && $db->query("DELETE FROM student WHERE id = ?", [$studentId]);
+
+        if ($ok) {
+            $db->commit();
+        } else {
+            $db->rollBack();
+            $error = "Gagal menghapus data siswa.";
+            header("Location: admin.php?table=student&error=" . urlencode($error));
+            exit();
+        }
+
+        resetAutoIncrementIfEmpty($db, ['presence', 'student_schedule', 'activity_logs', 'student'], 0);
+
+        $filesToDelete = array_merge(
+            $backupResult['copied_references'] ?? [],
+            $backupResult['copied_attendance'] ?? [],
+            $backupResult['match_log_files'] ?? []
+        );
+        $filesToDelete = array_unique($filesToDelete);
+        foreach ($filesToDelete as $filePath) {
+            if ($filePath && is_file($filePath)) {
+                @unlink($filePath);
+            }
+        }
+
+        $success = "Siswa berhasil dihapus dan backup tersimpan.";
+        header("Location: admin.php?table=student&success=" . urlencode($success));
+        exit();
+    }
+
+    // Handle shift JP creation (from schedule section)
+    if (isset($_POST['shift_action'])) {
+        $jp_start = isset($_POST['jp_start']) ? intval($_POST['jp_start']) : 0;
+        $jp_end = isset($_POST['jp_end']) ? intval($_POST['jp_end']) : 0;
+        $jp_start_time = $_POST['jp_start_time'] ?? '07:00';
+
+        if ($jp_start < 1 || $jp_start > 12 || $jp_end < 1 || $jp_end > 12 || $jp_end < $jp_start) {
+            $error = "Rentang JP tidak valid.";
+            header("Location: admin.php?table=schedule&error=" . urlencode($error));
+            exit();
+        }
+
+        if (in_array($jp_start, [5, 9], true) || in_array($jp_end, [5, 9], true)) {
+            $error = "JP5 dan JP9 adalah jam istirahat, tidak dapat dipilih.";
+            header("Location: admin.php?table=schedule&error=" . urlencode($error));
+            exit();
+        }
+
+        $time_obj = DateTime::createFromFormat('H:i', $jp_start_time);
+        if (!$time_obj) {
+            $error = "Format jam mulai JP1 tidak valid.";
+            header("Location: admin.php?table=schedule&error=" . urlencode($error));
+            exit();
+        }
+
+        $tolerance_minutes = getTimeToleranceMinutesFromSite($db);
+        $time_range = calculateJpTimeRange($jp_start, $jp_end, $jp_start_time, 0, $tolerance_minutes);
+        if (!$time_range) {
+            $error = "Format jam mulai JP1 tidak valid.";
+            header("Location: admin.php?table=schedule&error=" . urlencode($error));
+            exit();
+        }
+        [$time_in, $time_out] = $time_range;
+
+        $shift_name = "JP{$jp_start}-JP{$jp_end}";
+
+        // Cek duplikasi shift
+        $check_shift = $db->query("SELECT COUNT(*) as total FROM shift WHERE shift_name = ?", [$shift_name])->fetch();
+        if (!empty($check_shift['total'])) {
+            $error = "Shift {$shift_name} sudah ada.";
+            header("Location: admin.php?table=schedule&error=" . urlencode($error));
+            exit();
+        }
+
+        $sql = "INSERT INTO shift (shift_name, time_in, time_out) VALUES (?, ?, ?)";
+        $stmt = $db->query($sql, [$shift_name, $time_in, $time_out]);
+
+        if ($stmt) {
+            $success = "Shift {$shift_name} berhasil ditambahkan!";
+            header("Location: admin.php?table=schedule&success=" . urlencode($success));
+        } else {
+            $error = "Gagal menambahkan shift.";
+            header("Location: admin.php?table=schedule&error=" . urlencode($error));
+        }
+        exit();
+    }
+
+    if (!empty($_POST['config_action']) && $_POST['config_action'] === 'day_schedule') {
+        $configs = $_POST['day_config'] ?? [];
+        if (!is_array($configs)) {
+            $error = "Data pengaturan jadwal tidak valid.";
+            header("Location: admin.php?table=schedule&error=" . urlencode($error));
+            exit();
+        }
+
+        foreach ($configs as $dayId => $config) {
+            $dayId = (int) $dayId;
+            if ($dayId <= 0) {
+                continue;
+            }
+
+            $schoolStart = trim((string)($config['school_start_time'] ?? ''));
+            if ($schoolStart === '') {
+                $schoolStart = '06:30';
+            }
+            $timeObj = DateTime::createFromFormat('H:i', $schoolStart);
+            if (!$timeObj) {
+                $timeObj = DateTime::createFromFormat('H:i:s', $schoolStart);
+            }
+            if (!$timeObj) {
+                $error = "Format jam masuk sekolah tidak valid untuk hari ID {$dayId}.";
+                header("Location: admin.php?table=schedule&error=" . urlencode($error));
+                exit();
+            }
+
+            $activity1Label = trim((string)($config['activity1_label'] ?? ''));
+            $activity2Label = trim((string)($config['activity2_label'] ?? ''));
+            $activity1Minutes = max(0, (int)($config['activity1_minutes'] ?? 0));
+            $activity2Minutes = max(0, (int)($config['activity2_minutes'] ?? 0));
+            $activity1Label = $activity1Label === '' ? null : $activity1Label;
+            $activity2Label = $activity2Label === '' ? null : $activity2Label;
+
+            $db->query(
+                "INSERT INTO day_schedule_config (day_id, school_start_time, activity1_label, activity1_minutes, activity2_label, activity2_minutes)
+                 VALUES (?, ?, ?, ?, ?, ?)
+                 ON DUPLICATE KEY UPDATE school_start_time = VALUES(school_start_time),
+                                         activity1_label = VALUES(activity1_label),
+                                         activity1_minutes = VALUES(activity1_minutes),
+                                         activity2_label = VALUES(activity2_label),
+                                         activity2_minutes = VALUES(activity2_minutes)",
+                [
+                    $dayId,
+                    $timeObj->format('H:i:s'),
+                    $activity1Label,
+                    $activity1Minutes,
+                    $activity2Label,
+                    $activity2Minutes
+                ]
+            );
+        }
+
+        // Recalculate future student schedules based on updated config
+        $affectedDays = array_keys($configs);
+        foreach ($affectedDays as $dayId) {
+            recalculateStudentSchedulesForDay($db, (int)$dayId);
+        }
+
+        $success = "Pengaturan jam absensi berhasil diperbarui.";
+        header("Location: admin.php?table=schedule&success=" . urlencode($success));
+        exit();
+    }
+
+    switch ($table) {
+        case 'student':
+            $student_id = $_POST['student_id'] ?? 0;
+            $student_code = $_POST['student_code'];
+            $student_nisn = $_POST['student_nisn'];
+            $student_name = $_POST['student_name'];
+            $class_id = $_POST['class_id'];
+            $jurusan_id = $_POST['jurusan_id'];
+            $password_input = $_POST['password'] ?? '';
+            
+            // Gunakan password input jika ada, jika tidak gunakan NISN
+            $password_to_use = !empty($password_input) ? $password_input : $student_nisn;
+            $password = hash('sha256', $password_to_use . PASSWORD_SALT);
+            
+            if ($student_id == 0) {
+                $sql = "INSERT INTO student (student_code, student_nisn, student_password, student_name, class_id, jurusan_id, location_id) 
+                        VALUES (?, ?, ?, ?, ?, ?, 1)";
+                $stmt = $db->query($sql, [$student_code, $student_nisn, $password, $student_name, $class_id, $jurusan_id]);
+                $success = "Siswa berhasil ditambahkan! Password: " . $password_to_use;
+            } else {
+                // Untuk edit, periksa apakah password diisi
+                if (!empty($password_input)) {
+                    $sql = "UPDATE student SET student_code = ?, student_nisn = ?, student_password = ?, student_name = ?, class_id = ?, jurusan_id = ? WHERE id = ?";
+                    $stmt = $db->query($sql, [$student_code, $student_nisn, $password, $student_name, $class_id, $jurusan_id, $student_id]);
+                    $success = "Siswa berhasil diperbarui! Password diubah";
+                } else {
+                    $sql = "UPDATE student SET student_code = ?, student_nisn = ?, student_name = ?, class_id = ?, jurusan_id = ? WHERE id = ?";
+                    $stmt = $db->query($sql, [$student_code, $student_nisn, $student_name, $class_id, $jurusan_id, $student_id]);
+                    $success = "Siswa berhasil diperbarui!";
+                }
+            }
+            header("Location: admin.php?table=student&success=" . urlencode($success));
+            exit();
+            break;
+
+        case 'teacher':
+            $teacher_id = $_POST['teacher_id'] ?? 0;
+            $teacher_code = $_POST['teacher_code'];
+            $teacher_name = $_POST['teacher_name'];
+            $subject = $_POST['subject'];
+            $teacher_type = $_POST['teacher_type'];
+            $password_input = $_POST['password'] ?? '';
+            
+            if ($teacher_id == 0) {
+                $username = strtolower(str_replace(' ', '.', $teacher_name));
+                // Gunakan password input jika ada, jika tidak gunakan 'guru123'
+                $password_to_use = !empty($password_input) ? $password_input : 'guru123';
+                $password = hash('sha256', $password_to_use . PASSWORD_SALT);
+                
+                $sql = "INSERT INTO teacher (teacher_code, teacher_username, teacher_password, teacher_name, subject, teacher_type, location_id) 
+                        VALUES (?, ?, ?, ?, ?, ?, 1)";
+                $stmt = $db->query($sql, [$teacher_code, $username, $password, $teacher_name, $subject, $teacher_type]);
+                $success = "Guru berhasil ditambahkan! Username: $username, Password: $password_to_use";
+            } else {
+                // Untuk edit, periksa apakah password diisi
+                if (!empty($password_input)) {
+                    $password = hash('sha256', $password_input . PASSWORD_SALT);
+                    $sql = "UPDATE teacher SET teacher_code = ?, teacher_name = ?, subject = ?, teacher_type = ?, teacher_password = ? WHERE id = ?";
+                    $stmt = $db->query($sql, [$teacher_code, $teacher_name, $subject, $teacher_type, $password, $teacher_id]);
+                    $success = "Guru berhasil diperbarui! Password diubah";
+                } else {
+                    $sql = "UPDATE teacher SET teacher_code = ?, teacher_name = ?, subject = ?, teacher_type = ? WHERE id = ?";
+                    $stmt = $db->query($sql, [$teacher_code, $teacher_name, $subject, $teacher_type, $teacher_id]);
+                    $success = "Guru berhasil diperbarui!";
+                }
+            }
+            header("Location: admin.php?table=teacher&success=" . urlencode($success));
+            exit();
+            break;
+            
+        case 'class':
+            if (isset($_POST['edit_jurusan_id'])) {
+                $jurusan_id = intval($_POST['edit_jurusan_id']);
+                $code = strtoupper(trim($_POST['edit_code'] ?? ''));
+                $name = trim($_POST['edit_name'] ?? '');
+
+                if ($jurusan_id <= 0 || $code === '' || $name === '') {
+                    $error = "Kode dan nama jurusan harus diisi!";
+                    header("Location: admin.php?table=class&error=" . urlencode($error));
+                    exit();
+                }
+
+                $check_sql = "SELECT COUNT(*) as total FROM jurusan WHERE code = ? AND jurusan_id != ?";
+                $check_stmt = $db->query($check_sql, [$code, $jurusan_id]);
+                $result = $check_stmt ? $check_stmt->fetch() : ['total' => 0];
+                if (!empty($result['total'])) {
+                    $error = "Kode jurusan '$code' sudah digunakan!";
+                    header("Location: admin.php?table=class&error=" . urlencode($error));
+                    exit();
+                }
+
+                $sql = "UPDATE jurusan SET code = ?, name = ? WHERE jurusan_id = ?";
+                $stmt = $db->query($sql, [$code, $name, $jurusan_id]);
+                if ($stmt) {
+                    $success = "Jurusan berhasil diperbarui!";
+                } else {
+                    $error = "Gagal memperbarui jurusan!";
+                }
+            } elseif (isset($_POST['class_id'])) {
+                $class_id = intval($_POST['class_id']);
+                $class_name = trim($_POST['class_name'] ?? '');
+                $jurusan_id = intval($_POST['jurusan_id'] ?? 0);
+
+                if ($class_name === '' || $jurusan_id <= 0) {
+                    $error = "Nama kelas dan jurusan harus diisi!";
+                    header("Location: admin.php?table=class&error=" . urlencode($error));
+                    exit();
+                }
+
+                $check_sql = "SELECT COUNT(*) as total FROM class WHERE class_name = ? AND class_id != ?";
+                $check_stmt = $db->query($check_sql, [$class_name, $class_id]);
+                $result = $check_stmt ? $check_stmt->fetch() : ['total' => 0];
+                if (!empty($result['total'])) {
+                    $error = "Nama kelas '$class_name' sudah ada!";
+                    header("Location: admin.php?table=class&error=" . urlencode($error));
+                    exit();
+                }
+
+                if ($class_id == 0) {
+                    $sql = "INSERT INTO class (class_name, jurusan_id) VALUES (?, ?)";
+                    $stmt = $db->query($sql, [$class_name, $jurusan_id]);
+                    $success = $stmt ? "Kelas berhasil ditambahkan!" : "Gagal menambahkan kelas!";
+                } else {
+                    $sql = "UPDATE class SET class_name = ?, jurusan_id = ? WHERE class_id = ?";
+                    $stmt = $db->query($sql, [$class_name, $jurusan_id, $class_id]);
+                    $success = $stmt ? "Kelas berhasil diperbarui!" : "Gagal memperbarui kelas!";
+                }
+            } elseif (isset($_POST['code']) && isset($_POST['name'])) {
+                $code = strtoupper(trim($_POST['code'] ?? ''));
+                $name = trim($_POST['name'] ?? '');
+
+                if ($code === '' || $name === '') {
+                    $error = "Kode dan nama jurusan harus diisi!";
+                    header("Location: admin.php?table=class&error=" . urlencode($error));
+                    exit();
+                }
+
+                $check_sql = "SELECT COUNT(*) as total FROM jurusan WHERE code = ?";
+                $check_stmt = $db->query($check_sql, [$code]);
+                $result = $check_stmt ? $check_stmt->fetch() : ['total' => 0];
+                if (!empty($result['total'])) {
+                    $error = "Kode jurusan '$code' sudah ada!";
+                    header("Location: admin.php?table=class&error=" . urlencode($error));
+                    exit();
+                }
+
+                $sql = "INSERT INTO jurusan (code, name) VALUES (?, ?)";
+                $stmt = $db->query($sql, [$code, $name]);
+                if ($stmt) {
+                    $success = "Jurusan berhasil ditambahkan!";
+                } else {
+                    $error = "Gagal menambahkan jurusan!";
+                }
+            } else {
+                $error = "Permintaan tidak valid.";
+                header("Location: admin.php?table=class&error=" . urlencode($error));
+                exit();
+            }
+
+            header("Location: admin.php?table=class&" . (isset($success) ? "success=" . urlencode($success) : "error=" . urlencode($error)));
+            exit();
+            break;
+            
+        // Di bagian POST schedule, tambahkan kode untuk membuat jadwal siswa
+        case 'schedule':
+            $schedule_id = $_POST['schedule_id'] ?? 0;
+            $teacher_id = $_POST['teacher_id'];
+            $class_id = $_POST['class_id'];
+            $subject = $_POST['subject'];
+            $day_id = $_POST['day_id'];
+            $jp_start = isset($_POST['jp_start']) ? intval($_POST['jp_start']) : 0;
+            $jp_end = isset($_POST['jp_end']) ? intval($_POST['jp_end']) : 0;
+            $shift_id = $_POST['shift_id'] ?? 0;
+
+            if (in_array($jp_start, [5, 9], true) || in_array($jp_end, [5, 9], true)) {
+                $error = "JP5 dan JP9 adalah jam istirahat, tidak dapat dipilih.";
+                header("Location: admin.php?table=schedule&error=" . urlencode($error));
+                exit();
+            }
+
+            if ($jp_start > 0 && $jp_end > 0) {
+                $shift_name = "JP{$jp_start}-JP{$jp_end}";
+                $shift_row = $db->query("SELECT shift_id, time_in, time_out FROM shift WHERE shift_name = ?", [$shift_name])->fetch();
+
+            if ($shift_row) {
+                $shift_id = $shift_row['shift_id'];
+        $defaultDayId = getDefaultDayId($db);
+        $defaultConfig = getDayScheduleConfig($db, $defaultDayId);
+        $tolerance_minutes = getTimeToleranceMinutesFromSite($db);
+        syncJpShiftTimes($db, $shift_id, $shift_name, $defaultConfig['school_start_time'], $defaultConfig['pre_minutes'], $tolerance_minutes);
+            } else {
+                $defaultDayId = getDefaultDayId($db);
+                $defaultConfig = getDayScheduleConfig($db, $defaultDayId);
+                $tolerance_minutes = getTimeToleranceMinutesFromSite($db);
+                $time_range = calculateJpTimeRange($jp_start, $jp_end, $defaultConfig['school_start_time'], $defaultConfig['pre_minutes'], $tolerance_minutes);
+                    if (!$time_range) {
+                        $error = "Format jam mulai JP1 tidak valid.";
+                        header("Location: admin.php?table=schedule&error=" . urlencode($error));
+                        exit();
+                    }
+                    [$time_in, $time_out] = $time_range;
+
+                    $db->query(
+                        "INSERT INTO shift (shift_name, time_in, time_out) VALUES (?, ?, ?)",
+                        [$shift_name, $time_in, $time_out]
+                    );
+                    $shift_id = $db->lastInsertId();
+                }
+            }
+            
+            // Check conflict
+            $conflict_sql = "SELECT COUNT(*) as total FROM teacher_schedule 
+                            WHERE teacher_id = ? AND day_id = ? AND shift_id = ? AND schedule_id != ?";
+    $conflict_stmt = $db->query($conflict_sql, [$teacher_id, $day_id, $shift_id, $schedule_id]);
+    $conflict = $conflict_stmt->fetch();
+    
+    if ($conflict['total'] > 0) {
+        $error = "Guru sudah memiliki jadwal di hari dan shift yang sama!";
+    } else {
+        if ($schedule_id == 0) {
+            // Insert new schedule
+            $sql = "INSERT INTO teacher_schedule (teacher_id, class_id, subject, day_id, shift_id) 
+                    VALUES (?, ?, ?, ?, ?)";
+            $stmt = $db->query($sql, [$teacher_id, $class_id, $subject, $day_id, $shift_id]);
+            
+            if ($stmt) {
+                $new_schedule_id = $db->lastInsertId();
+                $success = "Jadwal berhasil ditambahkan!";
+                
+                // Generate student schedules (skip if DB triggers already handle it)
+                if (!hasTeacherScheduleTriggers($db)) {
+                    generateStudentSchedules($new_schedule_id, $db);
+                }
+            } else {
+                $error = "Gagal menambahkan jadwal!";
+            }
+        } else {
+            $sql = "UPDATE teacher_schedule SET teacher_id = ?, class_id = ?, subject = ?, day_id = ?, shift_id = ? 
+                    WHERE schedule_id = ?";
+            $stmt = $db->query($sql, [$teacher_id, $class_id, $subject, $day_id, $shift_id, $schedule_id]);
+            $success = "Jadwal berhasil diperbarui!";
+            
+            // Update student schedules
+            updateStudentSchedules($schedule_id, $db);
+        }
+    }
+    
+    if (isset($success) && $success) {
+        header("Location: admin.php?table=schedule&success=" . urlencode($success));
+    } else {
+        header("Location: admin.php?table=schedule&error=" . urlencode($error ?? "Terjadi kesalahan"));
+    }
+    exit();
+    break;
+    }
+}
+
+// Sync JP shifts on schedule page load
+if ($_SERVER['REQUEST_METHOD'] === 'GET' && $table === 'schedule') {
+    $defaultDayId = getDefaultDayId($db);
+    $defaultConfig = getDayScheduleConfig($db, $defaultDayId);
+    $tolerance_minutes = getTimeToleranceMinutesFromSite($db);
+    syncAllJpShiftTimes($db, $defaultConfig['school_start_time'], $defaultConfig['pre_minutes'], $tolerance_minutes);
+    $dbHelper = new DatabaseHelper($db);
+    $dbHelper->ensureStudentSchedulesForAll(6);
+}
+
+// Fungsi untuk generate jadwal siswa
+function generateStudentSchedules($teacher_schedule_id, $db) {
+    // Get schedule details
+    $schedule_sql = "SELECT ts.*, sh.shift_name, sh.time_in, sh.time_out 
+                     FROM teacher_schedule ts
+                     LEFT JOIN shift sh ON ts.shift_id = sh.shift_id
+                     WHERE ts.schedule_id = ?";
+    $schedule = $db->query($schedule_sql, [$teacher_schedule_id])->fetch();
+    
+    if (!$schedule) return false;
+    
+    // Get students in the class
+    $students_sql = "SELECT id FROM student WHERE class_id = ?";
+    $students = $db->query($students_sql, [$schedule['class_id']])->fetchAll();
+    
+    $tz = new DateTimeZone('Asia/Jakarta');
+    $today = new DateTime('today', $tz);
+    $endDate = (clone $today)->modify('+6 months');
+    $dayId = (int) $schedule['day_id'];
+    if ($dayId <= 0) {
+        return false;
+    }
+    $startDow = (int) $today->format('N');
+    $diff = ($dayId - $startDow + 7) % 7;
+    $schedule_date = (clone $today)->modify('+' . $diff . ' days');
+
+    $computedTimes = calculateJpTimeRangeFromShiftForDay($db, $schedule['shift_name'] ?? '', $schedule['day_id']);
+    $timeIn = $computedTimes[0] ?? $schedule['time_in'];
+    $timeOut = $computedTimes[1] ?? $schedule['time_out'];
+
+    for ($date = $schedule_date; $date <= $endDate; $date->modify('+7 days')) {
+        $schedule_date = $date->format('Y-m-d');
+
+        foreach ($students as $student) {
+            $check_sql = "SELECT COUNT(*) as count FROM student_schedule 
+                          WHERE student_id = ? 
+                          AND teacher_schedule_id = ? 
+                          AND schedule_date = ?";
+            $check = $db->query($check_sql, [$student['id'], $teacher_schedule_id, $schedule_date])->fetch();
+
+            if ($check['count'] == 0) {
+                $insert_sql = "INSERT INTO student_schedule 
+                              (student_id, teacher_schedule_id, schedule_date, time_in, time_out, status) 
+                              VALUES (?, ?, ?, ?, ?, 'ACTIVE')";
+                $db->query($insert_sql, [
+                    $student['id'],
+                    $teacher_schedule_id,
+                    $schedule_date,
+                    $timeIn,
+                    $timeOut
+                ]);
+            }
+        }
+    }
+    
+    return true;
+}
+
+// Fungsi untuk update jadwal siswa
+function updateStudentSchedules($teacher_schedule_id, $db) {
+    // Get updated schedule details
+    $schedule_sql = "SELECT ts.*, sh.shift_name, sh.time_in, sh.time_out 
+                     FROM teacher_schedule ts
+                     LEFT JOIN shift sh ON ts.shift_id = sh.shift_id
+                     WHERE ts.schedule_id = ?";
+    $schedule = $db->query($schedule_sql, [$teacher_schedule_id])->fetch();
+    
+    if (!$schedule) return false;
+    
+    $computedTimes = calculateJpTimeRangeFromShiftForDay($db, $schedule['shift_name'] ?? '', $schedule['day_id']);
+    $timeIn = $computedTimes[0] ?? $schedule['time_in'];
+    $timeOut = $computedTimes[1] ?? $schedule['time_out'];
+
+    // Update future student schedules
+    $today = date('Y-m-d');
+    $update_sql = "UPDATE student_schedule 
+                   SET time_in = ?, time_out = ?
+                   WHERE teacher_schedule_id = ? 
+                   AND schedule_date >= ?
+                   AND status = 'ACTIVE'";
+    
+    $db->query($update_sql, [
+        $timeIn,
+        $timeOut,
+        $teacher_schedule_id,
+        $today
+    ]);
+    
+    return true;
+}
+
+function recalculateStudentSchedulesForDay($db, $day_id) {
+    $day_id = (int) $day_id;
+    if ($day_id <= 0) {
+        return false;
+    }
+
+    $rows = $db->query(
+        "SELECT ts.schedule_id, ts.day_id, sh.shift_name, sh.time_in, sh.time_out
+         FROM teacher_schedule ts
+         JOIN shift sh ON ts.shift_id = sh.shift_id
+         WHERE ts.day_id = ?",
+        [$day_id]
+    )?->fetchAll();
+
+    if (!$rows) return false;
+
+    foreach ($rows as $row) {
+        $computedTimes = calculateJpTimeRangeFromShiftForDay($db, $row['shift_name'] ?? '', $row['day_id']);
+        $timeIn = $computedTimes[0] ?? $row['time_in'];
+        $timeOut = $computedTimes[1] ?? $row['time_out'];
+        $db->query(
+            "UPDATE student_schedule
+             SET time_in = ?, time_out = ?
+             WHERE teacher_schedule_id = ?
+             AND schedule_date >= CURDATE()
+             AND status = 'ACTIVE'",
+            [$timeIn, $timeOut, $row['schedule_id']]
+        );
+    }
+
+    return true;
+}
+
+function sanitizeBackupPart($value) {
+    $value = trim((string) $value);
+    $value = preg_replace('/[^A-Za-z0-9]+/', '_', $value);
+    $value = trim($value, '_');
+    return $value;
+}
+
+function ensureDirectory($path) {
+    if (is_dir($path)) {
+        return true;
+    }
+    return mkdir($path, 0777, true);
+}
+
+function writeTextFile($path, $content) {
+    if (is_array($content)) {
+        $content = implode(PHP_EOL, array_map('strval', $content));
+    }
+    return file_put_contents($path, (string)$content);
+}
+
+function writeCsvFile($path, $rows, $headers = null) {
+    $fp = fopen($path, 'w');
+    if (!$fp) {
+        return false;
+    }
+    fwrite($fp, "\xEF\xBB\xBF");
+
+    if ($headers === null && is_array($rows) && !empty($rows)) {
+        $first = reset($rows);
+        if (is_array($first)) {
+            $headers = array_keys($first);
+        }
+    }
+    if ($headers && is_array($headers)) {
+        fputcsv($fp, $headers);
+    }
+
+    if (is_array($rows)) {
+        foreach ($rows as $row) {
+            if (is_array($row)) {
+                if ($headers) {
+                    $line = [];
+                    foreach ($headers as $header) {
+                        $line[] = $row[$header] ?? '';
+                    }
+                    fputcsv($fp, $line);
+                } else {
+                    fputcsv($fp, $row);
+                }
+            } else {
+                fputcsv($fp, [$row]);
+            }
+        }
+    }
+
+    fclose($fp);
+    return true;
+}
+
+function resolveAttendanceFile($basePath, $date, $filename) {
+    if (!$filename) return null;
+    $filename = ltrim($filename, '/\\');
+    if (strpos($filename, '/') !== false || strpos($filename, '\\') !== false) {
+        $candidate = rtrim($basePath, '/\\') . DIRECTORY_SEPARATOR . $filename;
+        if (is_file($candidate)) {
+            return $candidate;
+        }
+    }
+    if ($date) {
+        $candidate = rtrim($basePath, '/\\') . DIRECTORY_SEPARATOR . 'uploads' . DIRECTORY_SEPARATOR . 'attendance' . DIRECTORY_SEPARATOR . $date . DIRECTORY_SEPARATOR . $filename;
+        if (is_file($candidate)) {
+            return $candidate;
+        }
+    }
+    $candidate = rtrim($basePath, '/\\') . DIRECTORY_SEPARATOR . 'uploads' . DIRECTORY_SEPARATOR . 'attendance' . DIRECTORY_SEPARATOR . $filename;
+    if (is_file($candidate)) {
+        return $candidate;
+    }
+    return null;
+}
+
+function copyFilesUnique($files, $destDir) {
+    $copied = [];
+    if (!ensureDirectory($destDir)) {
+        return $copied;
+    }
+    foreach ($files as $file) {
+        if (!$file || !is_file($file)) continue;
+        $real = realpath($file) ?: $file;
+        if (isset($copied[$real])) continue;
+        $destPath = rtrim($destDir, '/\\') . DIRECTORY_SEPARATOR . basename($file);
+        if (@copy($file, $destPath)) {
+            $copied[$real] = $destPath;
+        }
+    }
+    return $copied;
+}
+
+function resetAutoIncrementIfEmpty($db, $tableNames, $nextValue = 0) {
+    $tables = is_array($tableNames) ? $tableNames : [$tableNames];
+
+    foreach ($tables as $tableName) {
+        $tableName = trim((string) $tableName);
+        if ($tableName === '' || !preg_match('/^[A-Za-z0-9_]+$/', $tableName)) {
+            continue;
+        }
+
+        $statusStmt = $db->query("SHOW TABLE STATUS LIKE '{$tableName}'");
+        $statusRow = $statusStmt ? $statusStmt->fetch() : null;
+        if (!$statusRow || $statusRow['Auto_increment'] === null) {
+            continue;
+        }
+
+        $rowStmt = $db->query("SELECT COUNT(*) as total FROM `{$tableName}`");
+        $row = $rowStmt ? $rowStmt->fetch() : null;
+        $total = (int) ($row['total'] ?? 0);
+
+        if ($total === 0) {
+            $next = (int) $nextValue;
+            if ($next < 0) {
+                $next = 0;
+            }
+            $db->query("ALTER TABLE `{$tableName}` AUTO_INCREMENT = {$next}");
+        }
+    }
+}
+
+function backupStudentData($db, $studentId, $reason) {
+    $studentStmt = $db->query("SELECT * FROM student WHERE id = ?", [$studentId]);
+    $student = $studentStmt ? $studentStmt->fetch() : null;
+    if (!$student) {
+        return ['success' => false, 'error' => 'Data siswa tidak ditemukan.'];
+    }
+
+    $nisn = trim((string)($student['student_nisn'] ?? ''));
+    $name = trim((string)($student['student_name'] ?? ''));
+    $safeNisn = sanitizeBackupPart($nisn ?: ('id_' . $studentId));
+    $safeName = sanitizeBackupPart($name);
+    $folderName = $safeNisn . ($safeName ? '_' . $safeName : '');
+
+    $backupRoot = BASE_PATH . '/uploads/temp/junk-capture-student';
+    if (!ensureDirectory($backupRoot)) {
+        return ['success' => false, 'error' => 'Gagal membuat folder backup.'];
+    }
+
+    $backupDir = rtrim($backupRoot, '/\\') . DIRECTORY_SEPARATOR . $folderName;
+    if (is_dir($backupDir)) {
+        $backupDir .= '_' . date('Ymd_His');
+    }
+    if (!ensureDirectory($backupDir)) {
+        return ['success' => false, 'error' => 'Gagal membuat folder backup siswa.'];
+    }
+
+    $logsDir = $backupDir . DIRECTORY_SEPARATOR . 'logs';
+    $attendanceDir = $backupDir . DIRECTORY_SEPARATOR . 'attendance';
+    $attendancePhotosDir = $attendanceDir . DIRECTORY_SEPARATOR . 'photos';
+    $referencesDir = $backupDir . DIRECTORY_SEPARATOR . 'references';
+    $dataDir = $backupDir . DIRECTORY_SEPARATOR . 'data';
+
+    ensureDirectory($logsDir);
+    ensureDirectory($attendanceDir);
+    ensureDirectory($attendancePhotosDir);
+    ensureDirectory($referencesDir);
+    ensureDirectory($dataDir);
+
+    $readmeLines = [
+        'Backup Data Siswa',
+        '=================',
+        'Folder ini berisi arsip data siswa yang dihapus.',
+        'Semua file disimpan dalam format TXT/CSV agar mudah dibuka.',
+        '',
+        'Isi folder:',
+        '- data/student.txt',
+        '- data/student_schedule.csv',
+        '- attendance/presence_records.csv',
+        '- attendance/summary.txt',
+        '- logs/activity_logs.csv',
+        '- logs/attendance_log.csv',
+        '- logs/match_logs.csv',
+        '- references/* (foto referensi)',
+        '- attendance/photos/* (foto absensi & validation card)'
+    ];
+    writeTextFile($backupDir . DIRECTORY_SEPARATOR . 'README.txt', $readmeLines);
+
+    // Activity logs
+    $activityLogsStmt = $db->query(
+        "SELECT * FROM activity_logs WHERE user_type = 'student' AND user_id = ? ORDER BY created_at DESC",
+        [$studentId]
+    );
+    $activityLogs = $activityLogsStmt ? $activityLogsStmt->fetchAll() : [];
+    writeCsvFile($logsDir . DIRECTORY_SEPARATOR . 'activity_logs.csv', $activityLogs);
+
+    // Presence records
+    $presenceStmt = $db->query(
+        "SELECT * FROM presence WHERE student_id = ? ORDER BY presence_date DESC, time_in DESC",
+        [$studentId]
+    );
+    $presenceRecords = $presenceStmt ? $presenceStmt->fetchAll() : [];
+    writeCsvFile($attendanceDir . DIRECTORY_SEPARATOR . 'presence_records.csv', $presenceRecords);
+
+    // Attendance summary
+    $summaryStmt = $db->query(
+        "SELECT 
+            SUM(CASE WHEN present_id = 1 THEN 1 ELSE 0 END) as hadir,
+            SUM(CASE WHEN present_id = 2 THEN 1 ELSE 0 END) as sakit,
+            SUM(CASE WHEN present_id = 3 THEN 1 ELSE 0 END) as izin,
+            SUM(CASE WHEN present_id = 4 THEN 1 ELSE 0 END) as alpa,
+            SUM(CASE WHEN is_late = 'Y' THEN 1 ELSE 0 END) as terlambat,
+            COUNT(*) as total
+        FROM presence WHERE student_id = ?",
+        [$studentId]
+    );
+    $summary = $summaryStmt ? $summaryStmt->fetch() : [];
+    $summaryLines = [
+        'Ringkasan Kehadiran',
+        '--------------------',
+        'Hadir: ' . ($summary['hadir'] ?? 0),
+        'Sakit: ' . ($summary['sakit'] ?? 0),
+        'Izin: ' . ($summary['izin'] ?? 0),
+        'Alpa: ' . ($summary['alpa'] ?? 0),
+        'Terlambat: ' . ($summary['terlambat'] ?? 0),
+        'Total: ' . ($summary['total'] ?? 0)
+    ];
+    writeTextFile($attendanceDir . DIRECTORY_SEPARATOR . 'summary.txt', $summaryLines);
+
+    // Student schedule backup
+    $scheduleStmt = $db->query(
+        "SELECT * FROM student_schedule WHERE student_id = ? ORDER BY schedule_date DESC",
+        [$studentId]
+    );
+    $studentSchedules = $scheduleStmt ? $scheduleStmt->fetchAll() : [];
+    writeCsvFile($dataDir . DIRECTORY_SEPARATOR . 'student_schedule.csv', $studentSchedules);
+
+    // Student snapshot
+    $studentLines = ['Data Siswa', '-----------'];
+    foreach ($student as $key => $value) {
+        $studentLines[] = $key . ': ' . (is_scalar($value) ? (string)$value : json_encode($value));
+    }
+    writeTextFile($dataDir . DIRECTORY_SEPARATOR . 'student.txt', $studentLines);
+
+    // Reference images
+    $referenceFiles = [];
+    $facesDir = BASE_PATH . '/uploads/faces/';
+    if (!empty($student['photo'])) {
+        $referenceFiles[] = $facesDir . $student['photo'];
+    }
+    if (!empty($student['photo_reference'])) {
+        $referenceFiles[] = $facesDir . $student['photo_reference'];
+    }
+    if ($nisn) {
+        $nisnMatches = glob($facesDir . '*' . $nisn . '*');
+        if ($nisnMatches) {
+            $referenceFiles = array_merge($referenceFiles, $nisnMatches);
+        }
+    }
+    $copiedReferences = copyFilesUnique($referenceFiles, $referencesDir);
+
+    // Match logs
+    $matchLogs = glob(BASE_PATH . '/uploads/temp/match_log_' . $studentId . '_*.json') ?: [];
+    $matchLogEntries = [];
+    foreach ($matchLogs as $matchLogFile) {
+        if (!is_file($matchLogFile)) continue;
+        $raw = file_get_contents($matchLogFile);
+        $decoded = json_decode($raw, true);
+        if (is_array($decoded)) {
+            $isList = array_keys($decoded) === range(0, count($decoded) - 1);
+            if ($isList) {
+                foreach ($decoded as $entry) {
+                    if (is_array($entry)) {
+                        $entry['source_file'] = basename($matchLogFile);
+                        $matchLogEntries[] = $entry;
+                    }
+                }
+            } else {
+                $decoded['source_file'] = basename($matchLogFile);
+                $matchLogEntries[] = $decoded;
+            }
+        } else {
+            $matchLogEntries[] = [
+                'source_file' => basename($matchLogFile),
+                'raw' => $raw
+            ];
+        }
+    }
+    writeCsvFile($logsDir . DIRECTORY_SEPARATOR . 'match_logs.csv', $matchLogEntries);
+
+    // Attendance logs from temp/capture
+    $attendanceLogEntries = [];
+    $attendanceLogFile = BASE_PATH . '/uploads/temp/capture/attendance_log.txt';
+    if (is_file($attendanceLogFile)) {
+        $handle = fopen($attendanceLogFile, 'r');
+        if ($handle) {
+            while (($line = fgets($handle)) !== false) {
+                $line = trim($line);
+                if ($line === '') continue;
+                $decoded = json_decode($line, true);
+                if (!is_array($decoded)) continue;
+                if ((int)($decoded['student_id'] ?? 0) !== (int)$studentId) continue;
+                $attendanceLogEntries[] = $decoded;
+            }
+            fclose($handle);
+        }
+    }
+    writeCsvFile($logsDir . DIRECTORY_SEPARATOR . 'attendance_log.csv', $attendanceLogEntries);
+
+    // Attendance photos
+    $attendanceFiles = [];
+    foreach ($presenceRecords as $record) {
+        $presenceDate = $record['presence_date'] ?? '';
+        foreach (['picture_in', 'picture_out'] as $field) {
+            if (!empty($record[$field])) {
+                $resolved = resolveAttendanceFile(BASE_PATH, $presenceDate, $record[$field]);
+                if ($resolved) {
+                    $attendanceFiles[] = $resolved;
+                }
+            }
+        }
+    }
+    foreach ($attendanceLogEntries as $entry) {
+        foreach (['attendance_path', 'validation_path'] as $field) {
+            if (!empty($entry[$field])) {
+                $candidate = BASE_PATH . DIRECTORY_SEPARATOR . ltrim($entry[$field], '/\\');
+                if (is_file($candidate)) {
+                    $attendanceFiles[] = $candidate;
+                }
+            }
+        }
+    }
+    $copiedAttendance = copyFilesUnique($attendanceFiles, $attendancePhotosDir);
+
+    $metaLines = [
+        'Backup Metadata',
+        '---------------',
+        'Deleted at: ' . date('c'),
+        'Deleted by (user_id): ' . ($_SESSION['user_id'] ?? '-'),
+        'Reason: ' . $reason,
+        'Student ID: ' . $studentId,
+        'NISN: ' . ($nisn ?: '-'),
+        'Name: ' . ($name ?: '-'),
+        'Presence records: ' . count($presenceRecords),
+        'Activity logs: ' . count($activityLogs),
+        'Attendance log entries: ' . count($attendanceLogEntries),
+        'Reference files: ' . count($copiedReferences),
+        'Attendance files: ' . count($copiedAttendance),
+        'Match logs: ' . count($matchLogEntries)
+    ];
+    writeTextFile($backupDir . DIRECTORY_SEPARATOR . 'backup_meta.txt', $metaLines);
+
+    return [
+        'success' => true,
+        'backup_dir' => $backupDir,
+        'student' => $student,
+        'copied_references' => array_keys($copiedReferences),
+        'copied_attendance' => array_keys($copiedAttendance),
+        'match_log_files' => $matchLogs
+    ];
+}
+
+// Handle deletions
+if ($action == 'delete') {
+    switch ($table) {
+        case 'student':
+            $error = "Penghapusan siswa wajib menggunakan alasan melalui modal.";
+            header("Location: admin.php?table=student&error=" . urlencode($error));
+            exit();
+            break;
+            
+        case 'teacher':
+            $id = $_GET['id'];
+            $sql = "DELETE FROM teacher WHERE id = ?";
+            $db->query($sql, [$id]);
+            resetAutoIncrementIfEmpty($db, 'teacher', 0);
+            $success = "Guru berhasil dihapus!";
+            header("Location: admin.php?table=teacher&success=" . urlencode($success));
+            exit();
+            break;
+            
+        case 'schedule':
+            $id = $_GET['id'];
+            $db->beginTransaction();
+            $db->query("DELETE FROM student_schedule WHERE teacher_schedule_id = ?", [$id]);
+            $db->query("DELETE FROM teacher_schedule WHERE schedule_id = ?", [$id]);
+            $db->commit();
+            resetAutoIncrementIfEmpty($db, 'teacher_schedule', 0);
+            $success = "Jadwal berhasil dihapus!";
+            header("Location: admin.php?table=schedule&success=" . urlencode($success));
+            exit();
+            break;
+
+        case 'attendance':
+            $id = isset($_GET['id']) ? (int) $_GET['id'] : 0;
+            if ($id <= 0) {
+                $error = "ID absensi tidak valid.";
+                header("Location: admin.php?table=attendance&error=" . urlencode($error));
+                exit();
+            }
+
+            $row = $db->query(
+                "SELECT p.presence_id, p.student_schedule_id, p.presence_date,
+                        ss.schedule_date,
+                        COALESCE(ss.time_in, sh.time_in) as schedule_time_in,
+                        COALESCE(ss.time_out, sh.time_out) as schedule_time_out
+                 FROM presence p
+                 LEFT JOIN student_schedule ss ON p.student_schedule_id = ss.student_schedule_id
+                 LEFT JOIN teacher_schedule ts ON ss.teacher_schedule_id = ts.schedule_id
+                 LEFT JOIN shift sh ON ts.shift_id = sh.shift_id
+                 WHERE p.presence_id = ?",
+                [$id]
+            )->fetch();
+
+            if (!$row) {
+                $error = "Data absensi tidak ditemukan.";
+                header("Location: admin.php?table=attendance&error=" . urlencode($error));
+                exit();
+            }
+
+            $tz = new DateTimeZone('Asia/Jakarta');
+            $now = new DateTime('now', $tz);
+            $schedule_date = $row['schedule_date'] ?? '';
+            if (!$schedule_date && !empty($row['presence_date'])) {
+                $schedule_date = date('Y-m-d', strtotime($row['presence_date']));
+            }
+
+            if (!$schedule_date || ($schedule_date !== $now->format('Y-m-d'))) {
+                $error = "Hapus hanya diizinkan untuk jadwal hari ini.";
+                header("Location: admin.php?table=attendance&error=" . urlencode($error));
+                exit();
+            }
+
+            $time_in = $row['schedule_time_in'] ?? '';
+            $time_out = $row['schedule_time_out'] ?? '';
+            if (!$time_in || !$time_out) {
+                $error = "Waktu jadwal tidak valid.";
+                header("Location: admin.php?table=attendance&error=" . urlencode($error));
+                exit();
+            }
+
+            [$start_dt, $end_dt] = buildScheduleWindow($schedule_date, $time_in, $time_out, $tz, 0);
+            if ($now < $start_dt || $now > $end_dt) {
+                $error = "Hapus hanya diizinkan saat jam pelajaran masih berlangsung.";
+                header("Location: admin.php?table=attendance&error=" . urlencode($error));
+                exit();
+            }
+
+            $db->beginTransaction();
+            $db->query("DELETE FROM presence WHERE presence_id = ?", [$id]);
+            if (!empty($row['student_schedule_id'])) {
+                $db->query(
+                    "UPDATE student_schedule SET status = 'ACTIVE', updated_at = NOW() WHERE student_schedule_id = ?",
+                    [$row['student_schedule_id']]
+                );
+            }
+            $db->commit();
+
+            $success = "Absensi berhasil dihapus. Siswa dapat mengulang absensi selama jadwal masih aktif.";
+            header("Location: admin.php?table=attendance&success=" . urlencode($success));
+            exit();
+            break;
+
+    }
+}
+
+// Get success/error from URL
+if (isset($_GET['success'])) {
+    $success = $_GET['success'];
+}
+if (isset($_GET['error'])) {
+    $error = $_GET['error'];
+}
+
+// Check if theme is set in cookie, otherwise default to light
+$theme = isset($_COOKIE['admin_theme']) ? $_COOKIE['admin_theme'] : 'light';
+$admin_touch_icon = '../assets/images/logo-192.png';
+$admin_icon_light = '../assets/images/favicon-admin-light.png?v=20260212b';
+$admin_icon_dark = '../assets/images/favicon-admin-dark.png?v=20260212b';
+?>
+<!DOCTYPE html>
+<html lang="id" data-theme="<?php echo $theme; ?>">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>dashboard admin - presenova</title>
+    <meta name="color-scheme" content="light dark">
+    <meta id="adminThemeColor" name="theme-color" content="<?php echo $theme === 'dark' ? '#0f172a' : '#f8fafc'; ?>">
+    <link rel="apple-touch-icon" href="<?php echo $admin_touch_icon; ?>">
+    <link id="adminFavicon" rel="icon" type="image/png" href="<?php echo $admin_icon_light; ?>" data-light="<?php echo $admin_icon_light; ?>" data-dark="<?php echo $admin_icon_dark; ?>">
+    <link id="adminShortcutIcon" rel="shortcut icon" type="image/png" href="<?php echo $theme === 'dark' ? $admin_icon_dark : $admin_icon_light; ?>">
+
+    <!-- Bootstrap 5 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <!-- Bootstrap Icons -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css">
+    
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- DataTables CSS -->
+    <link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css">
+
+    <!-- Import style.css -->
+    <link rel="stylesheet" href="../assets/css/admin.css">
+
+    <!-- Ion Icons -->
+    <script type="module" src="https://unpkg.com/ionicons@5.5.2/dist/ionicons/ionicons.esm.js"></script>
+    <script nomodule src="https://unpkg.com/ionicons@5.5.2/dist/ionicons/ionicons.js"></script>
+
+    <!-- jQuery (needed for inline section scripts) -->
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+
+    <!-- DataTables JS (needed for inline section scripts) -->
+    <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+    <script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap5.min.js"></script>
+    
+    <!-- Prevent theme flash with inline critical CSS -->
+    <script>
+        // Set theme immediately before page renders
+        (function() {
+            const savedTheme = document.cookie.match(/admin_theme=([^;]+)/);
+            const theme = savedTheme ? savedTheme[1] : 'light';
+            document.documentElement.setAttribute('data-theme', theme);
+
+            const favicon = document.getElementById('adminFavicon');
+            if (favicon) {
+                const light = favicon.getAttribute('data-light');
+                const dark = favicon.getAttribute('data-dark');
+                favicon.setAttribute('href', theme === 'dark' ? dark : light);
+            }
+            const shortcutIcon = document.getElementById('adminShortcutIcon');
+            if (shortcutIcon) {
+                const light = favicon ? favicon.getAttribute('data-light') : '<?php echo $admin_icon_light; ?>';
+                const dark = favicon ? favicon.getAttribute('data-dark') : '<?php echo $admin_icon_dark; ?>';
+                shortcutIcon.setAttribute('href', theme === 'dark' ? dark : light);
+            }
+            const themeColorMeta = document.getElementById('adminThemeColor');
+            if (themeColorMeta) {
+                themeColorMeta.setAttribute('content', theme === 'dark' ? '#0f172a' : '#f8fafc');
+            }
+        })();
+    </script>
+    
+    <style>
+        /* Critical CSS to prevent flash - loaded immediately */
+        html { visibility: visible !important; opacity: 1 !important; }
+        body { 
+            background-color: #f8fafc;
+            transition: none !important;
+        }
+        [data-theme="dark"] body {
+            background-color: #0f172a;
+        }
+    </style>
+    
+    <style>
+        :root {
+            /* Light Theme Colors - Elegant Blue & Green */
+            --primary-blue: #2563eb;
+            --primary-green: #10b981;
+            --accent-blue: #3b82f6;
+            --accent-green: #34d399;
+            --light-blue: #eff6ff;
+            --light-green: #d1fae5;
+            --background: #f8fafc;
+            --card-bg: #ffffff;
+            --text-primary: #1e293b;
+            --text-secondary: #64748b;
+            --border-color: #e2e8f0;
+            --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+            --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+            --radius-sm: 8px;
+            --radius: 12px;
+            --radius-lg: 16px;
+            --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            
+            /* Dark Theme Colors */
+            --dark-bg: #0f172a;
+            --dark-card: #1e293b;
+            --dark-border: #334155;
+            --dark-text: #f1f5f9;
+            --dark-text-secondary: #94a3b8;
+            --dark-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3), 0 2px 4px -1px rgba(0, 0, 0, 0.2);
+        }
+        
+        /* Apply theme based on data-theme attribute */
+        [data-theme="light"] {
+            --bg-color: var(--background);
+            --card-color: var(--card-bg);
+            --text-color: var(--text-primary);
+            --text-secondary-color: var(--text-secondary);
+            --border: var(--border-color);
+            --shadow-color: var(--shadow);
+            --sidebar-bg: linear-gradient(180deg, var(--primary-blue) 0%, #1d4ed8 100%);
+            --sidebar-text: rgba(255, 255, 255, 0.9);
+            --sidebar-hover: rgba(255, 255, 255, 0.15);
+            --sidebar-active: rgba(255, 255, 255, 0.2);
+            --sidebar-border: rgba(255, 255, 255, 0.1);
+            --topbar-bg: var(--card-bg);
+            --topbar-text: var(--text-primary);
+        }
+        
+        [data-theme="dark"] {
+            --bg-color: var(--dark-bg);
+            --card-color: var(--dark-card);
+            --text-color: var(--dark-text);
+            --text-secondary-color: var(--dark-text-secondary);
+            --border: var(--dark-border);
+            --shadow-color: var(--dark-shadow);
+            --sidebar-bg: linear-gradient(180deg, #1e3a8a 0%, #1e293b 100%);
+            --sidebar-text: rgba(255, 255, 255, 0.9);
+            --sidebar-hover: rgba(255, 255, 255, 0.15);
+            --sidebar-active: rgba(255, 255, 255, 0.2);
+            --sidebar-border: rgba(255, 255, 255, 0.1);
+            --topbar-bg: var(--dark-card);
+            --topbar-text: var(--dark-text);
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            line-height: 1.6;
+            transition: background-color 0.3s ease, color 0.3s ease;
+        }
+        
+        h1, h2, h3, h4, h5, h6 {
+            font-family: 'Poppins', sans-serif;
+            font-weight: 600;
+            color: var(--text-color);
+        }
+        
+        /* Layout */
+        .app-container {
+            display: flex;
+            min-height: 100vh;
+        }
+        
+        /* Sidebar - Elegant Design */
+        .sidebar {
+            width: 280px;
+            background: var(--sidebar-bg);
+            color: var(--sidebar-text);
+            transition: all 0.3s ease;
+            z-index: 1050;
+            position: fixed;
+            height: 100vh;
+            overflow-y: auto;
+            box-shadow: 4px 0 20px rgba(0, 0, 0, 0.1);
+            border-right: 1px solid var(--sidebar-border);
+        }
+        
+        .sidebar.collapsed {
+            width: 93px;
+        }
+        
+        .sidebar.collapsed .sidebar-header .logo-text,
+        .sidebar.collapsed .nav-link span,
+        .sidebar.collapsed .user-info {
+            display: none;
+        }
+        
+        .sidebar.collapsed .sidebar-header {
+            padding: 24px 10px;
+        }
+        
+        .sidebar.collapsed .nav-link {
+            padding: 12px;
+            justify-content: center;
+        }
+        
+        .sidebar.collapsed .nav-link i {
+            margin-right: 0;
+        }
+        
+        .sidebar-header {
+            padding: 24px 20px;
+            border-bottom: 1px solid var(--sidebar-border);
+            position: relative;
+        }
+        
+        .sidebar-header .logo {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            text-decoration: none;
+            color: white;
+        }
+        
+        .logo-icon {
+            width: 44px;
+            height: 44px;
+            background: white;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--primary-blue);
+            font-size: 22px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        }
+        
+        .logo-text h4 {
+            color: white;
+            margin-bottom: 0;
+            font-size: 1.3rem;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+        }
+        
+        .logo-text small {
+            color: rgba(255, 255, 255, 0.8);
+            font-size: 0.8rem;
+        }
+        
+        .sidebar-toggle {
+            position: absolute;
+            right: 3px;
+            top: 20px;
+            background: white;
+            border: none;
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--primary-blue);
+            cursor: pointer;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+            z-index: 1051;
+            transition: all 0.3s ease;
+        }
+        
+        .sidebar-toggle:hover {
+            transform: scale(1.1);
+            box-shadow: 0 6px 16px rgba(0, 0, 0, 0.25);
+        }
+        
+        .sidebar-menu {
+            padding: 20px 0;
+        }
+        
+        .sidebar-menu .nav-item {
+            margin-bottom: 6px;
+        }
+        
+        .sidebar-menu .nav-link {
+            padding: 14px 20px;
+            color: var(--sidebar-text);
+            font-weight: 500;
+            border-radius: 8px;
+            margin: 0 10px;
+            border-left: 4px solid transparent;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            text-decoration: none;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .sidebar-menu .nav-link::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent);
+            transform: translateX(-100%);
+            transition: transform 0.6s ease;
+        }
+        
+        .sidebar-menu .nav-link:hover::before {
+            transform: translateX(100%);
+        }
+        
+        .sidebar-menu .nav-link:hover {
+            background-color: var(--sidebar-hover);
+            color: white;
+            border-left-color: var(--accent-green);
+            transform: translateX(5px);
+        }
+        
+        .sidebar-menu .nav-link.active {
+            background-color: var(--sidebar-active);
+            color: white;
+            border-left-color: var(--accent-green);
+            font-weight: 600;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        }
+        
+        .sidebar-menu .nav-link i {
+            width: 22px;
+            text-align: center;
+            font-size: 1.2rem;
+            transition: transform 0.3s ease;
+        }
+        
+        .sidebar-menu .nav-link:hover i {
+            transform: scale(1.1);
+        }
+        
+        .sidebar-footer {
+            padding: 20px;
+            border-top: 1px solid var(--sidebar-border);
+            margin-top: auto;
+        }
+        
+        .user-profile {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        
+        .user-avatar {
+            width: 46px;
+            height: 46px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--accent-green) 0%, var(--primary-blue) 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: 700;
+            font-size: 1.1rem;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        }
+        
+        .user-info {
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .user-name {
+            font-weight: 600;
+            font-size: 0.95rem;
+            color: white;
+        }
+        
+        .user-role {
+            font-size: 0.8rem;
+            color: rgba(255, 255, 255, 0.8);
+        }
+        
+        /* Main Content */
+        .main-content {
+            flex: 1;
+            margin-left: 280px;
+            padding: 25px;
+            transition: all 0.3s ease;
+            min-height: 100vh;
+        }
+        
+        .main-content.expanded {
+            margin-left: 80px;
+        }
+        
+        /* Top Bar - Elegant Design */
+        .top-bar {
+            background-color: var(--topbar-bg);
+            border-radius: var(--radius-lg);
+            padding: 22px 30px;
+            margin-bottom: 25px;
+            box-shadow: var(--shadow-color);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border: 1px solid var(--border);
+            transition: all 0.3s ease;
+        }
+        
+        .top-bar .page-title h3 {
+            margin-bottom: 6px;
+            color: var(--text-color);
+            font-size: 1.5rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, var(--primary-blue) 0%, var(--accent-green) 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        
+        .top-bar .page-title p {
+            color: var(--text-secondary-color);
+            font-size: 0.9rem;
+            margin-bottom: 0;
+        }
+        
+        .top-bar-actions {
+            display: flex;
+            align-items: center;
+            gap: 18px;
+        }
+        
+        .date-time-display {
+            background: linear-gradient(135deg, var(--primary-blue) 0%, var(--accent-blue) 100%);
+            border-radius: var(--radius);
+            padding: 12px 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-family: 'Poppins', monospace;
+            color: white;
+            font-weight: 600;
+            box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
+            transition: transform 0.3s ease;
+        }
+        
+        .date-time-display:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 16px rgba(37, 99, 235, 0.4);
+        }
+        
+        .theme-toggle {
+            background: transparent;
+            border: 1px solid var(--border);
+            width: 46px;
+            height: 46px;
+            border-radius: var(--radius);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--text-color);
+            cursor: pointer;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .theme-toggle::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(135deg, var(--primary-blue) 0%, var(--accent-green) 100%);
+            opacity: 0;
+            transition: opacity 0.3s ease;
+            z-index: 1;
+        }
+        
+        .theme-toggle:hover::before {
+            opacity: 0.1;
+        }
+        
+        .theme-toggle i {
+            position: relative;
+            z-index: 2;
+            transition: all 0.3s ease;
+        }
+        
+        .theme-toggle:hover {
+            border-color: var(--primary-blue);
+            transform: rotate(15deg);
+        }
+        
+        .theme-toggle:hover i {
+            color: var(--primary-blue);
+        }
+        
+        /* Cards - Elegant Design */
+        .dashboard-card {
+            background-color: var(--card-color);
+            border-radius: var(--radius-lg);
+            padding: 28px;
+            box-shadow: var(--shadow);
+            transition: all 0.3s ease;
+            border: 1px solid var(--border);
+            height: 100%;
+            text-decoration: none;
+            display: block;
+            color: var(--text-color);
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .dashboard-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 4px;
+            background: linear-gradient(90deg, var(--primary-blue), var(--accent-green));
+            transform: scaleX(0);
+            transform-origin: left;
+            transition: transform 0.3s ease;
+        }
+        
+        .dashboard-card:hover::before {
+            transform: scaleX(1);
+        }
+        
+        .dashboard-card:hover {
+            transform: translateY(-8px);
+            box-shadow: var(--shadow-lg);
+            text-decoration: none;
+            color: var(--text-color);
+            border-color: var(--primary-blue);
+        }
+        
+        .dashboard-card.clickable:hover {
+            cursor: pointer;
+            background-color: rgba(37, 99, 235, 0.05);
+        }
+        
+        .card-icon {
+            width: 70px;
+            height: 70px;
+            border-radius: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 22px;
+            font-size: 28px;
+            color: white;
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
+            transition: transform 0.3s ease;
+        }
+        
+        .dashboard-card:hover .card-icon {
+            transform: scale(1.1) rotate(5deg);
+        }
+        
+        .card-icon.blue {
+            background: linear-gradient(135deg, var(--primary-blue) 0%, var(--accent-blue) 100%);
+        }
+        
+        .card-icon.green {
+            background: linear-gradient(135deg, var(--primary-green) 0%, var(--accent-green) 100%);
+        }
+        
+        .card-icon.teal {
+            background: linear-gradient(135deg, #0d9488 0%, #14b8a6 100%);
+        }
+        
+        .card-icon.purple {
+            background: linear-gradient(135deg, #8b5cf6 0%, #a78bfa 100%);
+        }
+        
+        .card-title {
+            font-size: 0.9rem;
+            color: var(--text-secondary-color);
+            margin-bottom: 10px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            font-weight: 600;
+        }
+        
+        .card-value {
+            font-size: 2.2rem;
+            font-weight: 800;
+            color: var(--text-color);
+            margin-bottom: 0;
+            line-height: 1.2;
+            background: linear-gradient(135deg, var(--primary-blue) 0%, var(--accent-green) 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        
+        .card-change {
+            font-size: 0.85rem;
+            margin-top: 10px;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            color: var(--primary-green);
+            font-weight: 500;
+        }
+        
+        /* Tables */
+        .data-table-container {
+            background-color: var(--card-color);
+            border-radius: var(--radius-lg);
+            padding: 28px;
+            box-shadow: var(--shadow);
+            overflow: hidden;
+            border: 1px solid var(--border);
+        }
+        
+        .table-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 22px;
+        }
+        
+        .table-title {
+            font-size: 1.4rem;
+            color: var(--text-color);
+            margin-bottom: 0;
+            font-weight: 700;
+            background: #ffffff;
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        
+        .dataTables_wrapper {
+            margin-top: 22px;
+        }
+        
+        table.dataTable {
+            border-collapse: collapse;
+            border-spacing: 0;
+            width: 100%;
+            margin-top: 12px !important;
+        }
+        
+        table.dataTable thead th {
+            background-color: rgba(37, 99, 235, 0.1);
+            color: var(--primary-blue);
+            font-weight: 600;
+            padding: 18px 14px;
+            border: none;
+            text-align: left;
+            font-size: 0.9rem;
+            border-bottom: 2px solid var(--border);
+        }
+        
+        table.dataTable tbody td {
+            padding: 18px 14px;
+            border-bottom: 1px solid var(--border);
+            vertical-align: middle;
+            color: var(--text-color);
+            transition: background-color 0.2s ease;
+        }
+        
+        table.dataTable tbody tr:hover td {
+            background-color: rgba(37, 99, 235, 0.05);
+        }
+        
+        /* Buttons */
+        .btn {
+            padding: 12px 24px;
+            border-radius: var(--radius);
+            font-weight: 600;
+            transition: all 0.3s ease;
+            border: none;
+            font-size: 0.95rem;
+            letter-spacing: 0.3px;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .btn::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(135deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+            transform: translateX(-100%);
+            transition: transform 0.6s ease;
+        }
+        
+        .btn:hover::before {
+            transform: translateX(100%);
+        }
+        
+        .btn-primary {
+            background: linear-gradient(135deg, var(--primary-blue) 0%, var(--accent-blue) 100%);
+            color: white;
+            border: none;
+            box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
+        }
+        
+        .btn-primary:hover {
+            background: linear-gradient(135deg, #1d4ed8 0%, var(--primary-blue) 100%);
+            color: white;
+            transform: translateY(-3px);
+            box-shadow: 0 8px 20px rgba(37, 99, 235, 0.4);
+        }
+        
+        .btn-success {
+            background: linear-gradient(135deg, var(--primary-green) 0%, var(--accent-green) 100%);
+            color: white;
+            border: none;
+            box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+        }
+        
+        .btn-success:hover {
+            background: linear-gradient(135deg, #0da271 0%, var(--primary-green) 100%);
+            color: white;
+            transform: translateY(-3px);
+            box-shadow: 0 8px 20px rgba(16, 185, 129, 0.4);
+        }
+        
+        .btn-outline-primary {
+            border: 2px solid var(--primary-blue);
+            color: var(--primary-blue);
+            background-color: transparent;
+            font-weight: 600;
+        }
+        
+        .btn-outline-primary:hover {
+            background: linear-gradient(135deg, var(--primary-blue) 0%, var(--accent-blue) 100%);
+            color: white;
+            border-color: transparent;
+            transform: translateY(-3px);
+            box-shadow: 0 8px 20px rgba(37, 99, 235, 0.2);
+        }
+        
+        .btn-sm {
+            padding: 8px 16px;
+            font-size: 0.85rem;
+            border-radius: var(--radius-sm);
+        }
+        
+        /* Badges */
+        .badge {
+            padding: 8px 14px;
+            border-radius: 20px;
+            font-weight: 600;
+            font-size: 0.8rem;
+            letter-spacing: 0.3px;
+        }
+        
+        .badge-success {
+            background: linear-gradient(135deg, var(--primary-green) 0%, var(--accent-green) 100%);
+            color: white;
+            box-shadow: 0 4px 10px rgba(16, 185, 129, 0.2);
+        }
+        
+        .badge-primary {
+            background: linear-gradient(135deg, var(--primary-blue) 0%, var(--accent-blue) 100%);
+            color: white;
+            box-shadow: 0 4px 10px rgba(37, 99, 235, 0.2);
+        }
+        
+        .badge-warning {
+            background: linear-gradient(135deg, #f59e0b 0%, #fbbf24 100%);
+            color: white;
+        }
+        
+        .badge-danger {
+            background: linear-gradient(135deg, #ef4444 0%, #f87171 100%);
+            color: white;
+        }
+        
+        /* Forms */
+        .form-container {
+            background-color: var(--card-color);
+            border-radius: var(--radius-lg);
+            padding: 32px;
+            box-shadow: var(--shadow);
+            border: 1px solid var(--border);
+        }
+        
+        .form-label {
+            font-weight: 600;
+            color: var(--text-color);
+            margin-bottom: 10px;
+            font-size: 0.95rem;
+        }
+        
+        .form-control, .form-select {
+            padding: 14px 18px;
+            border-radius: var(--radius);
+            border: 2px solid var(--border);
+            background-color: var(--card-color);
+            color: var(--text-color);
+            transition: all 0.3s ease;
+            font-size: 0.95rem;
+        }
+        
+        .form-control:focus, .form-select:focus {
+            border-color: var(--primary-blue);
+            box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.15);
+            background-color: var(--card-color);
+            color: var(--text-color);
+        }
+        
+        .form-text {
+            color: var(--text-secondary-color);
+            font-size: 0.85rem;
+        }
+        
+        /* Alerts */
+        .alert {
+            border-radius: var(--radius);
+            padding: 18px 22px;
+            border: none;
+            box-shadow: var(--shadow);
+        }
+        
+        .alert-success {
+            background: linear-gradient(135deg, rgba(16, 185, 129, 0.1) 0%, rgba(52, 211, 153, 0.1) 100%);
+            color: var(--primary-green);
+            border-left: 4px solid var(--primary-green);
+        }
+        
+        .alert-danger {
+            background: linear-gradient(135deg, rgba(239, 68, 68, 0.1) 0%, rgba(248, 113, 113, 0.1) 100%);
+            color: #ef4444;
+            border-left: 4px solid #ef4444;
+        }
+        
+        /* Quick Actions */
+        .quick-actions {
+            background-color: var(--card-color);
+            border-radius: var(--radius-lg);
+            padding: 28px;
+            box-shadow: var(--shadow);
+            border: 1px solid var(--border);
+        }
+        
+        .quick-action-item {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            padding: 14px 18px;
+            border-radius: var(--radius);
+            text-decoration: none;
+            color: var(--text-color);
+            transition: all 0.3s ease;
+            margin-bottom: 10px;
+            border: 1px solid transparent;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .quick-action-item::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 4px;
+            height: 100%;
+            background: linear-gradient(180deg, var(--primary-blue), var(--accent-green));
+            transform: scaleY(0);
+            transform-origin: top;
+            transition: transform 0.3s ease;
+        }
+        
+        .quick-action-item:hover::before {
+            transform: scaleY(1);
+        }
+        
+        .quick-action-item:hover {
+            background-color: rgba(37, 99, 235, 0.05);
+            color: var(--primary-blue);
+            text-decoration: none;
+            border-color: var(--border);
+            transform: translateX(5px);
+        }
+        
+        .quick-action-item i {
+            width: 22px;
+            text-align: center;
+            color: var(--primary-blue);
+            font-size: 1.1rem;
+            position: relative;
+            z-index: 1;
+        }
+        
+        /* Activity Table */
+        .activity-table {
+            background-color: var(--card-color);
+            border-radius: var(--radius-lg);
+            padding: 28px;
+            box-shadow: var(--shadow);
+            border: 1px solid var(--border);
+        }
+        
+        /* Responsive */
+        @media (max-width: 1199px) {
+            .main-content {
+                padding: 20px;
+            }
+            
+            .top-bar {
+                flex-direction: column;
+                gap: 20px;
+                align-items: flex-start;
+            }
+            
+            .top-bar-actions {
+                width: 100%;
+                justify-content: space-between;
+            }
+        }
+        
+        @media (max-width: 992px) {
+            .sidebar {
+                transform: translateX(-100%);
+                width: 280px;
+            }
+            
+            .sidebar.show {
+                transform: translateX(0);
+            }
+            
+            .main-content {
+                margin-left: 0 !important;
+                padding: 15px;
+            }
+            
+            .top-bar {
+                padding: 18px 22px;
+            }
+            
+            .dashboard-card {
+                padding: 22px;
+                margin-bottom: 15px;
+            }
+            
+            .data-table-container,
+            .form-container,
+            .activity-table,
+            .quick-actions {
+                padding: 22px;
+            }
+        }
+        
+        @media (max-width: 768px) {
+            .top-bar-actions {
+                flex-direction: column;
+                gap: 15px;
+                align-items: stretch;
+            }
+            
+            .date-time-display {
+                justify-content: center;
+            }
+            
+            .table-header {
+                flex-direction: column;
+                gap: 15px;
+                align-items: flex-start;
+            }
+            
+            .btn-group {
+                flex-wrap: wrap;
+            }
+        }
+        
+        @media (max-width: 576px) {
+            .main-content {
+                padding: 12px;
+            }
+            
+            .top-bar {
+                padding: 16px 20px;
+                border-radius: var(--radius);
+            }
+            
+            .data-table-container,
+            .form-container,
+            .activity-table,
+            .quick-actions {
+                padding: 18px;
+                border-radius: var(--radius);
+            }
+            
+            .card-icon {
+                width: 56px;
+                height: 56px;
+                font-size: 24px;
+            }
+            
+            .card-value {
+                font-size: 1.8rem;
+            }
+        }
+        
+        /* Custom scrollbar */
+        ::-webkit-scrollbar {
+            width: 10px;
+            height: 10px;
+        }
+        
+        ::-webkit-scrollbar-track {
+            background: var(--card-color);
+            border-radius: 10px;
+        }
+        
+        ::-webkit-scrollbar-thumb {
+            background: linear-gradient(180deg, var(--primary-blue), var(--accent-green));
+            border-radius: 10px;
+        }
+        
+        ::-webkit-scrollbar-thumb:hover {
+            background: linear-gradient(180deg, #1d4ed8, #0da271);
+        }
+        
+        /* DataTables customization */
+        .dataTables_wrapper {
+            color: var(--text-color);
+        }
+        
+        .dataTables_info,
+        .dataTables_length label,
+        .dataTables_filter label {
+            color: var(--text-color) !important;
+        }
+        
+        .dataTables_filter input {
+            padding: 10px 14px;
+            border-radius: var(--radius-sm);
+            border: 2px solid var(--border);
+            background-color: var(--card-color);
+            color: var(--text-color);
+            font-size: 0.9rem;
+        }
+        
+        .dataTables_length select {
+            padding: 10px 14px;
+            border-radius: var(--radius-sm);
+            border: 2px solid var(--border);
+            background-color: var(--card-color);
+            color: var(--text-color);
+            font-size: 0.9rem;
+        }
+        
+        .dataTables_paginate .paginate_button {
+            padding: 8px 14px;
+            margin-left: 4px;
+            border-radius: var(--radius-sm);
+            border: 2px solid var(--border);
+            background-color: var(--card-color);
+            color: var(--text-color) !important;
+            font-weight: 500;
+        }
+        
+        .dataTables_paginate .paginate_button:hover {
+            background: linear-gradient(135deg, var(--primary-blue) 0%, var(--accent-blue) 100%) !important;
+            color: white !important;
+            border-color: transparent;
+        }
+        
+        .dataTables_paginate .paginate_button.current {
+            background: linear-gradient(135deg, var(--primary-blue) 0%, var(--accent-blue) 100%) !important;
+            color: white !important;
+            border-color: transparent;
+            box-shadow: 0 4px 12px rgba(37, 99, 235, 0.2);
+        }
+        
+        /* Filter Section */
+        .filter-section {
+            background-color: rgba(37, 99, 235, 0.08);
+            border-radius: var(--radius);
+            padding: 18px;
+            margin-bottom: 22px;
+            border: 1px solid rgba(37, 99, 235, 0.2);
+        }
+        
+        /* Mobile Menu Toggle */
+        .mobile-menu-toggle {
+            background: linear-gradient(135deg, var(--primary-blue) 0%, var(--accent-blue) 100%);
+            color: white;
+            border: none;
+            width: 50px;
+            height: 50px;
+            border-radius: var(--radius);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.2rem;
+            box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
+            transition: all 0.3s ease;
+        }
+        
+        .mobile-menu-toggle:hover {
+            transform: scale(1.1);
+            box-shadow: 0 6px 16px rgba(37, 99, 235, 0.4);
+        }
+        
+        /* Loading Overlay */
+        .loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: var(--bg-color);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 9999;
+            transition: opacity 0.3s ease;
+            opacity: 0.95;
+        }
+        
+        .loading-spinner {
+            width: 60px;
+            height: 60px;
+            border: 4px solid var(--border);
+            border-top: 4px solid var(--primary-blue);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        /* Theme transition - only when manually toggling, not on load */
+        * {
+            transition: none;
+        }
+        
+        /* Enable transitions after page load via JavaScript */
+        body.transitions-enabled * {
+            transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;
+        }
+        
+        /* Prevent theme flash */
+        html {
+            visibility: visible;
+            opacity: 1;
+        }
+
+        /* ============================ */
+        /* DARK MODE FIXES START HERE */
+        /* ============================ */
+        
+        /* Dark mode fixes for tables and cards */
+        [data-theme="dark"] .table,
+        [data-theme="dark"] table.dataTable {
+            background-color: var(--dark-card);
+            color: var(--dark-text);
+            border-color: var(--dark-border);
+        }
+
+        [data-theme="dark"] table.dataTable thead th {
+            background-color: #414d61;
+            color: #93c5fd;
+            border-bottom: 2px solid var(--dark-border);
+        }
+
+        /* Dark mode table fixes - comprehensive */
+        [data-theme="dark"] table.dataTable tbody td {
+            color: var(--dark-text) !important;
+            border-bottom: 1px solid var(--dark-border);
+            background-color: var(--dark-card) !important;
+        }
+
+        [data-theme="dark"] table.dataTable tbody tr {
+            background-color: var(--dark-card) !important;
+        }
+        
+        [data-theme="dark"] table.dataTable tbody tr:nth-child(odd) {
+            background-color: var(--dark-card) !important;
+        }
+        
+        [data-theme="dark"] table.dataTable tbody tr:nth-child(even) {
+            background-color: rgba(30, 41, 59, 0.7) !important;
+        }
+
+        [data-theme="dark"] table.dataTable tbody tr:hover td {
+            background-color: rgba(37, 99, 235, 0.15) !important;
+        }
+        
+        [data-theme="dark"] .dataTables_wrapper,
+        [data-theme="dark"] .dataTables_info,
+        [data-theme="dark"] .dataTables_paginate,
+        [data-theme="dark"] .dataTables_length,
+        [data-theme="dark"] .dataTables_filter {
+            color: var(--dark-text) !important;
+        }
+        
+        [data-theme="dark"] .dataTables_empty {
+            color: var(--dark-text-secondary) !important;
+            background-color: var(--dark-card) !important;
+        }
+
+        [data-theme="dark"] .table-hover tbody tr:hover {
+            background-color: rgba(37, 99, 235, 0.1);
+            color: var(--dark-text);
+        }
+
+        [data-theme="dark"] .list-group-item {
+            background-color: var(--dark-card);
+            color: var(--dark-text);
+            border-color: var(--dark-border);
+        }
+
+        [data-theme="dark"] .list-group-item:hover {
+            background-color: rgba(37, 99, 235, 0.1);
+        }
+
+        [data-theme="dark"] .text-muted {
+            color: var(--dark-text-secondary) !important;
+        }
+
+        [data-theme="dark"] .modal-content {
+            background-color: var(--dark-card);
+            color: var(--dark-text);
+        }
+
+        [data-theme="dark"] .modal-header,
+        [data-theme="dark"] .modal-footer {
+            border-color: var(--dark-border);
+        }
+
+        [data-theme="dark"] .btn-close {
+            filter: invert(1) grayscale(100%) brightness(200%);
+        }
+        
+        /* Additional dark mode fixes for better visibility */
+        [data-theme="dark"] .badge {
+            border: 1px solid var(--dark-border);
+        }
+        
+        [data-theme="dark"] .alert {
+            background-color: var(--dark-card);
+            border-color: var(--dark-border);
+            color: var(--dark-text);
+        }
+        
+        [data-theme="dark"] .card {
+            background-color: var(--dark-card);
+            border-color: var(--dark-border);
+            color: var(--dark-text);
+        }
+        
+        [data-theme="dark"] .dropdown-menu {
+            background-color: var(--dark-card);
+            border-color: var(--dark-border);
+        }
+        
+        [data-theme="dark"] .dropdown-item {
+            color: var(--dark-text);
+        }
+        
+        [data-theme="dark"] .dropdown-item:hover {
+            background-color: rgba(37, 99, 235, 0.1);
+            color: var(--dark-text);
+        }
+        
+        /* Fix for pagination in dark mode */
+        [data-theme="dark"] .pagination .page-link {
+            background-color: var(--dark-card);
+            border-color: var(--dark-border);
+            color: var(--dark-text);
+        }
+        
+        [data-theme="dark"] .pagination .page-link:hover {
+            background-color: rgba(37, 99, 235, 0.2);
+            border-color: var(--primary-blue);
+            color: var(--dark-text);
+        }
+        
+        [data-theme="dark"] .pagination .page-item.active .page-link {
+            background-color: var(--primary-blue);
+            border-color: var(--primary-blue);
+            color: white;
+        }
+        
+        /* Fix for input groups in dark mode */
+        [data-theme="dark"] .input-group-text {
+            background-color: var(--dark-card);
+            border-color: var(--dark-border);
+            color: var(--dark-text);
+        }
+        
+        /* Fix for labels and text in dark mode */
+        [data-theme="dark"] label,
+        [data-theme="dark"] .form-label {
+            color: var(--dark-text) !important;
+        }
+        
+        [data-theme="dark"] small,
+        [data-theme="dark"] .small {
+            color: var(--dark-text-secondary) !important;
+        }
+
+        /* Fix for form controls in dark mode */
+        [data-theme="dark"] .form-control,
+        [data-theme="dark"] .form-select {
+            background-color: var(--dark-card);
+            color: var(--dark-text);
+            border-color: var(--dark-border);
+        }
+
+        [data-theme="dark"] .form-control:focus,
+        [data-theme="dark"] .form-select:focus {
+            background-color: var(--dark-card);
+            color: var(--dark-text);
+            border-color: var(--primary-blue);
+        }
+
+        /* Fix for badges in dark mode */
+        [data-theme="dark"] .badge.bg-success {
+            background: linear-gradient(135deg, var(--primary-green) 0%, var(--accent-green) 100%) !important;
+        }
+
+        [data-theme="dark"] .badge.bg-secondary {
+            background: linear-gradient(135deg, #64748b 0%, #94a3b8 100%) !important;
+        }
+
+        [data-theme="dark"] .badge.bg-warning {
+            background: linear-gradient(135deg, #f59e0b 0%, #fbbf24 100%) !important;
+        }
+
+        [data-theme="dark"] .badge.bg-danger {
+            background: linear-gradient(135deg, #ef4444 0%, #f87171 100%) !important;
+        }
+
+        /* Dark mode fixes for dashboard */
+        [data-theme="dark"] .card-body,
+        [data-theme="dark"] .table-striped tbody tr:nth-of-type(odd) {
+            background-color: rgba(255, 255, 255, 0.02);
+        }
+
+        [data-theme="dark"] .activity-table .table {
+            background-color: var(--dark-card);
+        }
+
+        [data-theme="dark"] .activity-table .table th {
+            background-color: rgba(37, 99, 235, 0.2);
+            color: #93c5fd;
+        }
+
+        [data-theme="dark"] .activity-table .table td {
+            color: var(--dark-text);
+            border-color: var(--dark-border);
+        }
+
+        [data-theme="dark"] .activity-table .table-hover tbody tr:hover {
+            background-color: rgba(37, 99, 235, 0.1);
+        }
+
+        [data-theme="dark"] .quick-action-item {
+            background-color: rgba(255, 255, 255, 0.02);
+        }
+
+        [data-theme="dark"] .quick-action-item:hover {
+            background-color: rgba(37, 99, 235, 0.1);
+        }
+
+        /* DataTables pagination dark mode fix */
+        [data-theme="dark"] .dataTables_paginate .paginate_button {
+            background-color: var(--dark-card) !important;
+            color: var(--dark-text) !important;
+            border-color: var(--dark-border);
+        }
+
+        [data-theme="dark"] .dataTables_paginate .paginate_button:hover {
+            background: linear-gradient(135deg, var(--primary-blue) 0%, var(--accent-blue) 100%) !important;
+            color: white !important;
+        }
+
+        [data-theme="dark"] .dataTables_length select,
+        [data-theme="dark"] .dataTables_filter input {
+            background-color: var(--dark-card);
+            color: var(--dark-text);
+            border-color: var(--dark-border);
+        }
+
+        /* Fix for Bootstrap alert in dark mode */
+        [data-theme="dark"] .alert {
+            background-color: rgba(255, 255, 255, 0.05);
+        }
+
+        [data-theme="dark"] .alert-success {
+            background: linear-gradient(135deg, rgba(16, 185, 129, 0.15) 0%, rgba(52, 211, 153, 0.15) 100%);
+        }
+
+        [data-theme="dark"] .alert-danger {
+            background: linear-gradient(135deg, rgba(239, 68, 68, 0.15) 0%, rgba(248, 113, 113, 0.15) 100%);
+        }
+
+        /* Fix for dropdown menus in dark mode */
+        [data-theme="dark"] .dropdown-menu {
+            background-color: var(--dark-card);
+            color: var(--dark-text);
+            border-color: var(--dark-border);
+        }
+
+        [data-theme="dark"] .dropdown-item {
+            color: var(--dark-text);
+        }
+
+        [data-theme="dark"] .dropdown-item:hover {
+            background-color: rgba(37, 99, 235, 0.1);
+            color: var(--dark-text);
+        }
+
+        /* Fix for card borders in dark mode */
+        [data-theme="dark"] .card {
+            background-color: var(--dark-card);
+            border-color: var(--dark-border);
+        }
+
+        /* Fix for form text in dark mode */
+        [data-theme="dark"] .form-text {
+            color: var(--dark-text-secondary);
+        }
+
+        /* Fix for pagination in dark mode */
+        [data-theme="dark"] .page-link {
+            background-color: var(--dark-card);
+            color: var(--dark-text);
+            border-color: var(--dark-border);
+        }
+
+        [data-theme="dark"] .page-item.disabled .page-link {
+            background-color: rgba(255, 255, 255, 0.05);
+            color: var(--dark-text-secondary);
+            border-color: var(--dark-border);
+        }
+
+        [data-theme="dark"] .page-item.active .page-link {
+            background: linear-gradient(135deg, var(--primary-blue) 0%, var(--accent-blue) 100%);
+            border-color: transparent;
+        }
+
+        /* ============================ */
+        /* DARK MODE FIXES - TABEL TAMBAHAN */
+        /* ============================ */
+
+        /* Fix untuk tabel Kelas & Jurusan */
+        [data-theme="dark"] .table-classes {
+            background-color: var(--dark-card) !important;
+            color: var(--dark-text) !important;
+            border-color: var(--dark-border) !important;
+        }
+
+        [data-theme="dark"] .table-classes thead th {
+            background-color: rgba(37, 99, 235, 0.2) !important;
+            color: #93c5fd !important;
+            border-bottom: 2px solid var(--dark-border) !important;
+        }
+
+        [data-theme="dark"] .table-classes tbody td {
+            background-color: var(--dark-card) !important;
+            color: var(--dark-text) !important;
+            border-bottom: 1px solid var(--dark-border) !important;
+        }
+
+        [data-theme="dark"] .table-classes tbody tr {
+            background-color: var(--dark-card) !important;
+        }
+
+        [data-theme="dark"] .table-classes tbody tr:nth-child(odd) {
+            background-color: var(--dark-card) !important;
+        }
+
+        [data-theme="dark"] .table-classes tbody tr:nth-child(even) {
+            background-color: rgba(30, 41, 59, 0.7) !important;
+        }
+
+        [data-theme="dark"] .table-classes tbody tr:hover td {
+            background-color: rgba(37, 99, 235, 0.15) !important;
+        }
+
+        /* Fix untuk tabel Jadwal */
+        [data-theme="dark"] .table-schedule {
+            background-color: var(--dark-card) !important;
+            color: var(--dark-text) !important;
+            border-color: var(--dark-border) !important;
+        }
+
+        [data-theme="dark"] .table-schedule thead th {
+            background-color: rgba(37, 99, 235, 0.2) !important;
+            color: #93c5fd !important;
+            border-bottom: 2px solid var(--dark-border) !important;
+        }
+
+        [data-theme="dark"] .table-schedule tbody td {
+            background-color: var(--dark-card) !important;
+            color: var(--dark-text) !important;
+            border-bottom: 1px solid var(--dark-border) !important;
+        }
+
+        [data-theme="dark"] .table-schedule tbody tr {
+            background-color: var(--dark-card) !important;
+        }
+
+        [data-theme="dark"] .table-schedule tbody tr:nth-child(odd) {
+            background-color: var(--dark-card) !important;
+        }
+
+        [data-theme="dark"] .table-schedule tbody tr:nth-child(even) {
+            background-color: rgba(30, 41, 59, 0.7) !important;
+        }
+
+        [data-theme="dark"] .table-schedule tbody tr:hover td {
+            background-color: rgba(37, 99, 235, 0.15) !important;
+        }
+
+        /* Fix untuk tabel Pengaturan Admin User */
+        [data-theme="dark"] .table-admin-users {
+            background-color: var(--dark-card) !important;
+            color: var(--dark-text) !important;
+            border-color: var(--dark-border) !important;
+        }
+
+        [data-theme="dark"] .table-admin-users thead th {
+            background-color: rgba(37, 99, 235, 0.2) !important;
+            color: #93c5fd !important;
+            border-bottom: 2px solid var(--dark-border) !important;
+        }
+
+        [data-theme="dark"] .table-admin-users tbody td {
+            background-color: var(--dark-card) !important;
+            color: var(--dark-text) !important;
+            border-bottom: 1px solid var(--dark-border) !important;
+        }
+
+        [data-theme="dark"] .table-admin-users tbody tr {
+            background-color: var(--dark-card) !important;
+        }
+
+        [data-theme="dark"] .table-admin-users tbody tr:nth-child(odd) {
+            background-color: var(--dark-card) !important;
+        }
+
+        [data-theme="dark"] .table-admin-users tbody tr:nth-child(even) {
+            background-color: rgba(30, 41, 59, 0.7) !important;
+        }
+
+        [data-theme="dark"] .table-admin-users tbody tr:hover td {
+            background-color: rgba(37, 99, 235, 0.15) !important;
+        }
+
+        /* Fix umum untuk semua tabel dalam section content */
+        [data-theme="dark"] #content table {
+            background-color: var(--dark-card) !important;
+            color: var(--dark-text) !important;
+            border-color: var(--dark-border) !important;
+        }
+
+        [data-theme="dark"] #content table thead th {
+            background-color: rgba(37, 99, 235, 0.2) !important;
+            color: #93c5fd !important;
+            border-bottom: 2px solid var(--dark-border) !important;
+        }
+
+        [data-theme="dark"] #content table tbody td {
+            background-color: var(--dark-card) !important;
+            color: var(--dark-text) !important;
+            border-bottom: 1px solid var(--dark-border) !important;
+        }
+
+        [data-theme="dark"] #content table tbody tr {
+            background-color: var(--dark-card) !important;
+        }
+
+        [data-theme="dark"] #content table tbody tr:hover td {
+            background-color: rgba(37, 99, 235, 0.15) !important;
+        }
+
+        /* Fix untuk tabel tanpa kelas spesifik di dalam data-table-container */
+        [data-theme="dark"] .data-table-container table {
+            background-color: var(--dark-card) !important;
+            color: var(--dark-text) !important;
+        }
+
+        [data-theme="dark"] .data-table-container table thead th {
+            background-color: rgba(37, 99, 235, 0.2) !important;
+            color: #93c5fd !important;
+        }
+
+        [data-theme="dark"] .data-table-container table tbody td {
+            background-color: var(--dark-card) !important;
+            color: var(--dark-text) !important;
+        }
+
+        /* Fix untuk tabel striped (bergaris) */
+        [data-theme="dark"] .table-striped > tbody > tr:nth-of-type(odd) {
+            background-color: rgba(255, 255, 255, 0.02) !important;
+        }
+
+        [data-theme="dark"] .table-striped > tbody > tr:nth-of-type(even) {
+            background-color: rgba(30, 41, 59, 0.5) !important;
+        }
+
+        /* Fix untuk tabel bordered */
+        [data-theme="dark"] .table-bordered {
+            border: 1px solid var(--dark-border) !important;
+        }
+
+        [data-theme="dark"] .table-bordered th,
+        [data-theme="dark"] .table-bordered td {
+            border: 1px solid var(--dark-border) !important;
+        }
+
+        /* Fix untuk tabel hover */
+        [data-theme="dark"] .table-hover tbody tr:hover {
+            background-color: rgba(37, 99, 235, 0.1) !important;
+            color: var(--dark-text) !important;
+        }
+
+        /* Kelas tambahan untuk tabel dark mode */
+        .dark-table {
+            background-color: var(--dark-card) !important;
+            color: var(--dark-text) !important;
+            border-color: var(--dark-border) !important;
+        }
+
+        .dark-table thead th {
+            background-color: rgba(37, 99, 235, 0.2) !important;
+            color: #93c5fd !important;
+            border-bottom: 2px solid var(--dark-border) !important;
+        }
+
+        .dark-table tbody td {
+            background-color: var(--dark-card) !important;
+            color: var(--dark-text) !important;
+            border-bottom: 1px solid var(--dark-border) !important;
+        }
+    </style>
+</head>
+<body>
+    <!-- Loading Overlay -->
+    <div class="loading-overlay" id="loadingOverlay" style="display: none;">
+        <div class="loading-spinner"></div>
+    </div>
+    
+    <div class="container-fluid p-0">
+        <!-- Navigation Sidebar -->
+        <div class="navigation" id="navigation">
+            <ul>
+                <li>
+                    <a href="#">
+                        <span class="icon">
+                            <ion-icon name="person-circle-outline"></ion-icon>
+                        </span>
+                        <span class="title">Admin Panel</span>
+                    </a>
+                </li>
+                <li class="<?php echo ($table == 'dashboard' || $table == '') ? 'hovered' : ''; ?>">
+                    <a href="admin.php?table=dashboard">
+                        <span class="icon">
+                            <ion-icon name="home-outline"></ion-icon>
+                        </span>
+                        <span class="title">Dashboard</span>
+                    </a>
+                </li>
+                <li class="<?php echo $table == 'student' ? 'hovered' : ''; ?>">
+                    <a href="admin.php?table=student">
+                        <span class="icon">
+                            <ion-icon name="people-outline"></ion-icon>
+                        </span>
+                        <span class="title">Manajemen Siswa</span>
+                    </a>
+                </li>
+                <li class="<?php echo $table == 'teacher' ? 'hovered' : ''; ?>">
+                    <a href="admin.php?table=teacher">
+                        <span class="icon">
+                            <ion-icon name="school-outline"></ion-icon>
+                        </span>
+                        <span class="title">Manajemen Guru</span>
+                    </a>
+                </li>
+                <li class="<?php echo $table == 'class' ? 'hovered' : ''; ?>">
+                    <a href="admin.php?table=class">
+                        <span class="icon">
+                            <ion-icon name="business-outline"></ion-icon>
+                        </span>
+                        <span class="title">Kelas & Jurusan</span>
+                    </a>
+                </li>
+                <li class="<?php echo $table == 'schedule' ? 'hovered' : ''; ?>">
+                    <a href="admin.php?table=schedule">
+                        <span class="icon">
+                            <ion-icon name="calendar-outline"></ion-icon>
+                        </span>
+                        <span class="title">Jadwal Mengajar</span>
+                    </a>
+                </li>
+                <li class="<?php echo $table == 'attendance' ? 'hovered' : ''; ?>">
+                    <a href="admin.php?table=attendance">
+                        <span class="icon">
+                            <ion-icon name="clipboard-outline"></ion-icon>
+                        </span>
+                        <span class="title">Data Absensi</span>
+                    </a>
+                </li>
+                <li class="<?php echo $table == 'location' ? 'hovered' : ''; ?>">
+                    <a href="admin.php?table=location">
+                        <span class="icon">
+                            <ion-icon name="location-outline"></ion-icon>
+                        </span>
+                        <span class="title">Pengaturan Lokasi</span>
+                    </a>
+                </li>
+                <li class="<?php echo $table == 'system' ? 'hovered' : ''; ?>">
+                    <a href="admin.php?table=system">
+                        <span class="icon">
+                            <ion-icon name="settings-outline"></ion-icon>
+                        </span>
+                        <span class="title">Pengaturan Sistem</span>
+                    </a>
+                </li>
+            </ul>
+            <div class="navigation-logout">
+                <a href="../logout.php">
+                    <span class="icon">
+                        <ion-icon name="log-out-outline"></ion-icon>
+                    </span>
+                    <span class="title">Logout</span>
+                </a>
+            </div>
+        </div>
+
+        <!-- Main Content -->
+        <div class="main" id="main">
+            <!-- Topbar -->
+            <div class="topbar">
+                <div class="toggle">
+                    <ion-icon name="menu-outline"></ion-icon>
+                </div>
+
+                <div class="topbar-time">
+                    <div class="topbar-date" id="currentDate">--</div>
+                    <div class="topbar-clock" id="currentTime">--:--:--</div>
+                </div>
+
+                <div class="topbar-actions">
+                    <!-- Theme Toggle -->
+                    <button id="themeToggle" title="Toggle Theme">
+                        <i class="fas fa-moon"></i>
+                    </button>
+
+                    <!-- User -->
+                    <div class="user">
+                        <?php
+                        $nameParts = explode(' ', $_SESSION['fullname']);
+                        $initials = '';
+                        foreach ($nameParts as $part) {
+                            $initials .= strtoupper(substr($part, 0, 1));
+                            if (strlen($initials) >= 2) break;
+                        }
+                        ?>
+                        <div class="avatar-text" style="
+                            width: 40px;
+                            height: 40px;
+                            border-radius: 50%;
+                            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                            color: white;
+                            display: flex;
+                            align-items: center;
+                            justify-content: center;
+                            font-weight: bold;
+                            font-size: 16px;
+                        ">
+                            <?php echo $initials; ?>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Success/Error Messages -->
+            <?php if ($success): ?>
+            <div class="alert alert-success alert-dismissible fade show mb-4" role="alert">
+                <i class="fas fa-check-circle me-2"></i>
+                <?php echo $success; ?>
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>
+            <?php endif; ?>
+            
+            <?php if ($error): ?>
+            <div class="alert alert-danger alert-dismissible fade show mb-4" role="alert">
+                <i class="fas fa-exclamation-triangle me-2"></i>
+                <?php echo $error; ?>
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>
+            <?php endif; ?>
+            
+            <!-- Content based on selected table -->
+            <div id="content">
+                <?php
+                $section_file = "sections/$table.php";
+                if (file_exists($section_file)) {
+                    include $section_file;
+                } else {
+                    // Default dashboard
+                    // Get statistics
+                    $stats = [];
+
+                    // Total Students
+                    $sql = "SELECT COUNT(*) as total FROM student";
+                    $stmt = $db->query($sql);
+                    $stats['students'] = $stmt->fetch()['total'];
+
+                    // Total Teachers
+                    $sql = "SELECT COUNT(*) as total FROM teacher";
+                    $stmt = $db->query($sql);
+                    $stats['teachers'] = $stmt->fetch()['total'];
+
+                    // Total Classes
+                    $sql = "SELECT COUNT(*) as total FROM class";
+                    $stmt = $db->query($sql);
+                    $stats['classes'] = $stmt->fetch()['total'];
+
+                    // Weekly cycle (Mon-Sat 15:00 WIB)
+                    $tz = new DateTimeZone('Asia/Jakarta');
+                    $now_wib = new DateTime('now', $tz);
+                    $week_start = (clone $now_wib)->modify('monday this week')->setTime(0, 0, 0);
+                    $week_reset = (clone $week_start)->modify('+5 days')->setTime(15, 0, 0);
+                    if ($now_wib >= $week_reset) {
+                        $week_start->modify('+7 days');
+                        $week_reset->modify('+7 days');
+                    }
+                    $cycle_start = $week_start->format('Y-m-d H:i:s');
+                    $cycle_end = $week_reset->format('Y-m-d H:i:s');
+
+                    // Attendance in current cycle
+                    $sql = "SELECT COUNT(*) as total FROM presence WHERE presence_date BETWEEN ? AND ?";
+                    $stmt = $db->query($sql, [$cycle_start, $cycle_end]);
+                    $stats['attendance_today'] = $stmt->fetch()['total'];
+
+                    // Recent Activities (current cycle)
+                    $sql = "SELECT p.*, s.student_name, c.class_name 
+                            FROM presence p 
+                            JOIN student s ON p.student_id = s.id 
+                            JOIN class c ON s.class_id = c.class_id 
+                            WHERE p.presence_date BETWEEN ? AND ?
+                            ORDER BY p.presence_date DESC, p.time_in DESC 
+                            LIMIT 10";
+                    $stmt = $db->query($sql, [$cycle_start, $cycle_end]);
+                    $recent_activities = $stmt->fetchAll();
+                    ?>
+                    
+                    <div class="row mb-4">
+                        <div class="col-md-3 col-sm-6 mb-4">
+                            <a href="?table=student" class="dashboard-card clickable">
+                                <div class="card-icon blue">
+                                    <i class="fas fa-users"></i>
+                                </div>
+                                <h4 class="card-value"><?php echo $stats['students']; ?></h4>
+                                <p class="card-title">Total Siswa</p>
+                                <p class="card-change positive">
+                                    <i class="fas fa-arrow-up"></i> Klik untuk melihat daftar
+                                </p>
+                            </a>
+                        </div>
+                        <div class="col-md-3 col-sm-6 mb-4">
+                            <a href="?table=teacher" class="dashboard-card clickable">
+                                <div class="card-icon green">
+                                    <i class="fas fa-chalkboard-teacher"></i>
+                                </div>
+                                <h4 class="card-value"><?php echo $stats['teachers']; ?></h4>
+                                <p class="card-title">Total Guru</p>
+                                <p class="card-change positive">
+                                    <i class="fas fa-arrow-up"></i> Klik untuk melihat daftar
+                                </p>
+                            </a>
+                        </div>
+                        <div class="col-md-3 col-sm-6 mb-4">
+                            <a href="?table=class" class="dashboard-card clickable">
+                                <div class="card-icon teal">
+                                    <i class="fas fa-school"></i>
+                                </div>
+                                <h4 class="card-value"><?php echo $stats['classes']; ?></h4>
+                                <p class="card-title">Total Kelas</p>
+                                <p class="card-change positive">
+                                    <i class="fas fa-arrow-up"></i> Klik untuk mengelola
+                                </p>
+                            </a>
+                        </div>
+                        <div class="col-md-3 col-sm-6 mb-4">
+                            <a href="?table=attendance" class="dashboard-card clickable">
+                                <div class="card-icon purple">
+                                    <i class="fas fa-clipboard-check"></i>
+                                </div>
+                                <h4 class="card-value"><?php echo $stats['attendance_today']; ?></h4>
+                                <p class="card-title">Absensi Minggu Ini</p>
+                                <p class="card-change positive">
+                                    <i class="fas fa-arrow-up"></i> Klik untuk melihat detail
+                                </p>
+                            </a>
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-lg-8 mb-4">
+                            <div class="activity-table">
+                                <h5 class="mb-4"><i class="fas fa-history text-primary me-2"></i>Aktivitas Terbaru</h5>
+                                <div class="table-responsive">
+                                    <table class="table table-hover">
+                                        <thead>
+                                            <tr>
+                                                <th>Siswa</th>
+                                                <th>Kelas</th>
+                                                <th>Waktu</th>
+                                                <th>Status</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <?php foreach($recent_activities as $activity): ?>
+                                            <tr>
+                                                <td><?php echo $activity['student_name']; ?></td>
+                                                <td><?php echo $activity['class_name']; ?></td>
+                                                <td><?php echo date('H:i', strtotime($activity['time_in'])); ?></td>
+                                                <td>
+                                                    <span class="badge badge-success">Hadir</span>
+                                                </td>
+                                            </tr>
+                                            <?php endforeach; ?>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="col-lg-4 mb-4">
+                            <div class="quick-actions">
+                                <h5 class="mb-4"><i class="fas fa-bolt text-success me-2"></i>Quick Actions</h5>
+                                <a href="?table=student" class="quick-action-item">
+                                    <i class="fas fa-plus-circle"></i>
+                                    <span>Tambah Siswa Baru</span>
+                                </a>
+                                <a href="?table=teacher" class="quick-action-item">
+                                    <i class="fas fa-user-plus"></i>
+                                    <span>Tambah Guru Baru</span>
+                                </a>
+                                <a href="?table=schedule" class="quick-action-item">
+                                    <i class="fas fa-calendar-plus"></i>
+                                    <span>Buat Jadwal Baru</span>
+                                </a>
+                                <a href="?table=attendance&export=today" class="quick-action-item">
+                                    <i class="fas fa-download"></i>
+                                    <span>Export Absensi Minggu Ini</span>
+                                </a>
+                                <a href="?table=system" class="quick-action-item">
+                                    <i class="fas fa-cog"></i>
+                                    <span>Pengaturan Sistem</span>
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                    <?php
+                }
+                ?>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Modals -->
+    <div class="modal fade" id="addModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <!-- Modal content will be loaded via AJAX -->
+            </div>
+        </div>
+    </div>
+    
+    <!-- JavaScript -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="../assets/js/main.js"></script>
+    
+    <script>
+    // Set cookie function
+    function setCookie(name, value, days) {
+        let expires = "";
+        if (days) {
+            const date = new Date();
+            date.setTime(date.getTime() + (days * 24 * 60 * 60 * 1000));
+            expires = "; expires=" + date.toUTCString();
+        }
+        document.cookie = name + "=" + (value || "") + expires + "; path=/";
+    }
+    
+    // Get cookie function
+    function getCookie(name) {
+        const nameEQ = name + "=";
+        const ca = document.cookie.split(';');
+        for(let i = 0; i < ca.length; i++) {
+            let c = ca[i];
+            while (c.charAt(0) === ' ') c = c.substring(1, c.length);
+            if (c.indexOf(nameEQ) === 0) return c.substring(nameEQ.length, c.length);
+        }
+        return null;
+    }
+    
+    // Real-time clock
+    function updateClock() {
+        const timeEl = document.getElementById('currentTime');
+        const dateEl = document.getElementById('currentDate');
+        if (!timeEl && !dateEl) return;
+
+        const now = new Date();
+        // Get UTC time
+        const utc = now.getTime() + (now.getTimezoneOffset() * 60000);
+        // Create UTC+7 time (WIB)
+        const wib = new Date(utc + (3600000 * 7));
+
+        const hours = String(wib.getHours()).padStart(2, '0');
+        const minutes = String(wib.getMinutes()).padStart(2, '0');
+        const seconds = String(wib.getSeconds()).padStart(2, '0');
+
+        if (timeEl) {
+            timeEl.textContent = `${hours}:${minutes}:${seconds} WIB`;
+        }
+
+        if (dateEl) {
+            const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
+            const dateStr = wib.toLocaleDateString('id-ID', options);
+            dateEl.textContent = dateStr;
+        }
+    }
+    
+    // Update every second if elements exist
+    if (document.getElementById('currentTime') || document.getElementById('currentDate')) {
+        setInterval(updateClock, 1000);
+        updateClock(); // Initial call
+    }
+    
+    $(document).ready(function() {
+        // Initialize DataTables with consistent styling
+        $('.data-table').each(function() {
+            if (!$.fn.DataTable.isDataTable(this)) {
+                $(this).DataTable({
+                    "language": {
+                        "url": "//cdn.datatables.net/plug-ins/1.13.6/i18n/id.json"
+                    },
+                    "pageLength": 10,
+                    "lengthMenu": [10, 25, 50, 100],
+                    "ordering": true,
+                    "searching": true,
+                    "responsive": true,
+                    "dom": "<'row'<'col-sm-12 col-md-6'l><'col-sm-12 col-md-6'f>>" +
+                           "<'row'<'col-sm-12'tr>>" +
+                           "<'row'<'col-sm-12 col-md-5'i><'col-sm-12 col-md-7'p>>",
+                    "initComplete": function() {
+                        // Apply custom styling to DataTables elements
+                        $('.dataTables_filter input').addClass('form-control');
+                        $('.dataTables_length select').addClass('form-select');
+                    }
+                });
+            }
+        });
+        
+        // Handle edit button click
+      $(document).on('click', '.edit-btn', function() {
+    const id = $(this).data('id');
+    const table = $(this).data('table');
+    
+    $('#loadingOverlay').show();
+    
+    // Tentukan URL berdasarkan tabel
+    let url = 'ajax/get_form.php';
+    if (table === 'schedule') {
+        url = 'ajax/get_schedule_form.php';
+    }
+    
+    $.ajax({
+        url: url,
+        method: 'POST',
+        data: { 
+            id: id, 
+            table: table 
+        },
+        success: function(response) {
+            $('#addModal .modal-content').html(response);
+            $('#addModal').modal('show');
+            $('#loadingOverlay').hide();
+        },
+        error: function(xhr, status, error) {
+            $('#loadingOverlay').hide();
+            alert('Terjadi kesalahan saat memuat data: ' + error);
+            console.error('AJAX Error:', error, xhr.responseText);
+        }
+    });
+});
+
+        
+        // Handle add button click
+       $(document).on('click', '.add-btn', function() {
+    const table = $(this).data('table');
+    
+    $('#loadingOverlay').show();
+    
+    // Tentukan URL berdasarkan tabel
+    let url = 'ajax/get_form.php';
+    if (table === 'schedule') {
+        url = 'ajax/get_schedule_form.php';
+    }
+    
+    $.ajax({
+        url: url,
+        method: 'POST',
+        data: { table: table },
+        success: function(response) {
+            $('#addModal .modal-content').html(response);
+            $('#addModal').modal('show');
+            $('#loadingOverlay').hide();
+        },
+        error: function(xhr, status, error) {
+            $('#loadingOverlay').hide();
+            alert('Terjadi kesalahan saat memuat form: ' + error);
+        }
+    });
+});
+        // Auto-hide alerts after 5 seconds
+        setTimeout(function() {
+            $('.alert').fadeOut('slow');
+        }, 5000);
+        
+        // Toggle sidebar
+        $('#sidebarToggle').click(function() {
+            const sidebar = $('#sidebar');
+            const mainContent = $('#mainContent');
+            const icon = $(this).find('i');
+            
+            sidebar.toggleClass('collapsed');
+            mainContent.toggleClass('expanded');
+            
+            if (sidebar.hasClass('collapsed')) {
+                icon.removeClass('fa-chevron-left').addClass('fa-chevron-right');
+                localStorage.setItem('sidebarCollapsed', 'true');
+            } else {
+                icon.removeClass('fa-chevron-right').addClass('fa-chevron-left');
+                localStorage.setItem('sidebarCollapsed', 'false');
+            }
+        });
+        
+        // Mobile menu toggle
+        $('#mobileMenuToggle').click(function() {
+            $('#sidebar').toggleClass('show');
+        });
+        
+        function updateAdminFavicon(theme) {
+            const favicon = document.getElementById('adminFavicon');
+            const shortcutIcon = document.getElementById('adminShortcutIcon');
+            if (!favicon) {
+                return;
+            }
+            const light = favicon.getAttribute('data-light');
+            const dark = favicon.getAttribute('data-dark');
+            favicon.setAttribute('href', theme === 'dark' ? dark : light);
+            if (shortcutIcon) {
+                shortcutIcon.setAttribute('href', theme === 'dark' ? dark : light);
+            }
+
+            const themeColorMeta = document.getElementById('adminThemeColor');
+            if (themeColorMeta) {
+                themeColorMeta.setAttribute('content', theme === 'dark' ? '#0f172a' : '#f8fafc');
+            }
+        }
+
+        // Theme toggle with cookie persistence and smooth transition
+        $('#themeToggle').click(function() {
+            const html = document.documentElement;
+            const currentTheme = html.getAttribute('data-theme');
+            const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+            const icon = $(this).find('i');
+            
+            // Enable lighter transitions for theme change
+            document.body.style.transition = 'background-color 0.15s ease, color 0.15s ease';
+            
+            // Set theme attribute
+            html.setAttribute('data-theme', newTheme);
+            updateAdminFavicon(newTheme);
+            
+            // Update cookie (expires in 365 days)
+            setCookie('admin_theme', newTheme, 365);
+            
+            // Update icon
+            if (newTheme === 'dark') {
+                icon.removeClass('fa-moon').addClass('fa-sun');
+                $(this).attr('title', 'Switch to Light Mode');
+            } else {
+                icon.removeClass('fa-sun').addClass('fa-moon');
+                $(this).attr('title', 'Switch to Dark Mode');
+            }
+            
+            // Reapply dark mode fixes and table styles after theme change
+            setTimeout(function() {
+                applyDarkModeFixes();
+                updateTableStyles();
+            }, 100);
+        });
+        
+        // Restore sidebar state from localStorage
+        const sidebarCollapsed = localStorage.getItem('sidebarCollapsed');
+        if (sidebarCollapsed === 'true') {
+            $('#sidebar').addClass('collapsed');
+            $('#mainContent').addClass('expanded');
+            $('#sidebarToggle i').removeClass('fa-chevron-left').addClass('fa-chevron-right');
+        }
+        
+        // Update active menu item based on current page
+        function updateActiveMenuItem() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const currentTable = urlParams.get('table') || 'dashboard';
+            
+            $('.sidebar-menu .nav-link').removeClass('active');
+            $(`.sidebar-menu .nav-link[href*="table=${currentTable}"]`).addClass('active');
+        }
+        
+        updateActiveMenuItem();
+        
+        // Close mobile sidebar when clicking outside
+        $(document).click(function(event) {
+            if ($(window).width() <= 992) {
+                const sidebar = $('#sidebar');
+                const toggle = $('#mobileMenuToggle');
+                if (!sidebar.is(event.target) && sidebar.has(event.target).length === 0 && 
+                    !toggle.is(event.target) && toggle.has(event.target).length === 0) {
+                    sidebar.removeClass('show');
+                }
+            }
+        });
+        
+        // Loading overlay for page transitions
+        $(document).on('click', 'a:not([href^="#"]):not([href*="javascript"]):not([target="_blank"])', function(e) {
+            const href = $(this).attr('href');
+            const hasInlineConfirm = ($(this).attr('onclick') || '').includes('confirm');
+            if ($(this).data('no-loading') || hasInlineConfirm) {
+                return;
+            }
+            if (href && !href.startsWith('javascript:') && !href.startsWith('#')) {
+                $('#loadingOverlay').show();
+            }
+        });
+
+        // Ensure no-loading links do not leave overlay visible
+        $(document).on('click', 'a[data-no-loading="1"]', function() {
+            $('#loadingOverlay').hide();
+        });
+        
+        // Hide loading overlay when page is fully loaded
+        $(window).on('load', function() {
+            $('#loadingOverlay').hide();
+        });
+        
+        // Theme is already set in head, just verify
+        const savedTheme = getCookie('admin_theme') || '<?php echo $theme; ?>';
+        // Only update if different (shouldn't happen)
+        if (document.documentElement.getAttribute('data-theme') !== savedTheme) {
+            document.documentElement.setAttribute('data-theme', savedTheme);
+        }
+        updateAdminFavicon(savedTheme);
+        
+        // Remove transition delay after initial load
+        setTimeout(function() {
+            document.body.style.transition = '';
+            document.querySelectorAll('*').forEach(function(el) {
+                if (el.style.transition === 'none') {
+                    el.style.transition = '';
+                }
+            });
+        }, 50);
+        
+        // Apply dark mode fixes to existing elements
+        function applyDarkModeFixes() {
+            const isDarkMode = document.documentElement.getAttribute('data-theme') === 'dark';
+            
+            // Fix for Bootstrap dropdowns
+            if (isDarkMode) {
+                $('.dropdown-menu').addClass('dark-dropdown');
+            } else {
+                $('.dropdown-menu').removeClass('dark-dropdown');
+            }
+            
+            // Fix for pagination
+            if (isDarkMode) {
+                $('.pagination').addClass('dark-pagination');
+            } else {
+                $('.pagination').removeClass('dark-pagination');
+            }
+        }
+        
+        // Apply fixes on page load
+        applyDarkModeFixes();
+        
+        // Fungsi untuk memperbarui tampilan tabel setelah perubahan tema
+        function updateTableStyles() {
+            const isDarkMode = document.documentElement.getAttribute('data-theme') === 'dark';
+            
+            // Update semua tabel di dalam content
+            $('#content table').each(function() {
+                if (isDarkMode) {
+                    $(this).addClass('dark-table');
+                    $(this).css({
+                        'background-color': 'var(--dark-card)',
+                        'color': 'var(--dark-text)'
+                    });
+                } else {
+                    $(this).removeClass('dark-table');
+                    $(this).css({
+                        'background-color': '',
+                        'color': ''
+                    });
+                }
+            });
+            
+            // Update DataTables jika ada
+            if ($.fn.DataTable.isDataTable('.data-table')) {
+                $('.data-table').DataTable().draw();
+            }
+        }
+        
+        // Panggil saat halaman dimuat
+        setTimeout(updateTableStyles, 500);
+    });
+
+    // Weekly calendar functions
+function initWeeklyCalendar() {
+    // Get current week
+    const now = new Date();
+    const currentWeek = getWeekDates(now);
+    
+    // Update calendar display
+    updateCalendarDisplay(currentWeek);
+}
+
+function getWeekDates(date) {
+    const day = date.getDay();
+    const diff = date.getDate() - day + (day === 0 ? -6 : 1); // Adjust for Sunday
+    const monday = new Date(date.setDate(diff));
+    
+    const week = [];
+    for (let i = 0; i < 7; i++) {
+        const day = new Date(monday);
+        day.setDate(monday.getDate() + i);
+        week.push(day);
+    }
+    return week;
+}
+
+function updateCalendarDisplay(weekDates) {
+    const days = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu'];
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+    
+    const calendarContainer = document.getElementById('weeklyCalendar');
+    if (!calendarContainer) return;
+    
+    let html = '<div class="row text-center mb-3">';
+    
+    weekDates.forEach((date, index) => {
+        const dayName = days[index];
+        const dayNum = date.getDate();
+        const month = months[date.getMonth()];
+        const isToday = isSameDay(date, new Date());
+        
+        html += `
+            <div class="col">
+                <div class="calendar-day ${isToday ? 'calendar-today' : ''}">
+                    <div class="calendar-day-name">${dayName}</div>
+                    <div class="calendar-date">${dayNum}</div>
+                    <div class="calendar-month">${month}</div>
+                </div>
+            </div>
+        `;
+    });
+    
+    html += '</div>';
+    calendarContainer.innerHTML = html;
+}
+
+function isSameDay(date1, date2) {
+    return date1.getDate() === date2.getDate() &&
+           date1.getMonth() === date2.getMonth() &&
+           date1.getFullYear() === date2.getFullYear();
+}
+
+// Panggil fungsi kalender saat halaman dimuat
+$(document).ready(function() {
+    initWeeklyCalendar();
+});
+    </script>
+</body>
+</html>
+<?php ob_end_flush(); ?>

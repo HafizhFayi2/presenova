@@ -1,0 +1,14 @@
+Backup Metadata
+---------------
+Deleted at: 2026-02-08T13:46:35+07:00
+Deleted by (user_id): 1
+Reason: rt
+Student ID: 9
+NISN: 123456
+Name: UDIN
+Presence records: 0
+Activity logs: 0
+Attendance log entries: 0
+Reference files: 0
+Attendance files: 0
+Match logs: 0

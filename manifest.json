@@ -1,0 +1,27 @@
+{
+  "name": "Presenova",
+  "short_name": "Presenova",
+  "description": "Sistem Absensi Online dengan Face Recognition & GPS",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0a0f1e",
+  "theme_color": "#0a0f1e",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/assets/images/logo-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/assets/images/logo-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["education", "productivity"],
+  "lang": "id-ID",
+  "dir": "ltr"
+}

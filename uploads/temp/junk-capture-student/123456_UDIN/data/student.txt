@@ -1,0 +1,16 @@
+Data Siswa
+-----------
+id: 9
+student_code: SW0001
+student_nisn: 123456
+student_password: ec276d4c3452a528915c218e1b878d0e8119c5b1142215817747d1e784bb0a8b
+student_name: UDIN
+class_id: 1
+jurusan_id: 1
+photo: null
+photo_reference: null
+face_embedding: null
+last_face_update: null
+location_id: 1
+created_login: null
+created_cookies: -

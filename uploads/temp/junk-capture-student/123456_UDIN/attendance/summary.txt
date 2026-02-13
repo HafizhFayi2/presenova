@@ -1,0 +1,8 @@
+Ringkasan Kehadiran
+--------------------
+Hadir: 0
+Sakit: 0
+Izin: 0
+Alpa: 0
+Terlambat: 0
+Total: 0
