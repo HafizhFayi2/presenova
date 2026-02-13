@@ -881,34 +881,37 @@ $(document).ready(function() {
                 $('#previewImage').attr('src', canvas.toDataURL('image/jpeg', 0.85));
 
                 const serverResult = await requestServerMatch(capturedData);
-                const similarityRaw = parseFloat(serverResult.similarity || 0);
+                const serverSimilarity = parseFloat(serverResult.similarity || 0);
                 const thresholdValue = serverResult.threshold || similarityThreshold;
-                let similarityDisplay = similarityRaw;
-                if (serverResult.passed && similarityDisplay < thresholdValue) {
-                    similarityDisplay = thresholdValue;
-                }
+                const localDistance = faceapi.euclideanDistance(referenceDescriptor, detection.descriptor);
+                const localSimilarity = distanceToSimilarity(localDistance);
+                const localPassed = Number.isFinite(localDistance) && localDistance <= distanceThreshold;
+                const serverNearThreshold = serverSimilarity >= Math.max(45, thresholdValue - 30);
+                const finalPassed = localPassed && serverNearThreshold;
+                const similarityDisplay = Math.max(0, Math.min(100, (serverSimilarity * 0.58) + (localSimilarity * 0.42)));
 
-                $('#faceSimilarityValue').val(similarityRaw.toFixed(2));
-                $('#faceDistanceValue').val(serverResult.details?.lbph_confidence ?? 0);
+                $('#faceSimilarityValue').val(similarityDisplay.toFixed(2));
+                $('#faceDistanceValue').val(Number.isFinite(localDistance) ? localDistance.toFixed(4) : '');
                 $('#faceSimilarityText').text(similarityDisplay.toFixed(2) + '%');
                 $('#faceMatchProgress').css('width', similarityDisplay.toFixed(2) + '%');
 
-                if (serverResult.passed) {
+                if (finalPassed) {
                     $('#faceVerifiedValue').val('1');
                     $('#faceMatchStatus')
                         .removeClass('alert-info alert-secondary alert-danger')
                         .addClass('alert-success')
-                        .html('<i class="fas fa-check-circle me-1"></i> Verifikasi wajah berhasil!');
+                        .html('<i class="fas fa-check-circle me-1"></i> Verifikasi wajah berhasil (descriptor + server).');
 
                     setTimeout(() => {
                         showResultModal();
                     }, 400);
                 } else {
                     $('#faceVerifiedValue').val('0');
+                    const localDistanceText = Number.isFinite(localDistance) ? localDistance.toFixed(3) : '-';
                     $('#faceMatchStatus')
                         .removeClass('alert-info alert-secondary alert-success')
                         .addClass('alert-danger')
-                        .html(`<i class="fas fa-times-circle me-1"></i> Similarity di bawah ${thresholdValue}%. Coba ulangi dengan pencahayaan lebih baik.`);
+                        .html(`<i class="fas fa-times-circle me-1"></i> Verifikasi gagal. Descriptor: ${localDistanceText} (batas ${distanceThreshold}).`);
                 }
             } catch (error) {
                 $('#faceMatchStatus')

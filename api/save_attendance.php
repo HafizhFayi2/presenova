@@ -77,6 +77,9 @@ $information = $_POST['information'] ?? '';
 $face_similarity = isset($_POST['face_similarity']) ? floatval($_POST['face_similarity']) : null;
 $face_distance = isset($_POST['face_distance']) ? floatval($_POST['face_distance']) : null;
 $face_verified = isset($_POST['face_verified']) ? ($_POST['face_verified'] === '1') : false;
+$descriptorThreshold = defined('FACE_DESCRIPTOR_DISTANCE_THRESHOLD')
+    ? (float) FACE_DESCRIPTOR_DISTANCE_THRESHOLD
+    : 0.55;
 
 // Validasi input
 if (!$schedule_id || !$base64Image || !$latitude || !$longitude) {
@@ -204,12 +207,46 @@ try {
         respondJson(['success' => false, 'message' => 'Gagal proses face matching'], 500);
     }
 
-    if (!$matchResult['passed']) {
+    $serverPassed = !empty($matchResult['passed']);
+    // Descriptor distance valid range ~0.0 - 1.5. Nilai besar (mis. lbph confidence)
+    // dianggap legacy dan diabaikan agar tetap kompatibel dengan form lama.
+    $clientDistanceProvided = is_numeric($face_distance) && $face_distance > 0 && $face_distance <= 2.0;
+    $clientDistancePassed = $clientDistanceProvided ? ((float)$face_distance <= $descriptorThreshold) : null;
+    $clientStrongVerified = $face_verified && $clientDistancePassed === true;
+
+    if ($serverPassed && $clientDistancePassed === false) {
         $faceMatcher->saveMatchResult(
             $student_id,
             $matchResult['similarity'],
             false,
-            $matchResult['details']
+            array_merge($matchResult['details'] ?? [], [
+                'client_distance' => $face_distance,
+                'client_distance_threshold' => $descriptorThreshold,
+                'client_descriptor_rejected' => true
+            ])
+        );
+
+        if (file_exists($selfieResult['path'])) {
+            @unlink($selfieResult['path']);
+        }
+
+        respondJson([
+            'success' => false,
+            'message' => 'Verifikasi wajah gagal (descriptor tidak sesuai)',
+            'similarity' => $matchResult['similarity']
+        ], 403);
+    }
+
+    if (!$serverPassed && !$clientStrongVerified) {
+        $faceMatcher->saveMatchResult(
+            $student_id,
+            $matchResult['similarity'],
+            false,
+            array_merge($matchResult['details'] ?? [], [
+                'client_distance' => $clientDistanceProvided ? $face_distance : null,
+                'client_distance_threshold' => $descriptorThreshold,
+                'client_verified' => $face_verified ? 1 : 0
+            ])
         );
 
         if (file_exists($selfieResult['path'])) {
@@ -221,6 +258,16 @@ try {
             'message' => 'Verifikasi wajah gagal',
             'similarity' => $matchResult['similarity']
         ], 403);
+    }
+
+    if (!$serverPassed && $clientStrongVerified) {
+        $matchResult['passed'] = true;
+        $matchResult['similarity'] = max((float)($matchResult['similarity'] ?? 0), (float)($face_similarity ?? 0), (float)FACE_MATCH_THRESHOLD);
+        $matchResult['details'] = array_merge($matchResult['details'] ?? [], [
+            'client_distance' => $face_distance,
+            'client_distance_threshold' => $descriptorThreshold,
+            'client_descriptor_override' => true
+        ]);
     }
     
     // 6. Simpan log matching sukses

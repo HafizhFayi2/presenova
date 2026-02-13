@@ -453,7 +453,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     const referenceUrl = page.dataset.referenceUrl;
     const threshold = parseFloat(page.dataset.threshold || '89');
-    const descriptorDistanceThreshold = parseFloat(page.dataset.descriptorThreshold || '<?php echo defined('FACE_DESCRIPTOR_DISTANCE_THRESHOLD') ? FACE_DESCRIPTOR_DISTANCE_THRESHOLD : 0.55; ?>');
+    const descriptorDistanceThreshold = parseFloat(page.dataset.descriptorThreshold || '0.55');
     const descriptorStrongThreshold = Math.max(0.38, descriptorDistanceThreshold - 0.08);
     const descriptorMaxDistance = 0.9;
     const faceLabel = page.dataset.faceLabel || '';
@@ -638,9 +638,10 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     function setSimilarity(value) {
-        lastSimilarity = value;
-        similarityValue.textContent = value.toFixed(2) + '%';
-        similarityBar.style.width = Math.min(100, value) + '%';
+        const safeValue = Number.isFinite(value) ? value : 0;
+        lastSimilarity = safeValue;
+        similarityValue.textContent = safeValue.toFixed(2) + '%';
+        similarityBar.style.width = Math.min(100, Math.max(0, safeValue)) + '%';
     }
 
     function updateLocationSnapshot(lat, lng, accuracy, distance, timestamp) {
@@ -2055,6 +2056,8 @@ document.addEventListener('DOMContentLoaded', function() {
             setBadge('error', 'Gagal');
             setStatus(buildQualityMessage(quality));
             setSimilarity(0);
+            lastFaceDistance = null;
+            lastDescriptorSimilarity = 0;
             return false;
         }
 
@@ -2071,6 +2074,8 @@ document.addEventListener('DOMContentLoaded', function() {
             setBadge('error', 'Gagal');
             setStatus(error.message || 'Gagal memproses verifikasi.');
             setSimilarity(0);
+            lastFaceDistance = null;
+            lastDescriptorSimilarity = 0;
             return false;
         }
 
@@ -2130,6 +2135,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         proceedBtn.disabled = true;
         matchPassed = false;
+        lastDescriptorSimilarity = localDescriptor ? localDescriptor.similarity : 0;
         return false;
     }
 

@@ -56,6 +56,19 @@ def _preprocess_face(img, box, size=160):
     return resized
 
 
+def _extract_core_face(gray_face, size=160):
+    """Crop central facial area to reduce hair/background influence."""
+    h, w = gray_face.shape[:2]
+    x0 = int(w * 0.16)
+    x1 = int(w * 0.84)
+    y0 = int(h * 0.18)
+    y1 = int(h * 0.92)
+    core = gray_face[y0:y1, x0:x1]
+    if core.size == 0:
+        core = gray_face
+    return cv2.resize(core, (size, size))
+
+
 def _adjust_gamma(image, gamma):
     if gamma <= 0:
         return image
@@ -201,6 +214,22 @@ def _edge_similarity(face_ref, face_cand):
     return similarity, float(corr)
 
 
+def _gradient_similarity(face_ref, face_cand):
+    gx_ref = cv2.Sobel(face_ref, cv2.CV_32F, 1, 0, ksize=3)
+    gy_ref = cv2.Sobel(face_ref, cv2.CV_32F, 0, 1, ksize=3)
+    gx_cand = cv2.Sobel(face_cand, cv2.CV_32F, 1, 0, ksize=3)
+    gy_cand = cv2.Sobel(face_cand, cv2.CV_32F, 0, 1, ksize=3)
+
+    mag_ref = cv2.magnitude(gx_ref, gy_ref).reshape(-1)
+    mag_cand = cv2.magnitude(gx_cand, gy_cand).reshape(-1)
+    mag_ref /= (np.linalg.norm(mag_ref) + 1e-6)
+    mag_cand /= (np.linalg.norm(mag_cand) + 1e-6)
+
+    sim = float(np.dot(mag_ref, mag_cand))
+    similarity = max(0.0, min(100.0, sim * 100.0))
+    return similarity, sim
+
+
 def _corr_similarity(face_ref, face_cand):
     ref = face_ref.astype(np.float32)
     cand = face_cand.astype(np.float32)
@@ -211,23 +240,25 @@ def _corr_similarity(face_ref, face_cand):
     return similarity, corr
 
 
-def _quality_score(lbph, corr_sim, edge_sim, hist_sim, hog_sim):
+def _quality_score(lbph, corr_sim, edge_sim, hist_sim, hog_sim, grad_sim):
     """Aggregate confidence score; mixes texture + structure."""
     return (
-        (lbph * 0.4) +
-        (corr_sim * 0.25) +
+        (lbph * 0.32) +
+        (corr_sim * 0.23) +
         (hog_sim * 0.2) +
-        (hist_sim * 0.1) +
-        (edge_sim * 0.05)
+        (grad_sim * 0.15) +
+        (hist_sim * 0.07) +
+        (edge_sim * 0.03)
     )
 
 
-def _structural_quality(corr_sim, hog_sim, hist_sim, edge_sim):
+def _structural_quality(corr_sim, hog_sim, hist_sim, edge_sim, grad_sim):
     """Structure-heavy quality score to survive lighting shifts."""
     return (
-        (corr_sim * 0.45) +
-        (hog_sim * 0.3) +
-        (hist_sim * 0.2) +
+        (corr_sim * 0.35) +
+        (hog_sim * 0.28) +
+        (grad_sim * 0.25) +
+        (hist_sim * 0.07) +
         (edge_sim * 0.05)
     )
 
@@ -336,36 +367,45 @@ def main():
 
     face_ref = _preprocess_face(img_ref, box_ref)
     face_cand = _preprocess_face(img_cand, box_cand)
+    face_ref_core = _extract_core_face(face_ref)
 
     cand_variants = [face_cand]
-    cand_variants.append(_adjust_gamma(face_cand, 0.85))
-    cand_variants.append(_adjust_gamma(face_cand, 1.15))
-    cand_variants.append(cv2.convertScaleAbs(face_cand, alpha=1.1, beta=12))
-    cand_variants.append(cv2.convertScaleAbs(face_cand, alpha=0.9, beta=-12))
+    cand_variants.append(_adjust_gamma(face_cand, 0.95))
+    cand_variants.append(_adjust_gamma(face_cand, 1.05))
+    cand_variants.append(cv2.convertScaleAbs(face_cand, alpha=1.06, beta=8))
+    cand_variants.append(cv2.convertScaleAbs(face_cand, alpha=0.94, beta=-8))
 
     best = None
     for idx, cand in enumerate(cand_variants):
-        lbph_similarity, lbph_conf, lbph_base_conf = _lbph_similarity(face_ref, cand)
-        hist_similarity, hist_corr = _hist_similarity(face_ref, cand)
-        edge_similarity, edge_corr = _edge_similarity(face_ref, cand)
-        corr_similarity, corr_value = _corr_similarity(face_ref, cand)
-        hog_similarity, hog_value = _hog_similarity(face_ref, cand)
+        cand_core = _extract_core_face(cand)
+
+        lbph_similarity, lbph_conf, lbph_base_conf = _lbph_similarity(face_ref_core, cand_core)
+        hist_similarity, hist_corr = _hist_similarity(face_ref_core, cand_core)
+        edge_similarity, edge_corr = _edge_similarity(face_ref_core, cand_core)
+        corr_similarity, corr_value = _corr_similarity(face_ref_core, cand_core)
+        hog_similarity, hog_value = _hog_similarity(face_ref_core, cand_core)
+        grad_similarity, grad_value = _gradient_similarity(face_ref_core, cand_core)
 
         base_similarity = (
-            (lbph_similarity * 0.45) +
-            (hist_similarity * 0.1) +
-            (edge_similarity * 0.1) +
-            (corr_similarity * 0.25) +
-            (hog_similarity * 0.1)
+            (lbph_similarity * 0.32) +
+            (corr_similarity * 0.22) +
+            (hog_similarity * 0.2) +
+            (grad_similarity * 0.18) +
+            (hist_similarity * 0.05) +
+            (edge_similarity * 0.03)
         )
-        quality_struct = _structural_quality(corr_similarity, hog_similarity, hist_similarity, edge_similarity)
-        quality = max(_quality_score(lbph_similarity, corr_similarity, edge_similarity, hist_similarity, hog_similarity), quality_struct)
-        score = (quality_struct * 0.6) + (base_similarity * 0.4)
+        quality_struct = _structural_quality(corr_similarity, hog_similarity, hist_similarity, edge_similarity, grad_similarity)
+        quality = max(
+            _quality_score(lbph_similarity, corr_similarity, edge_similarity, hist_similarity, hog_similarity, grad_similarity),
+            quality_struct
+        )
+        score = (quality_struct * 0.62) + (base_similarity * 0.38)
 
         if best is None or score > best['score']:
             best = {
                 'idx': idx,
                 'face': cand,
+                'face_core': cand_core,
                 'lbph_similarity': lbph_similarity,
                 'lbph_conf': lbph_conf,
                 'lbph_base_conf': lbph_base_conf,
@@ -377,6 +417,8 @@ def main():
                 'corr_value': corr_value,
                 'hog_similarity': hog_similarity,
                 'hog_value': hog_value,
+                'grad_similarity': grad_similarity,
+                'grad_value': grad_value,
                 'base_similarity': base_similarity,
                 'quality_struct': quality_struct,
                 'quality': quality,
@@ -394,6 +436,8 @@ def main():
     corr_value = best['corr_value']
     hog_similarity = best['hog_similarity']
     hog_value = best['hog_value']
+    grad_similarity = best['grad_similarity']
+    grad_value = best['grad_value']
     base_similarity = best['base_similarity']
     quality_struct = best['quality_struct']
     quality = best['quality']
@@ -410,69 +454,80 @@ def main():
     base_edge_list = []
     base_corr_list = []
     base_hog_list = []
+    base_grad_list = []
     base_quality_list = []
     for aug in ref_augments:
-        lbph_aug, _, _ = _lbph_similarity(face_ref, aug)
-        hist_aug, _ = _hist_similarity(face_ref, aug)
-        edge_aug, _ = _edge_similarity(face_ref, aug)
-        corr_aug, _ = _corr_similarity(face_ref, aug)
-        hog_aug, _ = _hog_similarity(face_ref, aug)
+        aug_core = _extract_core_face(aug)
+        lbph_aug, _, _ = _lbph_similarity(face_ref_core, aug_core)
+        hist_aug, _ = _hist_similarity(face_ref_core, aug_core)
+        edge_aug, _ = _edge_similarity(face_ref_core, aug_core)
+        corr_aug, _ = _corr_similarity(face_ref_core, aug_core)
+        hog_aug, _ = _hog_similarity(face_ref_core, aug_core)
+        grad_aug, _ = _gradient_similarity(face_ref_core, aug_core)
         base_lbph_list.append(lbph_aug)
         base_hist_list.append(hist_aug)
         base_edge_list.append(edge_aug)
         base_corr_list.append(corr_aug)
         base_hog_list.append(hog_aug)
-        base_quality_list.append(_structural_quality(corr_aug, hog_aug, hist_aug, edge_aug))
+        base_grad_list.append(grad_aug)
+        base_quality_list.append(_structural_quality(corr_aug, hog_aug, hist_aug, edge_aug, grad_aug))
 
     base_lbph = _median(base_lbph_list, 70.0)
     base_hist = _median(base_hist_list, 60.0)
     base_edge = _median(base_edge_list, 55.0)
     base_corr = _median(base_corr_list, 60.0)
     base_hog = _median(base_hog_list, 60.0)
+    base_grad = _median(base_grad_list, 60.0)
     base_quality = _median(base_quality_list, 65.0)
 
     if ref_aligned and cand_aligned:
         base_similarity = min(100.0, base_similarity + 4.0)
 
     relax = 3.5 if (ref_aligned and cand_aligned) else 0.0
-    mean_ref = float(np.mean(face_ref))
-    mean_cand = float(np.mean(best['face']))
+    mean_ref = float(np.mean(face_ref_core))
+    mean_cand = float(np.mean(best['face_core']))
     lighting_diff = abs(mean_ref - mean_cand)
-    lighting_relax = min(0.18, lighting_diff / 120.0)
+    lighting_relax = min(0.10, lighting_diff / 140.0)
 
-    min_lbph = max(50.0, (base_lbph * 0.82) * (1 - lighting_relax * 0.5) - relax)
-    min_corr = max(45.0, (base_corr * 0.82) * (1 - lighting_relax * 0.4) - relax)
-    min_edge = max(28.0, (base_edge * 0.65) * (1 - lighting_relax) - relax)
-    min_hist = max(35.0, (base_hist * 0.75) * (1 - lighting_relax * 0.6) - relax)
-    min_hog = max(50.0, (base_hog * 0.82) * (1 - lighting_relax * 0.4) - relax)
-    min_quality = max(60.0, (base_quality * 0.82) * (1 - lighting_relax * 0.4) - relax)
+    min_lbph = max(48.0, (base_lbph * 0.78) * (1 - lighting_relax * 0.35) - relax)
+    min_corr = max(48.0, (base_corr * 0.79) * (1 - lighting_relax * 0.35) - relax)
+    min_edge = max(24.0, (base_edge * 0.6) * (1 - lighting_relax) - relax)
+    min_hist = max(34.0, (base_hist * 0.72) * (1 - lighting_relax * 0.45) - relax)
+    min_hog = max(50.0, (base_hog * 0.79) * (1 - lighting_relax * 0.35) - relax)
+    min_grad = max(52.0, (base_grad * 0.79) * (1 - lighting_relax * 0.25) - relax)
+    min_quality = max(58.0, (base_quality * 0.8) * (1 - lighting_relax * 0.35) - relax)
 
     # Hard floors to reduce false positives across different faces.
-    hard_min_lbph = max(60.0, min_lbph)
-    hard_min_corr = max(55.0, min_corr)
-    hard_min_hog = max(55.0, min_hog)
-    hard_min_quality = max(65.0, min_quality)
-    hard_min_hist = max(45.0, min_hist)
-    hard_min_edge = max(35.0, min_edge)
+    hard_min_lbph = max(52.0, min_lbph)
+    hard_min_corr = max(54.0, min_corr)
+    hard_min_hog = max(57.0, min_hog)
+    hard_min_grad = max(58.0, min_grad)
+    hard_min_quality = max(63.0, min_quality)
+    hard_min_hist = max(40.0, min_hist)
+    hard_min_edge = max(30.0, min_edge)
 
     if lbph_base_conf < 1e-3:
         conf_ratio = 1.0
         conf_ratio_ok = True
     else:
         conf_ratio = lbph_conf / lbph_base_conf
-        conf_ratio_ok = conf_ratio <= 1.6
+        conf_ratio_ok = conf_ratio <= 1.8
 
-    strong_structure = (corr_similarity >= hard_min_corr and hog_similarity >= hard_min_hog)
+    strong_structure = (
+        corr_similarity >= hard_min_corr and
+        hog_similarity >= hard_min_hog and
+        grad_similarity >= hard_min_grad
+    )
     name_detected = (
         quality >= hard_min_quality and
-        lbph_similarity >= hard_min_lbph and
+        (lbph_similarity >= hard_min_lbph or conf_ratio_ok) and
         (hist_similarity >= hard_min_hist or edge_similarity >= hard_min_edge) and
         (strong_structure or (quality_struct >= hard_min_quality and conf_ratio_ok))
     )
 
     similarity = max(0.0, min(100.0, score))
 
-    if corr_similarity < hard_min_corr or hog_similarity < hard_min_hog:
+    if corr_similarity < hard_min_corr or hog_similarity < hard_min_hog or grad_similarity < hard_min_grad:
         name_detected = False
         similarity = min(similarity, 50.0)
 
@@ -497,11 +552,14 @@ def main():
             'corr_value': round(corr_value, 4),
             'hog_similarity': round(hog_similarity, 2),
             'hog_value': round(hog_value, 4),
+            'grad_similarity': round(grad_similarity, 2),
+            'grad_value': round(grad_value, 4),
             'baseline_lbph': round(base_lbph, 2),
             'baseline_hist': round(base_hist, 2),
             'baseline_edge': round(base_edge, 2),
             'baseline_corr': round(base_corr, 2),
             'baseline_hog': round(base_hog, 2),
+            'baseline_grad': round(base_grad, 2),
             'baseline_quality': round(base_quality, 2),
             'variant_index': int(best['idx']),
             'lighting_diff': round(lighting_diff, 2),
@@ -514,6 +572,7 @@ def main():
             'min_corr': round(min_corr, 2),
             'min_hist': round(min_hist, 2),
             'min_hog': round(min_hog, 2),
+            'min_grad': round(min_grad, 2),
             'min_quality': round(min_quality, 2)
         }
     }
