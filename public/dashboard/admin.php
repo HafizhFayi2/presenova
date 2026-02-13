@@ -1236,6 +1236,12 @@ $admin_section_css = [
     'student' => 'student.css',
 ];
 $active_admin_section_css = $admin_section_css[$table] ?? null;
+$active_admin_section_css_href = null;
+if ($active_admin_section_css !== null) {
+    $active_admin_section_css_file = __DIR__ . '/../assets/css/legacy-dashboard/sections/' . $active_admin_section_css;
+    $active_admin_section_css_version = is_file($active_admin_section_css_file) ? (string) filemtime($active_admin_section_css_file) : date('YmdHis');
+    $active_admin_section_css_href = '../assets/css/legacy-dashboard/sections/' . $active_admin_section_css . '?v=' . rawurlencode($active_admin_section_css_version);
+}
 ?>
 <!DOCTYPE html>
 <html lang="id" data-theme="<?php echo $theme; ?>">
@@ -1316,8 +1322,8 @@ $active_admin_section_css = $admin_section_css[$table] ?? null;
     
 <link rel="stylesheet" href="../assets/css/legacy-dashboard/admin.css" data-inline-style="extracted">
 
-    <?php if ($active_admin_section_css !== null): ?>
-    <link rel="stylesheet" href="../assets/css/legacy-dashboard/sections/<?php echo $active_admin_section_css; ?>">
+    <?php if ($active_admin_section_css_href !== null): ?>
+    <link rel="stylesheet" href="<?php echo htmlspecialchars($active_admin_section_css_href, ENT_QUOTES, 'UTF-8'); ?>">
     <?php endif; ?>
 
     

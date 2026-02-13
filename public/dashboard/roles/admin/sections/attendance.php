@@ -327,38 +327,376 @@ if ($is_today_default) {
     $statistik_title = 'Statistik Absen ' . $startLabel . ' - ' . $endLabel;
 }
 
-// Handle export (Excel-friendly)
+// Shared presentation payload for report output (print/excel)
+$printed_at = $now_wib->format('d F Y H:i:s') . ' WIB';
+$printed_by = trim((string)($_SESSION['fullname'] ?? $_SESSION['username'] ?? 'Admin'));
+if ($printed_by === '') {
+    $printed_by = 'Admin';
+}
+
+$selected_class_label = 'Semua Kelas';
+if ($filter_class !== '') {
+    foreach ($classes as $class_item) {
+        if ((string)($class_item['class_id'] ?? '') === (string)$filter_class) {
+            $selected_class_label = (string)($class_item['class_name'] ?? $selected_class_label);
+            break;
+        }
+    }
+}
+
+$selected_status_label = 'Semua Status';
+if ($is_alpa_filter) {
+    $selected_status_label = 'Alpa';
+} elseif ($filter_status !== '') {
+    foreach ($statuses as $status_item) {
+        if ((string)($status_item['present_id'] ?? '') === (string)$filter_status) {
+            $selected_status_label = (string)($status_item['present_name'] ?? $selected_status_label);
+            break;
+        }
+    }
+}
+
+$format_report_attendance = static function (array $attendance) use ($resolve_status_category): array {
+    $status_category = $resolve_status_category($attendance);
+    $present_name = trim((string)($attendance['present_name'] ?? '-'));
+    $status_label = $present_name !== '' ? $present_name : '-';
+    $status_class = 'status-neutral';
+    $row_class = 'row-neutral';
+    $status_bg = '#e2e8f0';
+    $status_text = '#334155';
+
+    if ($status_category === 'hadir') {
+        if (($attendance['is_late'] ?? 'N') === 'Y') {
+            $status_label = 'Terlambat';
+            $status_class = 'status-late';
+            $row_class = 'row-late';
+            $status_bg = '#fde68a';
+            $status_text = '#92400e';
+        } else {
+            $status_label = 'Hadir';
+            $status_class = 'status-hadir';
+            $row_class = 'row-hadir';
+            $status_bg = '#bbf7d0';
+            $status_text = '#166534';
+        }
+    } elseif ($status_category === 'sakit') {
+        $status_label = 'Sakit';
+        $status_class = 'status-sakit';
+        $row_class = 'row-sakit';
+        $status_bg = '#fed7aa';
+        $status_text = '#9a3412';
+    } elseif ($status_category === 'izin') {
+        $status_label = 'Izin';
+        $status_class = 'status-izin';
+        $row_class = 'row-izin';
+        $status_bg = '#bae6fd';
+        $status_text = '#0e7490';
+    } elseif ($status_category === 'alpa') {
+        $status_label = 'Alpa';
+        $status_class = 'status-alpa';
+        $row_class = 'row-alpa';
+        $status_bg = '#fecaca';
+        $status_text = '#991b1b';
+    }
+
+    $late_label = '0 menit';
+    if ($status_category === 'alpa') {
+        $late_label = 'Tidak hadir';
+    } elseif ($status_category === 'hadir' && ($attendance['is_late'] ?? 'N') === 'Y') {
+        $late_label = ((int)($attendance['late_time'] ?? 0)) . ' menit';
+    }
+
+    $location_label = '-';
+    if (!empty($attendance['latitude_in']) && !empty($attendance['longitude_in'])) {
+        $location_label = number_format((float)$attendance['latitude_in'], 6, '.', '') . ', ' .
+            number_format((float)$attendance['longitude_in'], 6, '.', '');
+    }
+
+    return [
+        'status_label' => $status_label,
+        'status_class' => $status_class,
+        'row_class' => $row_class,
+        'late_label' => $late_label,
+        'location_label' => $location_label,
+        'status_bg' => $status_bg,
+        'status_text' => $status_text,
+    ];
+};
+
+$logo_base64 = '';
+$logo_path = __DIR__ . '/../../../../assets/images/presenova.png';
+if (!is_file($logo_path)) {
+    $logo_path = __DIR__ . '/../../../../assets/images/logo-192.png';
+}
+if (is_file($logo_path)) {
+    $logo_base64 = base64_encode((string)file_get_contents($logo_path));
+}
+
+// Handle export (native XLSX without extension warning)
 if (isset($_GET['export'])) {
     if (ob_get_length()) {
         ob_clean();
     }
-    header('Content-Type: application/vnd.ms-excel');
+
+    $autoload_path = dirname(__DIR__, 5) . '/vendor/autoload.php';
+    if (!is_file($autoload_path)) {
+        http_response_code(500);
+        echo 'Dependency autoload tidak ditemukan. Jalankan composer install.';
+        exit();
+    }
+    require_once $autoload_path;
+
+    $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
+    $sheet = $spreadsheet->getActiveSheet();
+    $sheet->setTitle('Absensi');
+
+    $spreadsheet->getDefaultStyle()->getFont()->setName('Segoe UI')->setSize(10);
+    // Auto row height supaya teks panjang tidak terpotong.
+    $sheet->getDefaultRowDimension()->setRowHeight(-1);
+
+    $borderStyle = [
+        'borders' => [
+            'allBorders' => [
+                'borderStyle' => \PhpOffice\PhpSpreadsheet\Style\Border::BORDER_THIN,
+                'color' => ['rgb' => 'C7D9EA'],
+            ],
+        ],
+    ];
+
+    $metaLabelStyle = [
+        'font' => ['bold' => true, 'color' => ['rgb' => '0F172A']],
+        'fill' => [
+            'fillType' => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID,
+            'startColor' => ['rgb' => 'E9F2FB'],
+        ],
+        'alignment' => ['vertical' => \PhpOffice\PhpSpreadsheet\Style\Alignment::VERTICAL_CENTER],
+    ];
+    $metaValueStyle = [
+        'font' => ['color' => ['rgb' => '0F172A']],
+        'fill' => [
+            'fillType' => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID,
+            'startColor' => ['rgb' => 'E9F2FB'],
+        ],
+        'alignment' => ['vertical' => \PhpOffice\PhpSpreadsheet\Style\Alignment::VERTICAL_CENTER],
+    ];
+    $metaValueBoldStyle = $metaValueStyle;
+    $metaValueBoldStyle['font']['bold'] = true;
+
+    $summaryStyles = [
+        'total' => [
+            'font' => ['bold' => true, 'color' => ['rgb' => '1E40AF']],
+            'fill' => ['fillType' => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID, 'startColor' => ['rgb' => 'DBEAFE']],
+            'alignment' => ['horizontal' => \PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER, 'vertical' => \PhpOffice\PhpSpreadsheet\Style\Alignment::VERTICAL_CENTER],
+        ],
+        'hadir' => [
+            'font' => ['bold' => true, 'color' => ['rgb' => 'FFFFFF']],
+            'fill' => ['fillType' => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID, 'startColor' => ['rgb' => '22C55E']],
+            'alignment' => ['horizontal' => \PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER, 'vertical' => \PhpOffice\PhpSpreadsheet\Style\Alignment::VERTICAL_CENTER],
+        ],
+        'sakit' => [
+            'font' => ['bold' => true, 'color' => ['rgb' => '92400E']],
+            'fill' => ['fillType' => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID, 'startColor' => ['rgb' => 'FDE68A']],
+            'alignment' => ['horizontal' => \PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER, 'vertical' => \PhpOffice\PhpSpreadsheet\Style\Alignment::VERTICAL_CENTER],
+        ],
+        'izin' => [
+            'font' => ['bold' => true, 'color' => ['rgb' => '0E7490']],
+            'fill' => ['fillType' => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID, 'startColor' => ['rgb' => 'BAE6FD']],
+            'alignment' => ['horizontal' => \PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER, 'vertical' => \PhpOffice\PhpSpreadsheet\Style\Alignment::VERTICAL_CENTER],
+        ],
+        'alpa' => [
+            'font' => ['bold' => true, 'color' => ['rgb' => 'FFFFFF']],
+            'fill' => ['fillType' => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID, 'startColor' => ['rgb' => 'EF4444']],
+            'alignment' => ['horizontal' => \PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER, 'vertical' => \PhpOffice\PhpSpreadsheet\Style\Alignment::VERTICAL_CENTER],
+        ],
+    ];
+
+    $tableHeaderStyle = [
+        'font' => ['bold' => true, 'color' => ['rgb' => 'FFFFFF']],
+        'fill' => [
+            'fillType' => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID,
+            'startColor' => ['rgb' => '123E68'],
+        ],
+        'alignment' => ['vertical' => \PhpOffice\PhpSpreadsheet\Style\Alignment::VERTICAL_CENTER],
+    ];
+
+    $dataTopStyle = [
+        'alignment' => [
+            'vertical' => \PhpOffice\PhpSpreadsheet\Style\Alignment::VERTICAL_TOP,
+            'horizontal' => \PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_LEFT,
+            'wrapText' => true,
+        ],
+    ];
+    $dataMidStyle = [
+        'alignment' => [
+            'vertical' => \PhpOffice\PhpSpreadsheet\Style\Alignment::VERTICAL_CENTER,
+            'horizontal' => \PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_LEFT,
+            'wrapText' => true,
+        ],
+    ];
+
+    $rowPaletteMap = [
+        'status-hadir' => ['fill' => 'DCFCE7', 'font' => '14532D'],
+        'status-late' => ['fill' => 'FEF3C7', 'font' => '78350F'],
+        'status-sakit' => ['fill' => 'FFEDD5', 'font' => '9A3412'],
+        'status-izin' => ['fill' => 'CFFAFE', 'font' => '155E75'],
+        'status-alpa' => ['fill' => 'FEE2E2', 'font' => '7F1D1D'],
+        'status-neutral' => ['fill' => 'FFFFFF', 'font' => '0F172A'],
+    ];
+
+    // Header info rows.
+    $sheet->setCellValue('A1', 'Periode');
+    $sheet->setCellValue('B1', $cycle_start_date . ' s/d ' . $cycle_end_date);
+    $sheet->setCellValue('F1', 'Kelas');
+    $sheet->setCellValue('G1', $selected_class_label);
+    $sheet->mergeCells('B1:E1');
+    $sheet->mergeCells('G1:J1');
+
+    $sheet->setCellValue('A2', 'Status');
+    $sheet->setCellValue('B2', $selected_status_label);
+    $sheet->setCellValue('F2', 'Printed');
+    $sheet->setCellValue('G2', $printed_at . ' oleh ' . $printed_by);
+    $sheet->mergeCells('B2:E2');
+    $sheet->mergeCells('G2:J2');
+
+    $sheet->setCellValue('A3', 'Total: ' . (int)($stats['total'] ?? 0));
+    $sheet->setCellValue('C3', 'Hadir: ' . (int)($stats['present'] ?? 0));
+    $sheet->setCellValue('E3', 'Sakit: ' . (int)($stats['sick'] ?? 0));
+    $sheet->setCellValue('G3', 'Izin: ' . (int)($stats['permission'] ?? 0));
+    $sheet->setCellValue('I3', 'Alpa: ' . (int)$alpa_total);
+    $sheet->mergeCells('A3:B3');
+    $sheet->mergeCells('C3:D3');
+    $sheet->mergeCells('E3:F3');
+    $sheet->mergeCells('G3:H3');
+    $sheet->mergeCells('I3:J3');
+
+    $headers = ['NISN', 'Nama', 'Kelas', 'Tanggal', 'Jam', 'Mata Pelajaran', 'Status', 'Keterlambatan', 'Lokasi', 'Keterangan'];
+    foreach ($headers as $idx => $headerText) {
+        $columnLetter = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($idx + 1);
+        $sheet->setCellValue($columnLetter . '4', $headerText);
+    }
+
+    $columnOrder = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J'];
+    $columnMinWidth = [
+        'A' => 10, 'B' => 14, 'C' => 12, 'D' => 12, 'E' => 8,
+        'F' => 14, 'G' => 10, 'H' => 14, 'I' => 20, 'J' => 24,
+    ];
+    $columnMaxWidth = [
+        'A' => 18, 'B' => 28, 'C' => 20, 'D' => 16, 'E' => 10,
+        'F' => 28, 'G' => 14, 'H' => 18, 'I' => 30, 'J' => 64,
+    ];
+    $columnMaxTextLength = [];
+    $stringLength = static function ($value): int {
+        $text = trim((string)$value);
+        return function_exists('mb_strlen') ? mb_strlen($text) : strlen($text);
+    };
+    foreach ($columnOrder as $idx => $col) {
+        $columnMaxTextLength[$col] = $stringLength($headers[$idx] ?? '');
+    }
+
+    $sheet->getStyle('A1:A2')->applyFromArray($metaLabelStyle);
+    $sheet->getStyle('F1:F2')->applyFromArray($metaLabelStyle);
+    $sheet->getStyle('B1:E1')->applyFromArray($metaValueBoldStyle);
+    $sheet->getStyle('G1:J1')->applyFromArray($metaValueStyle);
+    $sheet->getStyle('B2:E2')->applyFromArray($metaValueStyle);
+    $sheet->getStyle('G2:J2')->applyFromArray($metaValueBoldStyle);
+
+    $sheet->getStyle('A3:B3')->applyFromArray($summaryStyles['total']);
+    $sheet->getStyle('C3:D3')->applyFromArray($summaryStyles['hadir']);
+    $sheet->getStyle('E3:F3')->applyFromArray($summaryStyles['sakit']);
+    $sheet->getStyle('G3:H3')->applyFromArray($summaryStyles['izin']);
+    $sheet->getStyle('I3:J3')->applyFromArray($summaryStyles['alpa']);
+
+    $sheet->getStyle('A4:J4')->applyFromArray($tableHeaderStyle);
+
+    $rowIndex = 5;
+    foreach ($attendances as $attendance) {
+        $report_row = $format_report_attendance((array)$attendance);
+        $isMidRow = in_array($report_row['row_class'], ['row-hadir', 'row-late'], true);
+
+        $presenceDate = !empty($attendance['presence_date']) ? date('d/m/Y', strtotime((string)$attendance['presence_date'])) : '-';
+        $timeIn = !empty($attendance['time_in']) ? date('H:i', strtotime((string)$attendance['time_in'])) : '-';
+        $rowData = [
+            'A' => (string)($attendance['student_nisn'] ?? '-'),
+            'B' => (string)($attendance['student_name'] ?? '-'),
+            'C' => (string)($attendance['class_name'] ?? '-'),
+            'D' => $presenceDate,
+            'E' => $timeIn,
+            'F' => (string)($attendance['subject'] ?? '-'),
+            'G' => (string)$report_row['status_label'],
+            'H' => (string)$report_row['late_label'],
+            'I' => (string)$report_row['location_label'],
+            'J' => (string)($attendance['information'] ?? '-'),
+        ];
+
+        $sheet->setCellValueExplicit('A' . $rowIndex, $rowData['A'], \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+        foreach (['B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J'] as $col) {
+            $sheet->setCellValue($col . $rowIndex, $rowData[$col]);
+        }
+
+        foreach ($columnOrder as $col) {
+            $lineParts = preg_split('/\R/u', (string)$rowData[$col]) ?: [''];
+            foreach ($lineParts as $linePart) {
+                $columnMaxTextLength[$col] = max($columnMaxTextLength[$col], $stringLength($linePart));
+            }
+        }
+
+        $sheet->getStyle('A' . $rowIndex . ':J' . $rowIndex)->applyFromArray($isMidRow ? $dataMidStyle : $dataTopStyle);
+        $sheet->getRowDimension($rowIndex)->setRowHeight(-1);
+
+        $rowPalette = $rowPaletteMap[$report_row['status_class']] ?? $rowPaletteMap['status-neutral'];
+        $sheet->getStyle('A' . $rowIndex . ':J' . $rowIndex)->applyFromArray([
+            'font' => ['color' => ['rgb' => $rowPalette['font']]],
+            'fill' => [
+                'fillType' => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID,
+                'startColor' => ['rgb' => $rowPalette['fill']],
+            ],
+        ]);
+        $sheet->getStyle('G' . $rowIndex)->applyFromArray([
+            'font' => ['bold' => true, 'color' => ['rgb' => $rowPalette['font']]],
+            'alignment' => ['vertical' => \PhpOffice\PhpSpreadsheet\Style\Alignment::VERTICAL_CENTER],
+        ]);
+
+        $rowIndex++;
+    }
+
+    $lastDataRow = max(4, $rowIndex - 1);
+    $sheet->getStyle('A1:J' . $lastDataRow)->applyFromArray($borderStyle);
+    if ($lastDataRow >= 5) {
+        $sheet->getStyle('A5:J' . $lastDataRow)->getAlignment()->setWrapText(true);
+    }
+    foreach ($columnOrder as $col) {
+        $targetWidth = $columnMaxTextLength[$col] + 2;
+        if ($col === 'J') {
+            $targetWidth = min(max($targetWidth, $columnMinWidth[$col]), $columnMaxWidth[$col]);
+            $sheet->getStyle('J:J')->getAlignment()->setWrapText(true);
+        } else {
+            $targetWidth = min(max($targetWidth, $columnMinWidth[$col]), $columnMaxWidth[$col]);
+        }
+        $sheet->getColumnDimension($col)->setWidth($targetWidth);
+    }
+    $sheet->freezePane('A5');
+
     $fileRangeLabel = $filter_date_from === $filter_date_to
         ? $filter_date_from
         : ($filter_date_from . '_sd_' . $filter_date_to);
-    header('Content-Disposition: attachment; filename="absensi_' . $fileRangeLabel . '.xls"');
-    
-    $output = fopen('php://output', 'w');
-    fputcsv($output, ['NISN', 'Nama', 'Kelas', 'Tanggal', 'Jam', 'Status', 'Keterlambatan', 'Keterangan']);
-    
-    foreach($attendances as $attendance) {
-        fputcsv($output, [
-            $attendance['student_nisn'],
-            $attendance['student_name'],
-            $attendance['class_name'],
-            $attendance['presence_date'],
-            $attendance['time_in'],
-            $attendance['present_name'],
-            $attendance['is_late'] == 'Y' ? $attendance['late_time'] . ' menit' : '0',
-            $attendance['information']
-        ]);
-    }
-    
-    fclose($output);
+
+    header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    header('Content-Disposition: attachment; filename="absensi_' . $fileRangeLabel . '.xlsx"');
+    header('Cache-Control: max-age=0');
+    header('Cache-Control: max-age=1');
+    header('Expires: Mon, 26 Jul 1997 05:00:00 GMT');
+    header('Last-Modified: ' . gmdate('D, d M Y H:i:s') . ' GMT');
+    header('Cache-Control: cache, must-revalidate');
+    header('Pragma: public');
+
+    $writer = new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($spreadsheet);
+    $writer->setPreCalculateFormulas(false);
+    $writer->save('php://output');
+    $spreadsheet->disconnectWorksheets();
     exit();
 }
 
-// Handle print
+// Handle print (admin-styled report)
 if (isset($_GET['print'])) {
     if (ob_get_length()) {
         ob_clean();
@@ -366,58 +704,435 @@ if (isset($_GET['print'])) {
     $printRangeLabel = $filter_date_from === $filter_date_to
         ? $filter_date_from
         : ($filter_date_from . ' s/d ' . $filter_date_to);
-    $printTitle = 'absensi - presenova';
+    $printTitle = 'Laporan Absensi Admin - Presenova';
     ?>
     <!DOCTYPE html>
     <html lang="id">
     <head>
         <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title><?php echo htmlspecialchars($printTitle, ENT_QUOTES, 'UTF-8'); ?></title>
         <style>
-            @page { margin: 12mm; }
-            body { font-family: Arial, sans-serif; font-size: 12px; color: #111827; }
-            h2 { margin: 0 0 6px; font-size: 16px; text-align: center; }
-            .meta { text-align: center; font-size: 11px; color: #4b5563; margin-bottom: 12px; }
-            table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-            th, td { border: 1px solid #e5e7eb; padding: 6px 8px; text-align: left; }
-            th { background: #f3f4f6; font-weight: 600; }
+            :root {
+                --bg: #eef3f8;
+                --card: #ffffff;
+                --line: #d3e0ec;
+                --text: #0f172a;
+                --muted: #475569;
+                --head-1: #0f172a;
+                --head-2: #1e40af;
+                --accent: #38bdf8;
+                --hadir: #16a34a;
+                --late: #d97706;
+                --sakit: #f97316;
+                --izin: #06b6d4;
+                --alpa: #dc2626;
+            }
+
+            * {
+                box-sizing: border-box;
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+            }
+
+            body {
+                margin: 0;
+                padding: 14px;
+                font-family: "Inter", "Segoe UI", Arial, sans-serif;
+                background: linear-gradient(135deg, #f8fafc 0%, var(--bg) 100%);
+                color: var(--text);
+                font-size: 11px;
+            }
+
+            .admin-sheet {
+                max-width: 1120px;
+                margin: 0 auto;
+                background: var(--card);
+                border: 1px solid var(--line);
+                border-radius: 14px;
+                overflow: hidden;
+                box-shadow: 0 18px 42px rgba(15, 23, 42, 0.14);
+            }
+
+            .sheet-header {
+                position: relative;
+                background: linear-gradient(120deg, var(--head-1) 0%, var(--head-2) 88%);
+                color: #ffffff;
+                padding: 16px 20px;
+                overflow: hidden;
+            }
+
+            .sheet-header::after {
+                content: "";
+                position: absolute;
+                right: -90px;
+                top: -85px;
+                width: 260px;
+                height: 260px;
+                border-radius: 50%;
+                background: radial-gradient(circle, rgba(56, 189, 248, 0.34), transparent 70%);
+            }
+
+            .header-row {
+                display: flex;
+                justify-content: space-between;
+                align-items: flex-start;
+                gap: 16px;
+                position: relative;
+                z-index: 1;
+            }
+
+            .brand {
+                display: flex;
+                align-items: center;
+                gap: 12px;
+                min-width: 0;
+            }
+
+            .brand-logo {
+                width: 50px;
+                height: 50px;
+                object-fit: contain;
+                background: rgba(255, 255, 255, 0.95);
+                border-radius: 10px;
+                padding: 5px;
+            }
+
+            .brand h1 {
+                margin: 0;
+                font-size: 22px;
+                letter-spacing: 0.5px;
+                text-transform: uppercase;
+            }
+
+            .brand p {
+                margin: 3px 0 0;
+                font-size: 12px;
+                opacity: 0.92;
+            }
+
+            .meta-box {
+                min-width: 255px;
+                border: 1px solid rgba(255, 255, 255, 0.3);
+                background: rgba(15, 23, 42, 0.28);
+                border-radius: 10px;
+                padding: 8px 10px;
+                display: grid;
+                gap: 5px;
+            }
+
+            .meta-box span {
+                display: block;
+                font-size: 9px;
+                text-transform: uppercase;
+                letter-spacing: 0.4px;
+                opacity: 0.8;
+            }
+
+            .meta-box strong {
+                display: block;
+                font-size: 11px;
+                margin-top: 1px;
+            }
+
+            .filter-strip {
+                display: grid;
+                grid-template-columns: repeat(4, minmax(0, 1fr));
+                gap: 8px;
+                padding: 10px 20px;
+                border-bottom: 1px solid var(--line);
+                background: #f4f8fc;
+            }
+
+            .filter-item {
+                border: 1px solid #d7e5f0;
+                border-radius: 8px;
+                padding: 6px 8px;
+                background: #ffffff;
+            }
+
+            .filter-item span {
+                display: block;
+                font-size: 9px;
+                color: var(--muted);
+                text-transform: uppercase;
+                letter-spacing: 0.35px;
+            }
+
+            .filter-item strong {
+                display: block;
+                margin-top: 3px;
+                font-size: 11px;
+            }
+
+            .stats-grid {
+                display: grid;
+                grid-template-columns: repeat(5, minmax(0, 1fr));
+                gap: 8px;
+                padding: 12px 20px 10px;
+            }
+
+            .stats-item {
+                border-radius: 10px;
+                padding: 7px 8px;
+                color: #ffffff;
+                font-weight: 700;
+                text-align: center;
+            }
+
+            .stats-item small {
+                display: block;
+                font-size: 9px;
+                text-transform: uppercase;
+                letter-spacing: 0.35px;
+                opacity: 0.9;
+            }
+
+            .stats-item strong {
+                display: block;
+                margin-top: 2px;
+                font-size: 18px;
+                line-height: 1.1;
+            }
+
+            .stats-total { background: linear-gradient(130deg, #1d4ed8, #3b82f6); }
+            .stats-hadir { background: linear-gradient(130deg, #15803d, #22c55e); }
+            .stats-sakit { background: linear-gradient(130deg, #b45309, #f59e0b); }
+            .stats-izin { background: linear-gradient(130deg, #0e7490, #22d3ee); }
+            .stats-alpa { background: linear-gradient(130deg, #b91c1c, #ef4444); }
+
+            .table-wrap {
+                padding: 0 20px 12px;
+            }
+
+            table {
+                width: 100%;
+                border-collapse: separate;
+                border-spacing: 0;
+                border: 1px solid var(--line);
+                border-radius: 10px;
+                overflow: hidden;
+            }
+
+            thead th {
+                background: #1e3a8a;
+                color: #ffffff;
+                padding: 7px 8px;
+                border-right: 1px solid #284ea3;
+                font-size: 10px;
+                text-transform: uppercase;
+                letter-spacing: 0.35px;
+                text-align: left;
+            }
+
+            thead th:last-child {
+                border-right: 0;
+            }
+
+            tbody td {
+                border-top: 1px solid #deebf5;
+                border-right: 1px solid #e0ebf5;
+                padding: 6px 8px;
+                vertical-align: top;
+                font-size: 10.4px;
+            }
+
+            tbody td:last-child {
+                border-right: 0;
+            }
+
+            tbody tr:nth-child(even) td {
+                background: #f9fcff;
+            }
+
+            tbody tr.row-hadir td { background: #ecfdf3; }
+            tbody tr.row-alpa td { background: #fff1f2; }
+
+            .status-pill {
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                min-width: 68px;
+                border-radius: 999px;
+                font-size: 9px;
+                font-weight: 700;
+                letter-spacing: 0.3px;
+                padding: 2px 8px;
+                border: 1px solid transparent;
+            }
+
+            .status-hadir { background: #bbf7d0; color: #166534; border-color: #86efac; }
+            .status-late { background: #fde68a; color: #92400e; border-color: #fcd34d; }
+            .status-sakit { background: #fed7aa; color: #9a3412; border-color: #fdba74; }
+            .status-izin { background: #bae6fd; color: #0e7490; border-color: #7dd3fc; }
+            .status-alpa { background: #fecaca; color: #991b1b; border-color: #fca5a5; }
+            .status-neutral { background: #e2e8f0; color: #334155; border-color: #cbd5e1; }
+
+            .row-hadir td:first-child { border-left: 3px solid var(--hadir); }
+            .row-late td:first-child { border-left: 3px solid var(--late); }
+            .row-sakit td:first-child { border-left: 3px solid var(--sakit); }
+            .row-izin td:first-child { border-left: 3px solid var(--izin); }
+            .row-alpa td:first-child { border-left: 3px solid var(--alpa); }
+            tbody tr.row-hadir td,
+            tbody tr.row-late td {
+                vertical-align: middle;
+            }
+
+            .sheet-footer {
+                display: flex;
+                justify-content: space-between;
+                gap: 8px;
+                padding: 10px 20px;
+                border-top: 1px solid var(--line);
+                background: #f8fafc;
+                color: var(--muted);
+                font-size: 10px;
+            }
+
+            @media print {
+                @page {
+                    margin: 9mm;
+                }
+
+                body {
+                    background: #ffffff;
+                    padding: 0;
+                }
+
+                .admin-sheet {
+                    max-width: none;
+                    margin: 0;
+                    border: 0;
+                    border-radius: 0;
+                    box-shadow: none;
+                }
+
+                .sheet-header,
+                .filter-strip,
+                .stats-grid,
+                .sheet-footer {
+                    break-inside: avoid;
+                    page-break-inside: avoid;
+                }
+
+                table thead {
+                    display: table-header-group;
+                }
+
+                table tr,
+                table td,
+                table th {
+                    break-inside: avoid;
+                    page-break-inside: avoid;
+                }
+            }
         </style>
     </head>
     <body>
-        <h2>Data Absensi</h2>
-        <div class="meta">Periode: <?php echo htmlspecialchars($cycle_start_date . ' s/d ' . $cycle_end_date); ?></div>
-        <table>
-            <thead>
-                <tr>
-                    <th>NISN</th>
-                    <th>Nama</th>
-                    <th>Kelas</th>
-                    <th>Tanggal</th>
-                    <th>Jam</th>
-                    <th>Mata Pelajaran</th>
-                    <th>Status</th>
-                    <th>Keterlambatan</th>
-                </tr>
-            </thead>
-            <tbody>
-            <?php foreach ($attendances as $attendance): ?>
-                <tr>
-                    <td><?php echo htmlspecialchars($attendance['student_nisn']); ?></td>
-                    <td><?php echo htmlspecialchars($attendance['student_name']); ?></td>
-                    <td><?php echo htmlspecialchars($attendance['class_name']); ?></td>
-                    <td><?php echo date('d/m/Y', strtotime($attendance['presence_date'])); ?></td>
-                    <td><?php echo date('H:i', strtotime($attendance['time_in'])); ?></td>
-                    <td><?php echo htmlspecialchars($attendance['subject'] ?? '-'); ?></td>
-                    <td><?php echo htmlspecialchars($attendance['present_name'] ?? '-'); ?></td>
-                    <td><?php echo ($attendance['is_late'] == 'Y') ? ((int)$attendance['late_time'] . ' menit') : '0'; ?></td>
-                </tr>
-            <?php endforeach; ?>
-            </tbody>
-        </table>
+        <main class="admin-sheet">
+            <header class="sheet-header">
+                <div class="header-row">
+                    <div class="brand">
+                        <?php if ($logo_base64 !== ''): ?>
+                            <img class="brand-logo" src="data:image/png;base64,<?php echo $logo_base64; ?>" alt="Logo Presenova">
+                        <?php endif; ?>
+                        <div>
+                            <h1>Laporan Absensi Admin</h1>
+                            <p>Presenova Monitoring Center</p>
+                        </div>
+                    </div>
+                    <div class="meta-box">
+                        <div>
+                            <span>Printed At</span>
+                            <strong><?php echo htmlspecialchars($printed_at, ENT_QUOTES, 'UTF-8'); ?></strong>
+                        </div>
+                        <div>
+                            <span>Printed By</span>
+                            <strong><?php echo htmlspecialchars($printed_by, ENT_QUOTES, 'UTF-8'); ?></strong>
+                        </div>
+                    </div>
+                </div>
+            </header>
+
+            <section class="filter-strip">
+                <div class="filter-item">
+                    <span>Periode</span>
+                    <strong><?php echo htmlspecialchars($printRangeLabel, ENT_QUOTES, 'UTF-8'); ?></strong>
+                </div>
+                <div class="filter-item">
+                    <span>Kelas</span>
+                    <strong><?php echo htmlspecialchars($selected_class_label, ENT_QUOTES, 'UTF-8'); ?></strong>
+                </div>
+                <div class="filter-item">
+                    <span>Status</span>
+                    <strong><?php echo htmlspecialchars($selected_status_label, ENT_QUOTES, 'UTF-8'); ?></strong>
+                </div>
+                <div class="filter-item">
+                    <span>Total Data</span>
+                    <strong><?php echo count($attendances); ?> baris</strong>
+                </div>
+            </section>
+
+            <section class="stats-grid">
+                <div class="stats-item stats-total"><small>Total</small><strong><?php echo (int)($stats['total'] ?? 0); ?></strong></div>
+                <div class="stats-item stats-hadir"><small>Hadir</small><strong><?php echo (int)($stats['present'] ?? 0); ?></strong></div>
+                <div class="stats-item stats-sakit"><small>Sakit</small><strong><?php echo (int)($stats['sick'] ?? 0); ?></strong></div>
+                <div class="stats-item stats-izin"><small>Izin</small><strong><?php echo (int)($stats['permission'] ?? 0); ?></strong></div>
+                <div class="stats-item stats-alpa"><small>Alpa</small><strong><?php echo (int)$alpa_total; ?></strong></div>
+            </section>
+
+            <section class="table-wrap">
+                <table aria-label="Laporan Absensi Admin">
+                    <thead>
+                        <tr>
+                            <th>NISN</th>
+                            <th>Nama</th>
+                            <th>Kelas</th>
+                            <th>Tanggal</th>
+                            <th>Jam</th>
+                            <th>Mata Pelajaran</th>
+                            <th>Status</th>
+                            <th>Keterlambatan</th>
+                            <th>Lokasi</th>
+                            <th>Keterangan</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php foreach ($attendances as $attendance): ?>
+                            <?php $report_row = $format_report_attendance((array)$attendance); ?>
+                            <tr class="<?php echo htmlspecialchars($report_row['row_class'], ENT_QUOTES, 'UTF-8'); ?>">
+                                <td class="main-cell"><?php echo htmlspecialchars((string)($attendance['student_nisn'] ?? '-'), ENT_QUOTES, 'UTF-8'); ?></td>
+                                <td class="main-cell"><?php echo htmlspecialchars((string)($attendance['student_name'] ?? '-'), ENT_QUOTES, 'UTF-8'); ?></td>
+                                <td class="main-cell"><?php echo htmlspecialchars((string)($attendance['class_name'] ?? '-'), ENT_QUOTES, 'UTF-8'); ?></td>
+                                <td class="main-cell"><?php echo !empty($attendance['presence_date']) ? date('d/m/Y', strtotime((string)$attendance['presence_date'])) : '-'; ?></td>
+                                <td class="main-cell"><?php echo !empty($attendance['time_in']) ? date('H:i', strtotime((string)$attendance['time_in'])) : '-'; ?></td>
+                                <td class="main-cell"><?php echo htmlspecialchars((string)($attendance['subject'] ?? '-'), ENT_QUOTES, 'UTF-8'); ?></td>
+                                <td class="main-cell">
+                                    <span class="status-pill <?php echo htmlspecialchars($report_row['status_class'], ENT_QUOTES, 'UTF-8'); ?>">
+                                        <?php echo htmlspecialchars($report_row['status_label'], ENT_QUOTES, 'UTF-8'); ?>
+                                    </span>
+                                </td>
+                                <td class="main-cell"><?php echo htmlspecialchars($report_row['late_label'], ENT_QUOTES, 'UTF-8'); ?></td>
+                                <td class="main-cell"><?php echo htmlspecialchars($report_row['location_label'], ENT_QUOTES, 'UTF-8'); ?></td>
+                                <td><?php echo htmlspecialchars((string)($attendance['information'] ?? '-'), ENT_QUOTES, 'UTF-8'); ?></td>
+                            </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </section>
+
+            <footer class="sheet-footer">
+                <div>Presenova Admin Panel</div>
+                <div>Printed at <?php echo htmlspecialchars($printed_at, ENT_QUOTES, 'UTF-8'); ?> by <?php echo htmlspecialchars($printed_by, ENT_QUOTES, 'UTF-8'); ?></div>
+            </footer>
+        </main>
+
         <script>
-            window.onload = function() {
-                window.print();
-            };
+            window.addEventListener('load', function () {
+                setTimeout(function () {
+                    window.print();
+                }, 220);
+            });
         </script>
     </body>
     </html>
@@ -449,7 +1164,7 @@ if (isset($_GET['print'])) {
         </div>
         <div class="col-md-2">
             <label class="form-label">Tanggal Akhir</label>
-            <input type="date" class="form-control" id="filterDateTo" value="<?php echo htmlspecialchars($filter_date_to); ?>">
+            <input type="date" class="form-control" id="filterDateTo" value="<?php echo htmlspecialchars($filter_date_to); ?>" min="<?php echo htmlspecialchars($filter_date_from); ?>">
         </div>
         <div class="col-md-3">
             <label class="form-label">Kelas</label>
@@ -481,7 +1196,7 @@ if (isset($_GET['print'])) {
             </select>
         </div>
         <div class="col-md-2 d-flex align-items-end">
-            <button class="btn btn-primary w-100" onclick="applyFilters()">
+            <button class="btn btn-primary w-100" id="attendanceFilterBtn" onclick="applyFilters()">
                 <i class="bi bi-filter"></i> Filter
             </button>
         </div>
@@ -788,11 +1503,34 @@ function ensureAttendanceMap() {
     L.tileLayer(SATELLITE_TILE_URL, { maxZoom: 19, minZoom: 15 }).addTo(attendanceMap);
 }
 
+function enforceAttendanceDateRange() {
+    const dateFromEl = document.getElementById('filterDateFrom');
+    const dateToEl = document.getElementById('filterDateTo');
+    if (!dateFromEl || !dateToEl) {
+        return;
+    }
+
+    const dateFrom = dateFromEl.value || '';
+    const dateTo = dateToEl.value || '';
+    dateToEl.min = dateFrom;
+
+    if (dateFrom && dateTo && dateTo < dateFrom) {
+        dateToEl.value = dateFrom;
+    }
+}
+
 function applyFilters() {
-    const dateFrom = $('#filterDateFrom').val();
-    const dateTo = $('#filterDateTo').val();
+    enforceAttendanceDateRange();
+
+    let dateFrom = $('#filterDateFrom').val();
+    let dateTo = $('#filterDateTo').val();
     const classId = $('#filterClass').val();
     const status = $('#filterStatus').val();
+
+    if (dateFrom && dateTo && dateTo < dateFrom) {
+        dateTo = dateFrom;
+        $('#filterDateTo').val(dateTo);
+    }
     
     let url = '?table=attendance';
     
@@ -805,6 +1543,14 @@ function applyFilters() {
 }
 
 $(document).ready(function() {
+    const dateFromEl = document.getElementById('filterDateFrom');
+    const dateToEl = document.getElementById('filterDateTo');
+    if (dateFromEl && dateToEl) {
+        enforceAttendanceDateRange();
+        dateFromEl.addEventListener('change', enforceAttendanceDateRange);
+        dateToEl.addEventListener('change', enforceAttendanceDateRange);
+    }
+
     // Initialize chart
     const ctx = document.getElementById('attendanceChart').getContext('2d');
     const chart = new Chart(ctx, {

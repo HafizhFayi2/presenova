@@ -298,7 +298,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             border: none;
             border-radius: 8px;
             background: transparent;
-            color: var(--text-light);
+            color: #475569;
             font-weight: 500;
             cursor: pointer;
             transition: all 0.2s ease;
@@ -308,6 +308,10 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             gap: 0.5rem;
             font-family: 'Inter', sans-serif;
             font-size: 0.9rem;
+        }
+
+        .role-btn i {
+            color: inherit;
         }
 
         .role-btn:hover {

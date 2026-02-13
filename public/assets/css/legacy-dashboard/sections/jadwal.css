@@ -171,6 +171,16 @@
     padding: 0.75rem;
 }
 
+/* Prevent stacked shadow layers when a day spans multiple rows */
+.jadwal-section .liquidGlass-wrapper .schedule-table tbody tr {
+    box-shadow: none;
+}
+
+.jadwal-section .liquidGlass-wrapper .schedule-table tbody tr:hover {
+    transform: none;
+    box-shadow: none;
+}
+
 .time-cell {
     font-weight: 500;
     color: var(--text-secondary-color);

@@ -582,118 +582,16 @@ foreach ($schedules as $schedule) {
     </div>
 </div>
 
-<?php
-$printLogoBase64 = '';
-$printLogoPath = __DIR__ . '/../../../../assets/images/logo-192.png';
-if (is_file($printLogoPath)) {
-    $printLogoBase64 = base64_encode(file_get_contents($printLogoPath));
-}
-?>
-
 <script>
 // Print schedule (global)
 window.printSchedule = function() {
-    const printContent = $('.jadwal-section').clone();
-    printContent.find('.btn, .btn-print, .btn-refresh').remove();
-    const printWindow = window.open('', '_blank');
+    const printUrl = `roles/siswa/print/jadwal_print.php?autoprint=1&t=${Date.now()}`;
+    const printWindow = window.open(printUrl, '_blank', 'noopener');
     if (!printWindow) {
         alert('Popup diblokir. Izinkan popup untuk mencetak.');
-        return;
+        return false;
     }
-    printWindow.document.write(`
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <title>jadwal - presenova</title>
-            <style>
-                @page { margin: 12mm; }
-                body { font-family: Arial, sans-serif; margin: 0; color: #111827; font-size: 12px; }
-                body::before {
-                    content: '';
-                    position: fixed;
-                    top: 12mm;
-                    left: 50%;
-                    transform: translateX(-50%);
-                    width: 120px;
-                    height: 120px;
-                    background-image: url('data:image/png;base64,<?php echo $printLogoBase64; ?>');
-                    background-repeat: no-repeat;
-                    background-size: contain;
-                    opacity: 0.08;
-                    z-index: 0;
-                }
-                .print-content { position: relative; z-index: 1; }
-                .header { text-align: center; margin-bottom: 12px; }
-                .header h2 { margin: 0 0 4px; font-size: 16px; }
-                .header h4 { margin: 0 0 2px; font-size: 13px; }
-                .header p { margin: 0; font-size: 11px; }
-                .student-info { margin-bottom: 8px; font-size: 11px; }
-                table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 11px; }
-                th, td { border: 1px solid #ddd; padding: 6px 8px; text-align: left; }
-                th { background-color: #f3f4f6; font-weight: 600; }
-                .print-content .row {
-                    display: flex;
-                    flex-wrap: wrap;
-                    gap: 8px;
-                    margin: 0 0 8px;
-                }
-                .print-content .row > [class*='col-'] {
-                    flex: 1 1 calc(25% - 8px);
-                    max-width: calc(25% - 8px);
-                }
-                .print-content .today-summary-card .row > [class*='col-'] {
-                    flex: 1 1 calc(33.33% - 8px);
-                    max-width: calc(33.33% - 8px);
-                }
-                .stat-card, .summary-item {
-                    border: 1px solid #e5e7eb;
-                    border-radius: 8px;
-                    padding: 6px 8px;
-                    display: flex;
-                    align-items: center;
-                    gap: 8px;
-                    box-shadow: none;
-                    background: #fff;
-                    width: 100%;
-                }
-                .stat-icon, .summary-icon {
-                    width: 28px;
-                    height: 28px;
-                    border-radius: 8px;
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    color: #111827;
-                }
-                .stat-content h3, .summary-content h4 { margin: 0; font-size: 13px; }
-                .stat-content p, .summary-content p { margin: 0; font-size: 10px; color: #6b7280; }
-                .mt-4, .mb-4, .mb-3 { margin: 6px 0 !important; }
-                .card-header, .card-body { padding: 6px 8px; }
-            </style>
-        </head>
-        <body>
-            <div class="print-content">
-            <div class="header">
-                <h2>Jadwal Pelajaran</h2>
-                <h4>SMKN 1 Cikarang Selatan</h4>
-                <p>Tahun Ajaran 2023/2024</p>
-            </div>
-            ${printContent.prop('outerHTML')}
-            </div>
-        </body>
-        </html>
-    `);
-    printWindow.document.close();
-    printWindow.focus();
-    printWindow.onload = function() {
-        printWindow.print();
-        printWindow.close();
-    };
-    setTimeout(function() {
-        if (!printWindow.closed) {
-            printWindow.print();
-        }
-    }, 300);
+    return false;
 };
 
 // Refresh schedule (global)
