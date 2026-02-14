@@ -68,15 +68,13 @@ if (count($tomorrow_schedules) > 1) {
     });
 }
 
-// Attendance stats for current month (include alpa when schedule closed without attendance)
-$month_start = (new DateTime('first day of this month', $tz))->format('Y-m-d');
-$month_end = (new DateTime('last day of this month', $tz))->format('Y-m-d');
-$monthly_sql = "
+// Attendance stats from full history (including alpa when schedule already closed)
+$attendance_sql = "
     SELECT 
         ss.student_schedule_id,
         ss.schedule_date,
-        ss.time_in,
-        ss.time_out,
+        COALESCE(ss.time_in, sh.time_in) as schedule_time_in,
+        COALESCE(ss.time_out, sh.time_out) as schedule_time_out,
         (
             SELECT p.present_id
             FROM presence p
@@ -92,10 +90,12 @@ $monthly_sql = "
             LIMIT 1
         ) as is_late
     FROM student_schedule ss
+    LEFT JOIN teacher_schedule ts ON ss.teacher_schedule_id = ts.schedule_id
+    LEFT JOIN shift sh ON ts.shift_id = sh.shift_id
     WHERE ss.student_id = ?
-    AND ss.schedule_date BETWEEN ? AND ?
+    AND ss.schedule_date <= CURDATE()
 ";
-$monthly_rows = $db->query($monthly_sql, [$student_id, $month_start, $month_end])->fetchAll() ?: [];
+$attendance_rows = $db->query($attendance_sql, [$student_id])->fetchAll() ?: [];
 
 $attendance_present = 0;
 $attendance_sick = 0;
@@ -105,14 +105,14 @@ $attendance_late = 0;
 $attendance_finished = 0;
 $now_dt = new DateTime('now', $tz);
 
-foreach ($monthly_rows as $row) {
+foreach ($attendance_rows as $row) {
     $present_id = (int)($row['present_id'] ?? 0);
     $is_late = ($row['is_late'] ?? '') === 'Y';
-    $schedule_date = $row['schedule_date'] ?? $month_start;
+    $schedule_date = $row['schedule_date'] ?? $now_wib->format('Y-m-d');
     [$start_dt, $end_dt] = buildScheduleWindow(
         $schedule_date,
-        $row['time_in'] ?? '00:00:00',
-        $row['time_out'] ?? '00:00:00',
+        $row['schedule_time_in'] ?? '00:00:00',
+        $row['schedule_time_out'] ?? '00:00:00',
         $tz,
         (int) $time_tolerance
     );

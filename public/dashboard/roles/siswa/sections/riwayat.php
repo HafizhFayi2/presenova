@@ -72,14 +72,6 @@ $today_day_id = date('N'); // 1=Senin, 7=Minggu
 $today_date = date('Y-m-d');
 $tz = new DateTimeZone('Asia/Jakarta');
 $now_wib = new DateTime('now', $tz);
-$week_start = (clone $now_wib)->modify('monday this week')->setTime(0, 0, 0);
-$reset_time = (clone $week_start)->modify('+5 days')->setTime(15, 0, 0);
-if ($now_wib >= $reset_time) {
-    $week_start->modify('+7 days');
-    $reset_time->modify('+7 days');
-}
-$cycle_start = $week_start->format('Y-m-d');
-$cycle_end = $reset_time->format('Y-m-d');
 
 $sql_pending = "
     SELECT 
@@ -176,7 +168,7 @@ if (count($pending_schedules) > 0) {
     $pending_by_date[$today_date] = $pending_schedules;
 }
 
-// Jadwal tidak terabsensi (alpa) dalam siklus minggu berjalan
+// Jadwal tidak terabsensi (alpa) dari seluruh riwayat jadwal
 $sql_missed = "
     SELECT 
         ss.student_schedule_id,
@@ -193,14 +185,14 @@ $sql_missed = "
     JOIN day d ON ts.day_id = d.day_id
     JOIN shift sh ON ts.shift_id = sh.shift_id
     WHERE ss.student_id = ?
-    AND ss.schedule_date BETWEEN ? AND ?
+    AND ss.schedule_date <= CURDATE()
     AND d.is_active = 'Y'
     AND NOT EXISTS (
         SELECT 1 FROM presence p WHERE p.student_schedule_id = ss.student_schedule_id
     )
     ORDER BY ss.schedule_date DESC, ss.time_in ASC
 ";
-$stmt_missed = $db->query($sql_missed, [$student_id, $cycle_start, $cycle_end]);
+$stmt_missed = $db->query($sql_missed, [$student_id]);
 $missed_rows = $stmt_missed ? $stmt_missed->fetchAll(PDO::FETCH_ASSOC) : [];
 $missed_schedules = [];
 foreach ($missed_rows as $row) {
@@ -219,7 +211,7 @@ foreach ($missed_rows as $row) {
     }
 }
 
-// Query riwayat absensi yang sudah dilakukan (7 hari terakhir)
+// Query riwayat absensi yang sudah dilakukan (seluruh data)
 $sql_riwayat = "
     SELECT 
         p.*,
@@ -239,7 +231,6 @@ $sql_riwayat = "
     LEFT JOIN class c ON ts.class_id = c.class_id
     LEFT JOIN shift sh ON ts.shift_id = sh.shift_id
     WHERE p.student_id = ?
-    AND p.presence_date >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)
     ORDER BY p.presence_date DESC, p.time_in DESC
 ";
 
@@ -406,8 +397,8 @@ $riwayat_izin = array_values(array_filter($riwayat, fn($i) => (int)($i['present_
                                                     }
                                                 ?>
                                                     <tr class="schedule-row" 
-                                                        data-subject="<?= strtolower($schedule['subject']) ?>"
-                                                        data-teacher="<?= strtolower($schedule['teacher_name']) ?>"
+                                                        data-subject="<?= htmlspecialchars(strtolower((string)($schedule['subject'] ?? '')), ENT_QUOTES) ?>"
+                                                        data-teacher="<?= htmlspecialchars(strtolower((string)($schedule['teacher_name'] ?? '')), ENT_QUOTES) ?>"
                                                         data-date="<?= $today_date ?>"
                                                         data-status="pending">
                                                         <td><span class="badge bg-info"><?= $schedule['shift_name'] ?></span></td>
@@ -492,12 +483,12 @@ $riwayat_izin = array_values(array_filter($riwayat, fn($i) => (int)($i['present_
                 </div>
             <?php else: ?>
                 <div class="alert alert-success modern-alert">
-                    <i class="fas fa-check-circle"></i> Tidak ada jadwal yang terlewat pada minggu ini.
+                    <i class="fas fa-check-circle"></i> Tidak ada jadwal yang terlewat pada riwayat saat ini.
                 </div>
             <?php endif; ?>
         </div>
 
-        <!-- Jadwal Sudah Terlaksana (7 Hari Terakhir) -->
+        <!-- Jadwal Sudah Terlaksana (Semua Data) -->
         <div id="riwayatSection" class="section-shell">
             <h5 class="section-title">
                 <span class="title-icon success"><i class="fas fa-check-circle"></i></span>
@@ -601,10 +592,11 @@ $riwayat_izin = array_values(array_filter($riwayat, fn($i) => (int)($i['present_
                                                     }
                                                 ?>
                                                     <tr class="attendance-row" 
-                                                        data-subject="<?= strtolower($item['subject'] ?? '') ?>"
-                                                        data-teacher="<?= strtolower($item['teacher_name'] ?? '') ?>"
+                                                        data-subject="<?= htmlspecialchars(strtolower((string)($item['subject'] ?? '')), ENT_QUOTES) ?>"
+                                                        data-teacher="<?= htmlspecialchars(strtolower((string)($item['teacher_name'] ?? '')), ENT_QUOTES) ?>"
+                                                        data-date="<?= htmlspecialchars(substr((string)($item['schedule_date'] ?? $item['presence_date']), 0, 10)) ?>"
                                                         data-status="<?= $item['present_id'] ?>"
-                                                        data-info="<?= strtolower($item['information'] ?? '') ?>">
+                                                        data-info="<?= htmlspecialchars(strtolower((string)($item['information'] ?? '')), ENT_QUOTES) ?>">
                                                         <td><span class="badge bg-secondary"><?= $item['shift_name'] ?></span></td>
                                                         <td><strong><?= htmlspecialchars($item['subject'] ?? '-') ?></strong></td>
                                                         <td><?= htmlspecialchars($item['teacher_name'] ?? '-') ?></td>
@@ -657,7 +649,7 @@ $riwayat_izin = array_values(array_filter($riwayat, fn($i) => (int)($i['present_
                 </div>
             <?php else: ?>
                 <div class="alert alert-info modern-alert">
-                    <i class="fas fa-info-circle"></i> Belum ada riwayat absensi dalam 7 hari terakhir.
+                    <i class="fas fa-info-circle"></i> Belum ada riwayat absensi tersimpan.
                 </div>
             <?php endif; ?>
         </div>
@@ -701,7 +693,7 @@ $riwayat_izin = array_values(array_filter($riwayat, fn($i) => (int)($i['present_
                 </div>
             <?php else: ?>
                 <div class="alert alert-info modern-alert">
-                    <i class="fas fa-info-circle"></i> Tidak ada rekap sakit dalam 7 hari terakhir.
+                    <i class="fas fa-info-circle"></i> Tidak ada rekap sakit tersimpan.
                 </div>
             <?php endif; ?>
         </div>
@@ -745,7 +737,7 @@ $riwayat_izin = array_values(array_filter($riwayat, fn($i) => (int)($i['present_
                 </div>
             <?php else: ?>
                 <div class="alert alert-info modern-alert">
-                    <i class="fas fa-info-circle"></i> Tidak ada rekap izin dalam 7 hari terakhir.
+                    <i class="fas fa-info-circle"></i> Tidak ada rekap izin tersimpan.
                 </div>
             <?php endif; ?>
         </div>
@@ -864,10 +856,18 @@ $riwayat_izin = array_values(array_filter($riwayat, fn($i) => (int)($i['present_
 </div>
 
 <script>
-$(document).ready(function() {
-    let stream = null;
-    let capturedImage = '';
-    let currentLocation = null;
+(function initRiwayatSection() {
+    const waitForJquery = () => {
+        if (!window.jQuery) {
+            setTimeout(waitForJquery, 50);
+            return;
+        }
+        const $ = window.jQuery;
+
+        $(function() {
+            let stream = null;
+            let capturedImage = '';
+            let currentLocation = null;
     
     // Absensi Button Click -> arahkan ke validasi wajah
     $('.btn-absensi-now').click(function(e) {
@@ -1225,6 +1225,10 @@ $(document).ready(function() {
         setFilterEmptyMessage('#riwayatSection', $('.riwayat-item:visible').length > 0);
         setFilterEmptyMessage('#sakitSection', $('#sakitSection .sakit-row:visible').length > 0);
         setFilterEmptyMessage('#izinSection', $('#izinSection .izin-row:visible').length > 0);
-    }
-});
+            }
+        });
+    };
+
+    waitForJquery();
+})();
 </script>
