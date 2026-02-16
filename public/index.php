@@ -7,6 +7,10 @@ require_once 'includes/database.php';
 $fullurl = ($_SERVER['PHP_SELF']);
 $trimmed = trim($fullurl, ".php");
 $canonical = rtrim($trimmed, '/' . '/?');
+$basePath = rtrim(str_replace('\\', '/', dirname($_SERVER['SCRIPT_NAME'] ?? '')), '/');
+$loginUrl = $basePath . '/login.php';
+$loginAdminUrl = $loginUrl . '?role=admin';
+$loginGuruUrl = $loginUrl . '?role=teacher';
 ?>
 <!DOCTYPE html>
 <html lang="id-ID" xml:lang="id-ID">
@@ -1213,9 +1217,9 @@ $canonical = rtrim($trimmed, '/' . '/?');
                         <li class="nav-link-item"><a href="#howto">Cara Kerja</a></li>
                         <li class="nav-link-item"><a href="#pwa">PWA</a></li>
                         <li class="nav-link-item"><a href="#contact">Kontak</a></li>
-                        <li class="nav-link-item"><a href="login.php" class="btn-neon"><i class="fas fa-sign-in-alt"></i> Login</a></li>
+                        <li class="nav-link-item"><a href="<?php echo htmlspecialchars($loginUrl, ENT_QUOTES, 'UTF-8'); ?>" class="btn-neon"><i class="fas fa-sign-in-alt"></i> Login</a></li>
                     </ul>
-                    <a href="login.php" class="btn-neon d-lg-none"><i class="fas fa-sign-in-alt"></i></a>
+                    <a href="<?php echo htmlspecialchars($loginUrl, ENT_QUOTES, 'UTF-8'); ?>" class="btn-neon d-lg-none"><i class="fas fa-sign-in-alt"></i></a>
                 </div>
             </div>
         </div>
@@ -1244,7 +1248,7 @@ $canonical = rtrim($trimmed, '/' . '/?');
                         </p>
                         
                         <div class="hero-buttons">
-                            <a href="login.php" class="btn-hero-primary">
+                            <a href="<?php echo htmlspecialchars($loginUrl, ENT_QUOTES, 'UTF-8'); ?>" class="btn-hero-primary">
                                 <i class="fas fa-sign-in-alt"></i> Login Sekarang
                             </a>
                             <a href="#features" class="btn-hero-secondary">
@@ -1536,9 +1540,9 @@ $canonical = rtrim($trimmed, '/' . '/?');
                     <div class="footer-widget">
                         <h3 class="footer-title">Akses Cepat</h3>
                         <ul class="footer-links">
-                            <li><a href="login.php"><i class="fas fa-chevron-right"></i> Login Siswa</a></li>
-                            <li><a href="login.php?role=admin"><i class="fas fa-chevron-right"></i> Login Admin</a></li>
-                            <li><a href="login.php?role=teacher"><i class="fas fa-chevron-right"></i> Login Guru</a></li>
+                            <li><a href="<?php echo htmlspecialchars($loginUrl, ENT_QUOTES, 'UTF-8'); ?>"><i class="fas fa-chevron-right"></i> Login Siswa</a></li>
+                            <li><a href="<?php echo htmlspecialchars($loginAdminUrl, ENT_QUOTES, 'UTF-8'); ?>"><i class="fas fa-chevron-right"></i> Login Admin</a></li>
+                            <li><a href="<?php echo htmlspecialchars($loginGuruUrl, ENT_QUOTES, 'UTF-8'); ?>"><i class="fas fa-chevron-right"></i> Login Guru</a></li>
                             <li><a href="register.php"><i class="fas fa-chevron-right"></i> Registrasi Wajah</a></li>
                         </ul>
                     </div>

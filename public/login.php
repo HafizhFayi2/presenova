@@ -38,6 +38,22 @@ require_once 'includes/auth.php';
 
 $auth = new Auth();
 
+$applyRememberCookie = function ($authInstance, $rememberFlag, $roleKey, $userId) {
+    if ($rememberFlag && !empty($userId)) {
+        $authInstance->issueRememberToken($userId, $roleKey);
+        $token = bin2hex(random_bytes(32));
+        setcookie('remember_token', $token, time() + (30 * 24 * 3600), '/', '', true, true);
+        return;
+    }
+
+    $authInstance->clearRememberToken();
+    if (isset($_COOKIE['remember_token'])) {
+        setcookie('remember_token', '', time() - 3600, '/');
+        setcookie('remember_token', '', time() - 3600, '/', '', true, true);
+        unset($_COOKIE['remember_token']);
+    }
+};
+
 // Check for session timeout (1 hour)
 if (isset($_SESSION['LAST_ACTIVITY']) && (time() - $_SESSION['LAST_ACTIVITY'] > 3600)) {
     session_unset();
@@ -95,6 +111,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 $_SESSION['LAST_ACTIVITY'] = time();
                 $_SESSION['CREATED'] = time();
                 session_regenerate_id(true);
+                $applyRememberCookie($auth, $remember, 'admin', $_SESSION['user_id'] ?? null);
                 
                 header("Location: dashboard/admin.php");
                 exit();
@@ -107,11 +124,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             if ($result['success']) {
                 $_SESSION['LAST_ACTIVITY'] = time();
                 $_SESSION['CREATED'] = time();
-                
-                if ($remember) {
-                    $token = bin2hex(random_bytes(32));
-                    setcookie('remember_token', $token, time() + (30 * 24 * 3600), '/', '', true, true);
-                }
+                $applyRememberCookie($auth, $remember, 'guru', $_SESSION['teacher_id'] ?? null);
                 
                 session_regenerate_id(true);
                 
@@ -126,11 +139,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             if ($result['success']) {
                 $_SESSION['LAST_ACTIVITY'] = time();
                 $_SESSION['CREATED'] = time();
-                
-                if ($remember) {
-                    $token = bin2hex(random_bytes(32));
-                    setcookie('remember_token', $token, time() + (30 * 24 * 3600), '/', '', true, true);
-                }
+                $applyRememberCookie($auth, $remember, 'student', $_SESSION['student_id'] ?? null);
                 
                 session_regenerate_id(true);
                 
