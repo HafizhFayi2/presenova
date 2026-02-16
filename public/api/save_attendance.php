@@ -221,26 +221,12 @@ try {
     $clientStrongVerified = $face_verified && $clientDistancePassed === true;
 
     if ($serverPassed && $clientDistancePassed === false) {
-        $faceMatcher->saveMatchResult(
-            $student_id,
-            $matchResult['similarity'],
-            false,
-            array_merge($matchResult['details'] ?? [], [
-                'client_distance' => $face_distance,
-                'client_distance_threshold' => $descriptorThreshold,
-                'client_descriptor_rejected' => true
-            ])
-        );
-
-        if (file_exists($selfieResult['path'])) {
-            @unlink($selfieResult['path']);
-        }
-
-        respondJson([
-            'success' => false,
-            'message' => 'Verifikasi wajah gagal (descriptor tidak sesuai)',
-            'similarity' => $matchResult['similarity']
-        ], 403);
+        // Prioritaskan verifikasi server DeepFace agar hasil modal & submit konsisten.
+        $matchResult['details'] = array_merge($matchResult['details'] ?? [], [
+            'client_distance' => $face_distance,
+            'client_distance_threshold' => $descriptorThreshold,
+            'client_descriptor_mismatch' => true
+        ]);
     }
 
     if (!$serverPassed && !$clientStrongVerified) {
@@ -533,32 +519,36 @@ function createValidationCard($sourcePath, $outputPath, $meta) {
         return false;
     }
 
-    $width = 720;
-    $height = 900;
+    $width = 1280;
+    $height = 760;
     $canvas = imagecreatetruecolor($width, $height);
     imagealphablending($canvas, true);
     imagesavealpha($canvas, true);
-    $bg = imagecolorallocate($canvas, 13, 20, 33);
+    $bg = imagecolorallocate($canvas, 8, 15, 30);
     imagefilledrectangle($canvas, 0, 0, $width, $height, $bg);
 
-    $white = imagecolorallocate($canvas, 248, 250, 252);
-    $muted = imagecolorallocate($canvas, 148, 163, 184);
+    $white = imagecolorallocate($canvas, 245, 248, 255);
+    $muted = imagecolorallocate($canvas, 165, 178, 198);
     $soft = imagecolorallocate($canvas, 203, 213, 225);
-    $accent = imagecolorallocate($canvas, 59, 130, 246);
+    $accent = imagecolorallocate($canvas, 56, 189, 248);
     $success = imagecolorallocate($canvas, 16, 185, 129);
     $warning = imagecolorallocate($canvas, 245, 158, 11);
+    $danger = imagecolorallocate($canvas, 239, 68, 68);
+    $panelBg = imagecolorallocatealpha($canvas, 10, 20, 38, 24);
+    $panelBorder = imagecolorallocatealpha($canvas, 148, 163, 184, 66);
+    $detailBg = imagecolorallocatealpha($canvas, 13, 24, 45, 18);
 
-    $padding = 24;
+    $padding = 26;
     $photoW = $width - ($padding * 2);
-    $photoH = (int) round($photoW * 0.75);
+    $photoH = 500;
     $photoX = $padding;
     $photoY = 24;
 
-    // Place selfie (cover crop to 4:3)
+    // Selfie full-width area with crop cover.
     $srcW = imagesx($srcImage);
     $srcH = imagesy($srcImage);
     $targetRatio = $photoW / $photoH;
-    $srcRatio = $srcW / $srcH;
+    $srcRatio = $srcH > 0 ? ($srcW / $srcH) : 1;
     if ($srcRatio > $targetRatio) {
         $newW = (int) round($srcH * $targetRatio);
         $cropX = (int) (($srcW - $newW) / 2);
@@ -574,51 +564,68 @@ function createValidationCard($sourcePath, $outputPath, $meta) {
     }
     imagecopyresampled($canvas, $srcImage, $photoX, $photoY, $cropX, $cropY, $photoW, $photoH, $cropW, $cropH);
 
-    // Overlay info on photo
-    $overlayH = 190;
-    $overlayY = $photoY + $photoH - $overlayH - 12;
-    $overlayColor = imagecolorallocatealpha($canvas, 15, 23, 42, 35);
-    imagefilledrectangle($canvas, $photoX + 12, $overlayY, $photoX + $photoW - 12, $overlayY + $overlayH, $overlayColor);
-
-    $statusText = strtoupper($meta['status'] ?? 'SUCCESS');
-    $statusColor = ($statusText === 'OVERDUE') ? $warning : $success;
-    imagefilledrectangle($canvas, $photoX + 20, $overlayY + 12, $photoX + 170, $overlayY + 34, $statusColor);
-    imagestring($canvas, 3, $photoX + 28, $overlayY + 16, $statusText, $white);
-
-    imagestring($canvas, 4, $photoX + 200, $overlayY + 12, 'Geolocation', $white);
-    imagestring($canvas, 2, $photoX + 200, $overlayY + 32, $meta['location_name'] ?? 'Lokasi Siswa', $soft);
-
-    $latText = $meta['latitude'] ?? '-';
-    $lngText = $meta['longitude'] ?? '-';
-    $distText = isset($meta['distance']) ? $meta['distance'] . ' m' : '-';
-    $accText = isset($meta['accuracy']) ? '±' . $meta['accuracy'] . ' m' : '-';
-
-    imagestring($canvas, 2, $photoX + 200, $overlayY + 52, "Lat: {$latText}", $muted);
-    imagestring($canvas, 2, $photoX + 200, $overlayY + 70, "Lng: {$lngText}", $muted);
-    imagestring($canvas, 2, $photoX + 200, $overlayY + 88, "Jarak: {$distText}", $muted);
-    imagestring($canvas, 2, $photoX + 200, $overlayY + 106, "Akurasi: {$accText}", $muted);
-
-    // Map thumbnail
-    $mapW = 170;
-    $mapH = 110;
-    $mapX = $photoX + $photoW - $mapW - 28;
-    $mapY = $overlayY + 18;
-    $mapBg = imagecolorallocate($canvas, 30, 41, 59);
-    imagefilledrectangle($canvas, $mapX, $mapY, $mapX + $mapW, $mapY + $mapH, $mapBg);
-
-    $tileImage = fetchMapTileImage($meta['latitude'] ?? null, $meta['longitude'] ?? null, 19);
-    if ($tileImage) {
-        imagecopyresampled($canvas, $tileImage, $mapX, $mapY, 0, 0, $mapW, $mapH, imagesx($tileImage), imagesy($tileImage));
-        imagedestroy($tileImage);
-        $markerX = (int) ($mapX + ($mapW / 2));
-        $markerY = (int) ($mapY + ($mapH / 2));
-        $markerColor = imagecolorallocate($canvas, 239, 68, 68);
-        imagefilledellipse($canvas, $markerX, $markerY, 10, 10, $markerColor);
+    // Subtle gradient for readability on bottom of photo.
+    for ($i = 0; $i < 120; $i++) {
+        $alpha = min(95, 82 + (int) ($i * 0.1));
+        $shade = imagecolorallocatealpha($canvas, 5, 10, 18, $alpha);
+        imageline($canvas, $photoX, $photoY + $photoH - $i, $photoX + $photoW, $photoY + $photoH - $i, $shade);
     }
 
-    // Attendance details section
+    // Compact metadata panel overlay (right-bottom).
+    $overlayW = 500;
+    $overlayH = 220;
+    $overlayX = $photoX + $photoW - $overlayW - 18;
+    $overlayY = $photoY + $photoH - $overlayH - 16;
+    imagefilledrectangle($canvas, $overlayX, $overlayY, $overlayX + $overlayW, $overlayY + $overlayH, $panelBg);
+    imagerectangle($canvas, $overlayX, $overlayY, $overlayX + $overlayW, $overlayY + $overlayH, $panelBorder);
+
+    $statusText = strtoupper($meta['status'] ?? 'SUCCESS');
+    $presentLabel = strtoupper((string) ($meta['present_label'] ?? 'HADIR'));
+    $statusColor = ($statusText === 'OVERDUE') ? $warning : ($statusText === 'FAILED' ? $danger : $success);
+    imagefilledrectangle($canvas, $overlayX + 14, $overlayY + 12, $overlayX + 168, $overlayY + 36, $statusColor);
+    imagestring($canvas, 3, $overlayX + 24, $overlayY + 18, $statusText, $white);
+    imagefilledrectangle($canvas, $overlayX + 176, $overlayY + 12, $overlayX + 334, $overlayY + 36, $accent);
+    imagestring($canvas, 3, $overlayX + 186, $overlayY + 18, $presentLabel, $white);
+
+    imagestring($canvas, 4, $overlayX + 14, $overlayY + 46, 'Geolocation', $white);
+    imagestring($canvas, 2, $overlayX + 14, $overlayY + 66, $meta['location_name'] ?? 'Lokasi Siswa', $soft);
+
+    $latText = isset($meta['latitude']) ? number_format((float) $meta['latitude'], 6) : '-';
+    $lngText = isset($meta['longitude']) ? number_format((float) $meta['longitude'], 6) : '-';
+    $distText = isset($meta['distance']) ? number_format((float) $meta['distance'], 1) . ' m' : '-';
+    $accText = isset($meta['accuracy']) ? '+/-' . number_format((float) $meta['accuracy'], 1) . ' m' : '-';
+
+    imagestring($canvas, 2, $overlayX + 14, $overlayY + 86, "Lat: {$latText}", $muted);
+    imagestring($canvas, 2, $overlayX + 14, $overlayY + 104, "Lng: {$lngText}", $muted);
+    imagestring($canvas, 2, $overlayX + 14, $overlayY + 122, "Jarak: {$distText}", $muted);
+    imagestring($canvas, 2, $overlayX + 14, $overlayY + 140, "Akurasi: {$accText}", $muted);
+    imagestring($canvas, 2, $overlayX + 14, $overlayY + 160, "Update: " . ($meta['time'] ?? '-'), $muted);
+
+    // HD map preview with marker.
+    $mapW = 220;
+    $mapH = 132;
+    $mapX = $overlayX + $overlayW - $mapW - 14;
+    $mapY = $overlayY + 72;
+    $mapBg = imagecolorallocate($canvas, 30, 41, 59);
+    imagefilledrectangle($canvas, $mapX, $mapY, $mapX + $mapW, $mapY + $mapH, $mapBg);
+    imagerectangle($canvas, $mapX, $mapY, $mapX + $mapW, $mapY + $mapH, $panelBorder);
+
+    $mapImage = fetchMapCompositeImage($meta['latitude'] ?? null, $meta['longitude'] ?? null, 18, 3);
+    if ($mapImage) {
+        imagecopyresampled($canvas, $mapImage, $mapX, $mapY, 0, 0, $mapW, $mapH, imagesx($mapImage), imagesy($mapImage));
+        imagedestroy($mapImage);
+        $markerX = (int) ($mapX + $mapW / 2);
+        $markerY = (int) ($mapY + $mapH / 2);
+        imagefilledellipse($canvas, $markerX, $markerY, 14, 14, $danger);
+        imageellipse($canvas, $markerX, $markerY, 26, 26, $white);
+    }
+
+    // Attendance details section (compact under photo).
     $sectionY = $photoY + $photoH + 20;
-    imagestring($canvas, 4, $photoX, $sectionY, 'Keterangan Absensi', $white);
+    $detailH = $height - $sectionY - 20;
+    imagefilledrectangle($canvas, $photoX, $sectionY, $photoX + $photoW, $sectionY + $detailH, $detailBg);
+    imagerectangle($canvas, $photoX, $sectionY, $photoX + $photoW, $sectionY + $detailH, $panelBorder);
+    imagestring($canvas, 5, $photoX + 14, $sectionY + 10, 'Keterangan Absensi', $white);
 
     $details = [
         ['Waktu absen', $meta['time'] ?? '-'],
@@ -631,32 +638,116 @@ function createValidationCard($sourcePath, $outputPath, $meta) {
         ['Absen', $meta['present_label'] ?? ($meta['status'] ?? '-')]
     ];
 
-    $rowY = $sectionY + 26;
-    $colX1 = $photoX;
-    $colX2 = $photoX + (int)($photoW / 2);
-    $rowGap = 18;
+    $rowY = $sectionY + 42;
+    $colX1 = $photoX + 14;
+    $colX2 = $photoX + (int)($photoW / 2) + 8;
+    $rowGap = 30;
     for ($i = 0; $i < count($details); $i++) {
         $colX = $i % 2 === 0 ? $colX1 : $colX2;
         if ($i % 2 === 0 && $i > 0) {
             $rowY += $rowGap;
         }
+        $value = (string) $details[$i][1];
+        if (strlen($value) > 42) {
+            $value = substr($value, 0, 39) . '...';
+        }
         imagestring($canvas, 2, $colX, $rowY, $details[$i][0], $muted);
-        imagestring($canvas, 3, $colX, $rowY + 12, $details[$i][1], $white);
+        imagestring($canvas, 4, $colX, $rowY + 12, $value, $white);
     }
 
-    $saved = imagejpeg($canvas, $outputPath, 90);
+    $saved = imagejpeg($canvas, $outputPath, 92);
     imagedestroy($srcImage);
     imagedestroy($canvas);
 
     return $saved;
 }
 
-function fetchMapTileImage($lat, $lng, $zoom = 19) {
+function fetchMapCompositeImage($lat, $lng, $zoom = 18, $gridSize = 3) {
     if (!is_numeric($lat) || !is_numeric($lng)) {
         return null;
     }
-    $tile = latLngToTile($lat, $lng, $zoom);
-    $url = "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{$zoom}/{$tile['y']}/{$tile['x']}";
+    $gridSize = max(1, min(5, (int) $gridSize));
+    $tileSize = 256;
+    $canvasSize = $gridSize * $tileSize;
+    $mapCanvas = imagecreatetruecolor($canvasSize, $canvasSize);
+    if (!$mapCanvas) {
+        return null;
+    }
+    imagealphablending($mapCanvas, true);
+    imagesavealpha($mapCanvas, true);
+    $bg = imagecolorallocate($mapCanvas, 28, 39, 58);
+    imagefilledrectangle($mapCanvas, 0, 0, $canvasSize, $canvasSize, $bg);
+
+    $tilePos = latLngToTileFraction($lat, $lng, $zoom);
+    if (!$tilePos) {
+        imagedestroy($mapCanvas);
+        return null;
+    }
+
+    $baseX = (int) floor($tilePos['x']) - (int) floor($gridSize / 2);
+    $baseY = (int) floor($tilePos['y']) - (int) floor($gridSize / 2);
+    $maxTile = (int) pow(2, $zoom) - 1;
+    $drawn = 0;
+
+    for ($dy = 0; $dy < $gridSize; $dy++) {
+        for ($dx = 0; $dx < $gridSize; $dx++) {
+            $tileX = $baseX + $dx;
+            $tileY = $baseY + $dy;
+            while ($tileX < 0) {
+                $tileX += ($maxTile + 1);
+            }
+            while ($tileX > $maxTile) {
+                $tileX -= ($maxTile + 1);
+            }
+            if ($tileY < 0 || $tileY > $maxTile) {
+                continue;
+            }
+            $tileImage = fetchMapTileImageByXYZ($tileX, $tileY, $zoom);
+            if (!$tileImage) {
+                continue;
+            }
+            imagecopy($mapCanvas, $tileImage, $dx * $tileSize, $dy * $tileSize, 0, 0, imagesx($tileImage), imagesy($tileImage));
+            imagedestroy($tileImage);
+            $drawn++;
+        }
+    }
+
+    if ($drawn === 0) {
+        imagedestroy($mapCanvas);
+        return null;
+    }
+
+    // Re-center around exact fractional tile coordinate.
+    $offsetX = (int) round(($tilePos['x'] - floor($tilePos['x'])) * $tileSize);
+    $offsetY = (int) round(($tilePos['y'] - floor($tilePos['y'])) * $tileSize);
+    $centerCanvas = imagecreatetruecolor($canvasSize, $canvasSize);
+    if (!$centerCanvas) {
+        imagedestroy($mapCanvas);
+        return null;
+    }
+    imagealphablending($centerCanvas, true);
+    imagesavealpha($centerCanvas, true);
+    imagefilledrectangle($centerCanvas, 0, 0, $canvasSize, $canvasSize, $bg);
+
+    $sourceX = max(0, $tileSize * (int) floor($gridSize / 2) + $offsetX - (int) floor($canvasSize / 2));
+    $sourceY = max(0, $tileSize * (int) floor($gridSize / 2) + $offsetY - (int) floor($canvasSize / 2));
+    if ($sourceX + $canvasSize > imagesx($mapCanvas)) {
+        $sourceX = max(0, imagesx($mapCanvas) - $canvasSize);
+    }
+    if ($sourceY + $canvasSize > imagesy($mapCanvas)) {
+        $sourceY = max(0, imagesy($mapCanvas) - $canvasSize);
+    }
+    imagecopy($centerCanvas, $mapCanvas, 0, 0, $sourceX, $sourceY, $canvasSize, $canvasSize);
+    imagedestroy($mapCanvas);
+
+    return $centerCanvas;
+}
+
+function fetchMapTileImageByXYZ($x, $y, $zoom) {
+    $x = (int) $x;
+    $y = (int) $y;
+    $zoom = (int) $zoom;
+    $url = "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{$zoom}/{$y}/{$x}";
     $context = stream_context_create([
         'http' => [
             'timeout' => 3,
@@ -667,7 +758,11 @@ function fetchMapTileImage($lat, $lng, $zoom = 19) {
     if ($data === false) {
         return null;
     }
-    return @imagecreatefromstring($data) ?: null;
+    $image = @imagecreatefromstring($data);
+    if (!$image) {
+        return null;
+    }
+    return $image;
 }
 
 function latLngToTile($lat, $lng, $zoom) {
@@ -678,7 +773,21 @@ function latLngToTile($lat, $lng, $zoom) {
     return ['x' => $x, 'y' => $y];
 }
 
+function latLngToTileFraction($lat, $lng, $zoom) {
+    if (!is_numeric($lat) || !is_numeric($lng)) {
+        return null;
+    }
+    $lat = max(-85.05112878, min(85.05112878, (float) $lat));
+    $lng = (float) $lng;
+    $n = pow(2, (int) $zoom);
+    $x = (($lng + 180.0) / 360.0) * $n;
+    $latRad = deg2rad($lat);
+    $y = (1.0 - log(tan($latRad) + (1 / cos($latRad))) / pi()) / 2.0 * $n;
+    return ['x' => $x, 'y' => $y];
+}
+
 function loadImageResource($path) {
+
     if (!file_exists($path)) {
         return null;
     }

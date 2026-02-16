@@ -323,7 +323,7 @@ if (isset($db)) {
 <?php endif; ?>
 
 <div class="modal fade" id="attendanceModal" tabindex="-1" aria-hidden="true" data-bs-backdrop="true" data-bs-keyboard="true">
-    <div class="modal-dialog modal-dialog-centered modal-xl">
+    <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable modal-xl attendance-modal-dialog">
         <div class="modal-content attendance-modal">
             <div class="modal-header">
                 <h5 class="modal-title"><i class="fas fa-circle-check me-2"></i>Konfirmasi Absensi</h5>
@@ -482,6 +482,14 @@ document.addEventListener('DOMContentLoaded', function() {
     const captureBtn = document.getElementById('faceCaptureBtn');
     const retryBtn = document.getElementById('faceRetryBtn');
     const proceedBtn = document.getElementById('faceProceedBtn');
+    const poseFlowCard = document.getElementById('poseFlowCard');
+    const poseFlowBadge = document.getElementById('poseFlowBadge');
+    const poseStartBtn = document.getElementById('poseStartBtn');
+    const poseResetBtn = document.getElementById('poseResetBtn');
+    const poseInstructionText = document.getElementById('poseInstructionText');
+    const poseRightProgress = document.getElementById('poseRightProgress');
+    const poseLeftProgress = document.getElementById('poseLeftProgress');
+    const poseFrontProgress = document.getElementById('poseFrontProgress');
 
     const cameraStatus = document.getElementById('cameraStatus');
     const matchBadge = document.getElementById('matchBadge');
@@ -539,7 +547,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const attendanceInfoStudent = document.getElementById('attendanceInfoStudent');
     const attendanceInfoStatus = document.getElementById('attendanceInfoStatus');
 
-    const gpsEnabled = page.dataset.gpsEnabled === '1';
+    const gpsEnabled = (page.dataset.gpsEnabled === '1');
     const schoolLat = parseFloat(page.dataset.schoolLat || '');
     const schoolLng = parseFloat(page.dataset.schoolLng || '');
     const schoolRadius = parseFloat(page.dataset.schoolRadius || '');
@@ -614,6 +622,26 @@ document.addEventListener('DOMContentLoaded', function() {
     const SATELLITE_TILE_URL = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
 
     let detectorType = 'tiny';
+    const poseFlowEnabled = false;
+    const poseRequiredPerSide = 5;
+    const poseRequiredFront = 1;
+    const poseYawSideThreshold = 0.12;
+    const poseYawFrontThreshold = 0.08;
+    const poseCaptureCooldownMs = 450;
+    let poseStarted = false;
+    let poseCompleted = false;
+    let poseStep = 'right';
+    let poseRightSign = null;
+    let poseRightFrames = [];
+    let poseLeftFrames = [];
+    let poseFrontFrames = [];
+    let poseMonitorId = null;
+    let poseMonitorBusy = false;
+    let poseLastCaptureAt = 0;
+    let poseLastYaw = null;
+    let poseLastDirection = 'front';
+    let poseSaving = false;
+    let poseSaved = false;
 
     if (page) {
         page.classList.add('mode-hadir');
@@ -650,6 +678,419 @@ document.addEventListener('DOMContentLoaded', function() {
         lastSimilarity = safeValue;
         similarityValue.textContent = safeValue.toFixed(2) + '%';
         similarityBar.style.width = Math.min(100, Math.max(0, safeValue)) + '%';
+    }
+
+    function setPoseBadge(state, text) {
+        if (!poseFlowEnabled) return;
+        if (!poseFlowBadge) return;
+        poseFlowBadge.className = 'match-badge ' + state;
+        poseFlowBadge.textContent = text;
+    }
+
+    function setPoseInstruction(htmlText) {
+        if (!poseFlowEnabled) return;
+        if (!poseInstructionText) return;
+        poseInstructionText.innerHTML = htmlText;
+    }
+
+    function updatePoseProgress() {
+        if (!poseFlowEnabled) return;
+        if (poseRightProgress) {
+            poseRightProgress.textContent = `${poseRightFrames.length}/${poseRequiredPerSide}`;
+        }
+        if (poseLeftProgress) {
+            poseLeftProgress.textContent = `${poseLeftFrames.length}/${poseRequiredPerSide}`;
+        }
+        if (poseFrontProgress) {
+            poseFrontProgress.textContent = `${poseFrontFrames.length}/${poseRequiredFront}`;
+        }
+    }
+
+    function setPoseStep(step) {
+        if (!poseFlowEnabled) return;
+        poseStep = step;
+        if (poseFlowCard) {
+            poseFlowCard.classList.remove('step-right', 'step-left', 'step-front', 'is-complete');
+            if (poseCompleted) {
+                poseFlowCard.classList.add('is-complete');
+            } else {
+                poseFlowCard.classList.add(`step-${step}`);
+            }
+        }
+    }
+
+    function stopPoseMonitor() {
+        if (!poseFlowEnabled) return;
+        if (poseMonitorId) {
+            clearInterval(poseMonitorId);
+            poseMonitorId = null;
+        }
+        poseMonitorBusy = false;
+    }
+
+    function getCurrentPoseTargetLabel() {
+        if (!poseFlowEnabled) return 'depan';
+        if (poseStep === 'left') return 'kiri';
+        if (poseStep === 'front') return 'depan';
+        return 'kanan';
+    }
+
+    function updateCaptureButtonByPose() {
+        const hasStream = !!stream && !!video.srcObject;
+        if (!poseFlowEnabled) {
+            captureBtn.disabled = !(hasStream && referenceReady);
+            return;
+        }
+        captureBtn.disabled = !(hasStream && referenceReady && poseCompleted);
+    }
+
+    function refreshPoseButtons() {
+        if (!poseFlowEnabled) {
+            if (poseFlowCard) {
+                poseFlowCard.style.display = 'none';
+            }
+            return;
+        }
+        const hasStream = !!stream && !!video.srcObject;
+        if (poseStartBtn) {
+            poseStartBtn.disabled = !hasStream || poseStarted || poseCompleted;
+        }
+        if (poseResetBtn) {
+            poseResetBtn.disabled = !hasStream;
+        }
+    }
+
+    function resetPoseValidation(options = {}) {
+        if (!poseFlowEnabled) {
+            poseStarted = false;
+            poseCompleted = true;
+            poseSaving = false;
+            poseSaved = true;
+            if (poseFlowCard) {
+                poseFlowCard.style.display = 'none';
+            }
+            updateCaptureButtonByPose();
+            return;
+        }
+        const keepStatus = !!options.keepStatus;
+        stopPoseMonitor();
+        poseStarted = false;
+        poseCompleted = false;
+        poseStep = 'right';
+        poseRightSign = null;
+        poseRightFrames = [];
+        poseLeftFrames = [];
+        poseFrontFrames = [];
+        poseLastYaw = null;
+        poseLastDirection = 'front';
+        poseLastCaptureAt = 0;
+        poseSaving = false;
+        poseSaved = false;
+        setPoseStep('right');
+        setPoseBadge('waiting', 'Belum Mulai');
+        updatePoseProgress();
+        if (!keepStatus) {
+            setPoseInstruction('Aktifkan kamera, lalu klik <strong>Konfirmasi Siap & Mulai Otomatis</strong>.');
+        }
+        refreshPoseButtons();
+        updateCaptureButtonByPose();
+    }
+
+    function averagePoint(points) {
+        if (!points || !points.length) return null;
+        let x = 0;
+        let y = 0;
+        for (const point of points) {
+            x += point.x;
+            y += point.y;
+        }
+        return {
+            x: x / points.length,
+            y: y / points.length
+        };
+    }
+
+    function estimateHeadYaw(landmarks) {
+        if (!landmarks) return null;
+        const nose = landmarks.getNose();
+        const leftEye = landmarks.getLeftEye();
+        const rightEye = landmarks.getRightEye();
+        if (!nose || !nose.length || !leftEye || !leftEye.length || !rightEye || !rightEye.length) {
+            return null;
+        }
+        const noseTip = nose[3] || nose[Math.floor(nose.length / 2)];
+        const leftEyeCenter = averagePoint(leftEye);
+        const rightEyeCenter = averagePoint(rightEye);
+        if (!noseTip || !leftEyeCenter || !rightEyeCenter) {
+            return null;
+        }
+        const eyeSpan = Math.abs(rightEyeCenter.x - leftEyeCenter.x);
+        if (eyeSpan < 1) {
+            return null;
+        }
+        const eyeCenterX = (leftEyeCenter.x + rightEyeCenter.x) / 2;
+        const normalized = (noseTip.x - eyeCenterX) / (eyeSpan / 2);
+        return Math.max(-1.2, Math.min(1.2, normalized));
+    }
+
+    function classifyYawDirection(yaw) {
+        if (!Number.isFinite(yaw)) return 'unknown';
+        if (Math.abs(yaw) < poseYawFrontThreshold) return 'front';
+        return yaw >= 0 ? 'right' : 'left';
+    }
+
+    function buildPoseFrameCanvas(maxSide = 640) {
+        if (!video.videoWidth || !video.videoHeight) return null;
+        const sourceWidth = video.videoWidth;
+        const sourceHeight = video.videoHeight;
+        const longest = Math.max(sourceWidth, sourceHeight);
+        const scale = longest > maxSide ? (maxSide / longest) : 1;
+        const width = Math.max(1, Math.round(sourceWidth * scale));
+        const height = Math.max(1, Math.round(sourceHeight * scale));
+
+        const poseCanvas = document.createElement('canvas');
+        poseCanvas.width = width;
+        poseCanvas.height = height;
+        const poseCtx = poseCanvas.getContext('2d');
+        poseCtx.save();
+        poseCtx.scale(-1, 1);
+        poseCtx.drawImage(video, -width, 0, width, height);
+        poseCtx.restore();
+        return poseCanvas;
+    }
+
+    async function detectPoseSample(options = {}) {
+        if (!poseFlowEnabled) return null;
+        const includeImage = !!options.includeImage;
+        const poseCanvas = buildPoseFrameCanvas(640);
+        if (!poseCanvas) return null;
+
+        let detection = await faceapi
+            .detectSingleFace(poseCanvas, getDetectorOptions())
+            .withFaceLandmarks();
+
+        if (!detection) {
+            return null;
+        }
+
+        const yaw = estimateHeadYaw(detection.landmarks);
+        if (!Number.isFinite(yaw)) {
+            return null;
+        }
+
+        const sample = {
+            yaw,
+            direction: classifyYawDirection(yaw),
+            timestamp: Date.now()
+        };
+
+        if (includeImage) {
+            sample.imageData = poseCanvas.toDataURL('image/jpeg', 0.84);
+        }
+
+        return sample;
+    }
+
+    function updatePoseLiveInstruction(sample) {
+        if (!poseFlowEnabled) return;
+        if (!poseStarted || poseCompleted) return;
+        const targetLabel = getCurrentPoseTargetLabel();
+        if (!sample) {
+            setPoseInstruction(`Target saat ini: <strong>${targetLabel}</strong>. Wajah belum terbaca, posisikan wajah di panduan. Sistem akan ambil frame otomatis.`);
+            return;
+        }
+        const yawText = Number.isFinite(sample.yaw) ? sample.yaw.toFixed(3) : '-';
+        const directionText = sample.direction === 'front'
+            ? 'depan'
+            : (sample.direction === 'right' ? 'kanan' : 'kiri');
+        setPoseInstruction(`Target saat ini: <strong>${targetLabel}</strong>. Terdeteksi: <strong>${directionText}</strong> (yaw ${yawText}). Sistem akan menangkap frame otomatis.`);
+    }
+
+    async function savePoseFramesToServer() {
+        if (!poseFlowEnabled) return true;
+        if (poseSaved) return true;
+        if (poseSaving) return false;
+        poseSaving = true;
+        try {
+            const payload = {
+                right: poseRightFrames.map(item => item.imageData).filter(Boolean),
+                left: poseLeftFrames.map(item => item.imageData).filter(Boolean),
+                front: poseFrontFrames.map(item => item.imageData).filter(Boolean)
+            };
+            const response = await fetch('../api/save_pose_frames.php', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            const data = await response.json().catch(() => null);
+            if (!response.ok || !data || !data.success) {
+                throw new Error(data?.message || 'Gagal menyimpan frame pose.');
+            }
+            poseSaved = true;
+            return true;
+        } catch (error) {
+            setStatus(error?.message || 'Gagal menyimpan frame pose di server.');
+            return false;
+        } finally {
+            poseSaving = false;
+        }
+    }
+
+    async function finalizePoseValidation() {
+        if (!poseFlowEnabled) return;
+        const saved = await savePoseFramesToServer();
+        poseCompleted = saved;
+        poseStarted = false;
+        stopPoseMonitor();
+        setPoseStep('front');
+        if (poseFlowCard) {
+            poseFlowCard.classList.add('is-complete');
+        }
+        if (saved) {
+            setPoseBadge('success', 'Selesai');
+            setPoseInstruction('Validasi pose selesai dan frame tersimpan. Lanjutkan dengan <strong>Ambil & Cocokkan</strong> untuk verifikasi wajah depan.');
+            setStatus('Validasi pose selesai. Silakan ambil foto wajah depan untuk verifikasi DeepFace.');
+        } else {
+            setPoseBadge('warning', 'Data Belum Tersimpan');
+            setPoseInstruction('Validasi pose selesai, namun penyimpanan frame gagal. Klik <strong>Reset Pose</strong> lalu ulangi.');
+            if (poseFlowCard) {
+                poseFlowCard.classList.remove('is-complete');
+            }
+        }
+        refreshPoseButtons();
+        updateCaptureButtonByPose();
+    }
+
+    async function processPoseSample(sample) {
+        if (!poseFlowEnabled) return;
+        if (!poseStarted || poseCompleted) return;
+        if (!sample) return;
+
+        const now = Date.now();
+        if ((now - poseLastCaptureAt) < poseCaptureCooldownMs) {
+            return;
+        }
+
+        poseLastYaw = sample.yaw;
+        poseLastDirection = sample.direction;
+        const absYaw = Math.abs(sample.yaw);
+        const sign = sample.yaw >= 0 ? 1 : -1;
+
+        if (poseStep === 'right') {
+            if (absYaw < poseYawSideThreshold) {
+                return;
+            }
+            if (poseRightSign === null) {
+                poseRightSign = sign;
+            }
+            if (sign !== poseRightSign) {
+                return;
+            }
+            if (poseRightFrames.length < poseRequiredPerSide) {
+                poseRightFrames.push(sample);
+                poseLastCaptureAt = now;
+                updatePoseProgress();
+                setStatus(`Frame kanan tersimpan (${poseRightFrames.length}/${poseRequiredPerSide}).`);
+            }
+            if (poseRightFrames.length >= poseRequiredPerSide) {
+                setPoseStep('left');
+                setPoseInstruction('Step 2/3: Sekarang menoleh ke <strong>kiri</strong>. Sistem akan menangkap frame otomatis.');
+                setStatus('Frame kanan lengkap. Lanjutkan menoleh ke kiri.');
+            }
+            return;
+        }
+
+        if (poseStep === 'left') {
+            if (absYaw < poseYawSideThreshold) {
+                return;
+            }
+            if (poseRightSign === null || sign !== (poseRightSign * -1)) {
+                return;
+            }
+            if (poseLeftFrames.length < poseRequiredPerSide) {
+                poseLeftFrames.push(sample);
+                poseLastCaptureAt = now;
+                updatePoseProgress();
+                setStatus(`Frame kiri tersimpan (${poseLeftFrames.length}/${poseRequiredPerSide}).`);
+            }
+            if (poseLeftFrames.length >= poseRequiredPerSide) {
+                setPoseStep('front');
+                setPoseInstruction('Step 3/3: Hadapkan wajah ke <strong>depan</strong>. Sistem akan ambil 1 frame otomatis.');
+                setStatus('Frame kiri lengkap. Hadapkan wajah ke depan.');
+            }
+            return;
+        }
+
+        if (poseStep === 'front') {
+            if (absYaw > poseYawFrontThreshold) {
+                return;
+            }
+            if (poseFrontFrames.length < poseRequiredFront) {
+                poseFrontFrames.push(sample);
+                poseLastCaptureAt = now;
+                updatePoseProgress();
+            }
+            if (poseFrontFrames.length >= poseRequiredFront) {
+                await finalizePoseValidation();
+            }
+        }
+    }
+
+    function startPoseMonitor() {
+        if (!poseFlowEnabled) return;
+        stopPoseMonitor();
+        poseMonitorId = setInterval(async () => {
+            if (!poseStarted || poseCompleted || poseMonitorBusy || !stream || !video.videoWidth) {
+                return;
+            }
+            poseMonitorBusy = true;
+            try {
+                const sample = await detectPoseSample({ includeImage: true });
+                if (sample) {
+                    poseLastYaw = sample.yaw;
+                    poseLastDirection = sample.direction;
+                }
+                updatePoseLiveInstruction(sample);
+                await processPoseSample(sample);
+            } catch (error) {
+                // Keep UI responsive even when frame detection misses.
+            } finally {
+                poseMonitorBusy = false;
+            }
+        }, 600);
+    }
+
+    function ensurePoseStarted() {
+        if (!poseFlowEnabled) return false;
+        if (!stream || !video.srcObject) {
+            setStatus('Aktifkan kamera terlebih dahulu.');
+            return false;
+        }
+        if (!modelsReady) {
+            setStatus('Model belum siap. Tunggu sampai kamera aktif.');
+            return false;
+        }
+        if (poseCompleted) {
+            setStatus('Validasi pose sudah selesai. Lanjutkan Ambil & Cocokkan.');
+            return false;
+        }
+        return true;
+    }
+
+    function startPoseValidationFlow() {
+        if (!poseFlowEnabled) return;
+        if (!ensurePoseStarted()) return;
+        if (poseRightFrames.length || poseLeftFrames.length || poseFrontFrames.length) {
+            resetPoseValidation({ keepStatus: true });
+        }
+        poseStarted = true;
+        setPoseStep('right');
+        setPoseBadge('loading', 'Berjalan');
+        setPoseInstruction('Step 1/3: Menoleh ke <strong>kanan</strong>. Sistem akan mengambil 5 frame otomatis.');
+        setStatus('Validasi pose otomatis aktif. Menoleh kanan, kiri, lalu depan.');
+        refreshPoseButtons();
+        updateCaptureButtonByPose();
+        startPoseMonitor();
     }
 
     function updateLocationSnapshot(lat, lng, accuracy, distance, timestamp) {
@@ -716,7 +1157,7 @@ document.addEventListener('DOMContentLoaded', function() {
             }).addTo(attendanceMap);
         }
         const center = L.latLng(lat, lng);
-        attendanceMap.setView(center, 16);
+        attendanceMap.setView(center, 18);
         if (!attendanceMapMarker) {
             attendanceMapMarker = L.circleMarker(center, {
                 radius: 6,
@@ -835,8 +1276,10 @@ document.addEventListener('DOMContentLoaded', function() {
             page.classList.add('mode-' + absenceMode);
         }
         if (absenceMode !== 'hadir') {
+            locationAllowed = true;
+            locationReady = true;
             setStatus(`Mode ${getModeLabel(absenceMode)} aktif. Verifikasi wajah tetap diperlukan.`);
-            if (gpsEnabled && Number.isFinite(currentLat) && Number.isFinite(currentLng)) {
+            if (gpsEnabled) {
                 setLocationLock(false);
             }
         } else {
@@ -844,26 +1287,54 @@ document.addEventListener('DOMContentLoaded', function() {
         }
 
         if (switchingToHadir && gpsEnabled) {
-            locationAllowed = false;
-            locationVerified = false;
-            locationReady = false;
-            hasValidLocation = false;
-            stableWithinCount = 0;
-            stableOutsideCount = 0;
-            distanceSamples.length = 0;
-            clearLocationState();
-            setLocationLock(true, 'Memeriksa ulang lokasi Anda...');
-            setCameraStatus('Memeriksa lokasi');
-            setStatus('Mode hadir aktif. Memeriksa ulang lokasi untuk memastikan Anda di dalam radius.');
-            if (stream) {
-                stopCamera();
+            const latestDistance = Number.isFinite(currentDistance) ? currentDistance : lastDistance;
+            const validCurrentGeo = Number.isFinite(currentLat) && Number.isFinite(currentLng) && isWithinRadius(latestDistance, currentAccuracy);
+            const lastDistanceState = loadLastDistance();
+            const validLastGeo = isRecentDistance(lastDistanceState, true) && isWithinRadius(lastDistanceState.distance, lastDistanceState.accuracy);
+
+            if (validCurrentGeo || validLastGeo) {
+                locationAllowed = true;
+                locationVerified = true;
+                locationReady = true;
+                hasValidLocation = true;
+                stableWithinCount = stableWithinThreshold;
+                stableOutsideCount = 0;
+                if (!validCurrentGeo && validLastGeo) {
+                    lastDistance = lastDistanceState.distance;
+                    updateLocationSnapshot(
+                        lastDistanceState.lat,
+                        lastDistanceState.lng,
+                        lastDistanceState.accuracy,
+                        lastDistanceState.distance,
+                        lastDistanceState.timestamp
+                    );
+                }
+                clearLocationState();
+                setLocationLock(false);
+                setCameraStatus(`Lokasi valid (${formatDistance(Number.isFinite(currentDistance) ? currentDistance : lastDistance)})`);
+                setStatus('Mode hadir aktif. Lokasi sudah tervalidasi, kamera bisa langsung diaktifkan.');
+            } else {
+                locationAllowed = false;
+                locationVerified = false;
+                locationReady = false;
+                hasValidLocation = false;
+                stableWithinCount = 0;
+                stableOutsideCount = 0;
+                distanceSamples.length = 0;
+                clearLocationState();
+                setLocationLock(true, 'Memeriksa ulang lokasi Anda...');
+                setCameraStatus('Memeriksa lokasi');
+                setStatus('Mode hadir aktif. Memeriksa ulang lokasi untuk memastikan Anda di dalam radius.');
+                if (stream) {
+                    stopCamera();
+                }
+                captureBtn.disabled = true;
+                retryBtn.disabled = true;
+                proceedBtn.disabled = true;
+                previewWrap.classList.remove('show');
+                setRetryLoading(true);
+                startLocationWatch();
             }
-            captureBtn.disabled = true;
-            retryBtn.disabled = true;
-            proceedBtn.disabled = true;
-            previewWrap.classList.remove('show');
-            setRetryLoading(true);
-            startLocationWatch();
         }
         updateAttendanceInfo();
         updateStartButtonState();
@@ -1269,13 +1740,15 @@ document.addEventListener('DOMContentLoaded', function() {
             startBtn.disabled = true;
             return;
         }
-        const hasGeo = Number.isFinite(currentLat) && Number.isFinite(currentLng);
-        const canStart = !gpsEnabled || locationAllowed || (locationOverride && hasGeo);
+        const canStart = !gpsEnabled || locationAllowed || locationOverride;
         startBtn.disabled = !canStart;
     }
 
     function setLocationLock(locked, message) {
         if (!gpsEnabled) return;
+        if (locationOverride && locked) {
+            locked = false;
+        }
         page.classList.toggle('location-locked', locked);
         if (locationLockLayer) {
             locationLockLayer.classList.toggle('show', locked);
@@ -1641,6 +2114,20 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     function handleLocationError(error) {
+        if (locationOverride) {
+            locationAllowed = true;
+            locationReady = true;
+            locationVerified = false;
+            setLocationLock(false);
+            setCameraStatus(`Mode ${getModeLabel(absenceMode)} aktif`);
+            if (!stream) {
+                setStatus(`Mode ${getModeLabel(absenceMode)} aktif. Kamera tetap bisa digunakan tanpa validasi radius.`);
+            }
+            updateStartButtonState();
+            finishRetryLoading();
+            return;
+        }
+
         if (hasValidLocation && locationAllowed) {
             setCameraStatus('Lokasi tidak stabil');
             setStatus('Lokasi sempat tidak terbaca. Memperbarui...');
@@ -1675,6 +2162,42 @@ document.addEventListener('DOMContentLoaded', function() {
             locationReady = true;
             updateStartButtonState();
             setScrollLock(false);
+            return;
+        }
+
+        if (locationOverride) {
+            locationAllowed = true;
+            locationReady = true;
+            setLocationLock(false);
+            setCameraStatus(`Mode ${getModeLabel(absenceMode)} aktif`);
+            if (!stream) {
+                setStatus(`Mode ${getModeLabel(absenceMode)} aktif. Kamera dapat langsung digunakan.`);
+            }
+            updateStartButtonState();
+
+            if (navigator.geolocation) {
+                if (locationWatchId !== null) {
+                    navigator.geolocation.clearWatch(locationWatchId);
+                    locationWatchId = null;
+                }
+                const relaxedOptions = {
+                    enableHighAccuracy: true,
+                    timeout: 12000,
+                    maximumAge: 5000
+                };
+                navigator.geolocation.getCurrentPosition(
+                    handleLocationSuccess,
+                    () => {},
+                    relaxedOptions
+                );
+                locationWatchId = navigator.geolocation.watchPosition(
+                    handleLocationSuccess,
+                    () => {},
+                    relaxedOptions
+                );
+            }
+
+            finishRetryLoading();
             return;
         }
 
@@ -1852,10 +2375,14 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     function stopCamera() {
+        stopPoseMonitor();
+        poseStarted = false;
         if (!stream) return;
         stream.getTracks().forEach(track => track.stop());
         stream = null;
         video.srcObject = null;
+        refreshPoseButtons();
+        updateCaptureButtonByPose();
     }
 
     function resetState() {
@@ -1871,6 +2398,7 @@ document.addEventListener('DOMContentLoaded', function() {
         retryBtn.disabled = true;
         previewWrap.classList.remove('show');
         previewImg.src = '';
+        resetPoseValidation({ keepStatus: true });
         updateStartButtonState();
     }
 
@@ -1909,10 +2437,13 @@ document.addEventListener('DOMContentLoaded', function() {
     async function switchCamera(deviceId) {
         if (!deviceId) return;
         stopCamera();
+        resetPoseValidation();
         setCameraStatus('Mengganti kamera...');
         try {
             await startCamera(deviceId);
             setCameraStatus('Kamera aktif');
+            resetPoseValidation();
+            setStatus('Kamera aktif. Klik konfirmasi pose untuk memulai pengambilan frame otomatis.');
         } catch (error) {
             setCameraStatus('Gagal');
             setStatus('Tidak dapat mengakses kamera yang dipilih.');
@@ -2186,7 +2717,7 @@ document.addEventListener('DOMContentLoaded', function() {
             setStatus('Foto referensi belum tersedia.');
             return;
         }
-        if (gpsEnabled && !locationAllowed) {
+        if (gpsEnabled && absenceMode === 'hadir' && !locationAllowed) {
             const msg = locationReady
                 ? 'Anda berada di luar radius. Kamera tidak dapat diaktifkan.'
                 : 'Menunggu lokasi. Aktifkan GPS untuk melanjutkan.';
@@ -2201,21 +2732,25 @@ document.addEventListener('DOMContentLoaded', function() {
         try {
             await loadModels();
             await startCamera();
-            captureBtn.disabled = false;
             retryBtn.disabled = false;
             setBadge('ready', 'Siap');
-            setStatus('Kamera aktif. Posisikan wajah di area panduan.');
+            setStatus('Kamera aktif. Konfirmasi siap untuk memulai validasi pose otomatis.');
             setCameraStatus('Kamera aktif');
+            resetPoseValidation();
             startMemoryMonitor();
 
             try {
                 await loadReferenceDescriptor();
-                captureBtn.disabled = false;
+                resetPoseValidation();
                 setBadge('ready', 'Siap');
-                setStatus('Kamera aktif. Posisikan wajah di area panduan.');
+                setStatus('Kamera aktif. Klik konfirmasi pose lalu menoleh kanan dan kiri.');
+                setPoseBadge('ready', 'Siap');
+                setPoseInstruction('Klik <strong>Konfirmasi Siap & Mulai Otomatis</strong>, lalu menoleh kanan dan kiri. Sistem akan capture frame otomatis.');
+                refreshPoseButtons();
+                updateCaptureButtonByPose();
             } catch (refError) {
                 referenceReady = false;
-                captureBtn.disabled = false;
+                updateCaptureButtonByPose();
                 setBadge('error', 'Gagal');
                 setStatus(refError.message || 'Foto referensi tidak dapat digunakan.');
             }
@@ -2229,6 +2764,11 @@ document.addEventListener('DOMContentLoaded', function() {
 
     captureBtn.addEventListener('click', async function() {
         if (!stream) return;
+        if (poseFlowEnabled && !poseCompleted) {
+            setBadge('warning', 'Pose Diperlukan');
+            setStatus('Selesaikan validasi pose otomatis terlebih dahulu.');
+            return;
+        }
         captureBtn.disabled = true;
         setBadge('loading', 'Memeriksa');
         setStatus('Sedang mencocokkan wajah...');
@@ -2236,7 +2776,7 @@ document.addEventListener('DOMContentLoaded', function() {
         if (!video.videoWidth || !video.videoHeight) {
             setBadge('error', 'Gagal');
             setStatus('Kamera belum siap. Tunggu beberapa detik lalu coba lagi.');
-            captureBtn.disabled = false;
+            updateCaptureButtonByPose();
             return;
         }
 
@@ -2253,7 +2793,7 @@ document.addEventListener('DOMContentLoaded', function() {
         lastCapturedData = capturedData;
 
         const result = await performMatch(capturedData);
-        captureBtn.disabled = false;
+        updateCaptureButtonByPose();
         if (!result) {
             faceHint.innerHTML = '<i class="fas fa-info-circle"></i><span>Tips: rapikan posisi wajah, jangan terlalu dekat, dan hindari bayangan.</span>';
         }
@@ -2271,6 +2811,24 @@ document.addEventListener('DOMContentLoaded', function() {
         previewImg.src = '';
         faceHint.innerHTML = '<i class="fas fa-info-circle"></i><span>Pastikan wajah berada di tengah area panduan.</span>';
     });
+
+    if (poseStartBtn) {
+        poseStartBtn.addEventListener('click', function() {
+            if (!stream || !referenceReady) {
+                setStatus('Aktifkan kamera dan tunggu foto referensi siap terlebih dahulu.');
+                return;
+            }
+            startPoseValidationFlow();
+        });
+    }
+
+    if (poseResetBtn) {
+        poseResetBtn.addEventListener('click', function() {
+            resetPoseValidation();
+            setStatus('Validasi pose direset. Klik konfirmasi siap untuk mulai lagi.');
+            setPoseBadge('ready', 'Siap');
+        });
+    }
 
     function setAttendanceModalMessage(text, state = '') {
         if (!attendanceModalMessage) return;
@@ -2296,7 +2854,8 @@ document.addEventListener('DOMContentLoaded', function() {
         const distanceValue = Number.isFinite(currentDistance) ? currentDistance : lastDistance;
         const geoVerified = !gpsEnabled ? true : isWithinRadius(distanceValue, currentAccuracy);
         const requiresRadius = absenceMode === 'hadir';
-        if (!hasGeo) {
+        const requiresGeo = gpsEnabled && requiresRadius;
+        if (requiresGeo && !hasGeo) {
             setStatus('Lokasi belum tersedia. Pastikan GPS aktif.');
             return;
         }
@@ -2307,6 +2866,11 @@ document.addEventListener('DOMContentLoaded', function() {
 
         if (attendanceFacePreview) {
             attendanceFacePreview.src = lastCapturedData;
+        }
+        setAttendanceModalMessage('Pastikan data sudah benar sebelum mengirim absensi.');
+        if (attendanceSubmitBtn) {
+            attendanceSubmitBtn.disabled = false;
+            attendanceSubmitBtn.innerHTML = '<i class="fas fa-paper-plane"></i> Konfirmasi & Absen';
         }
         if (attendanceSimilarityText) {
             attendanceSimilarityText.textContent = `${lastSimilarity.toFixed(2)}%`;
@@ -2359,20 +2923,18 @@ document.addEventListener('DOMContentLoaded', function() {
         attendanceSubmitting = false;
         updateAttendanceInfo();
         if (attendanceSubmitBtn) {
-            const canSubmit = matchPassed && studentScheduleId && lastCapturedData && hasGeo && (!requiresRadius || geoVerified);
+            const canSubmit = matchPassed && studentScheduleId && lastCapturedData && (!requiresGeo || hasGeo) && (!requiresRadius || geoVerified);
             attendanceSubmitBtn.disabled = !canSubmit;
             if (!canSubmit) {
                 if (!studentScheduleId) {
                     setAttendanceModalMessage('Jadwal belum dipilih. Kembali ke menu Jadwal.', 'danger');
                 } else if (!lastCapturedData) {
                     setAttendanceModalMessage('Foto verifikasi belum tersedia.', 'danger');
-                } else if (!hasGeo) {
+                } else if (requiresGeo && !hasGeo) {
                     setAttendanceModalMessage('Lokasi belum tersedia. Pastikan GPS aktif.', 'danger');
                 } else if (requiresRadius && !geoVerified) {
                     setAttendanceModalMessage('Lokasi belum tervalidasi. Pastikan berada di dalam radius.', 'danger');
                 }
-            } else {
-                setAttendanceModalMessage('Pastikan data sudah benar sebelum mengirim absensi.');
             }
         }
 
@@ -2402,7 +2964,8 @@ document.addEventListener('DOMContentLoaded', function() {
         const distanceValue = Number.isFinite(currentDistance) ? currentDistance : lastDistance;
         const geoVerified = !gpsEnabled ? true : isWithinRadius(distanceValue, currentAccuracy);
         const requiresRadius = absenceMode === 'hadir';
-        if (!hasGeo) {
+        const requiresGeo = gpsEnabled && requiresRadius;
+        if (requiresGeo && !hasGeo) {
             setAttendanceModalMessage('Lokasi belum tersedia. Pastikan GPS aktif.', 'danger');
             return;
         }
@@ -2535,6 +3098,10 @@ document.addEventListener('DOMContentLoaded', function() {
             document.body.classList.remove('attendance-modal-open');
         });
         attendanceModalEl.addEventListener('shown.bs.modal', function() {
+            const modalBody = attendanceModalEl.querySelector('.modal-body');
+            if (modalBody) {
+                modalBody.scrollTop = 0;
+            }
             ensureAttendanceMap(currentLat, currentLng);
         });
     }

@@ -1028,6 +1028,169 @@ body.scroll-locked {
     gap: 10px;
 }
 
+.pose-flow-card {
+    margin-top: 4px;
+    padding: 12px 14px;
+    border-radius: 14px;
+    border: 1px solid rgba(148, 163, 184, 0.35);
+    background: linear-gradient(145deg, rgba(59, 130, 246, 0.1), rgba(15, 23, 42, 0.08));
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+[data-theme="light"] .pose-flow-card {
+    background: linear-gradient(145deg, rgba(59, 130, 246, 0.1), rgba(226, 232, 240, 0.3));
+}
+
+.pose-flow-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+}
+
+.pose-flow-header h6 {
+    margin: 0;
+    font-size: 0.92rem;
+}
+
+.pose-flow-desc {
+    margin: 0;
+    color: var(--text-secondary-color);
+    font-size: 0.82rem;
+}
+
+.pose-progress-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+}
+
+.pose-progress-item {
+    border-radius: 10px;
+    border: 1px solid rgba(148, 163, 184, 0.35);
+    background: rgba(15, 23, 42, 0.25);
+    padding: 8px 10px;
+}
+
+[data-theme="light"] .pose-progress-item {
+    background: rgba(248, 250, 252, 0.85);
+}
+
+.pose-progress-item span {
+    display: block;
+    font-size: 0.72rem;
+    color: var(--text-secondary-color);
+}
+
+.pose-progress-item strong {
+    display: block;
+    margin-top: 2px;
+    font-size: 0.9rem;
+    color: var(--text);
+}
+
+.pose-animation {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    padding: 6px 0;
+}
+
+.pose-head-icon {
+    width: 42px;
+    height: 42px;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(20, 184, 166, 0.25);
+    border: 1px solid rgba(45, 212, 191, 0.45);
+    color: #14b8a6;
+    animation: headSwing 1.8s ease-in-out infinite;
+}
+
+.pose-arrow {
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(59, 130, 246, 0.18);
+    color: #60a5fa;
+    border: 1px solid rgba(96, 165, 250, 0.45);
+}
+
+.pose-arrow-left {
+    animation: arrowPulseLeft 1.8s ease-in-out infinite;
+}
+
+.pose-arrow-right {
+    animation: arrowPulseRight 1.8s ease-in-out infinite;
+}
+
+.pose-flow-card.step-right .pose-arrow-right,
+.pose-flow-card.step-left .pose-arrow-left {
+    background: rgba(20, 184, 166, 0.28);
+    color: #14b8a6;
+    border-color: rgba(45, 212, 191, 0.6);
+    box-shadow: 0 0 0 3px rgba(20, 184, 166, 0.12);
+}
+
+.pose-flow-card.step-front .pose-head-icon {
+    background: rgba(59, 130, 246, 0.3);
+    border-color: rgba(96, 165, 250, 0.65);
+    color: #60a5fa;
+}
+
+.pose-flow-card.is-complete .pose-head-icon {
+    background: rgba(25, 135, 84, 0.25);
+    border-color: rgba(25, 135, 84, 0.55);
+    color: #2b8a57;
+    animation-duration: 1.2s;
+}
+
+.pose-instruction {
+    border-radius: 10px;
+    padding: 8px 10px;
+    font-size: 0.85rem;
+    background: rgba(15, 23, 42, 0.25);
+    border: 1px dashed rgba(148, 163, 184, 0.3);
+}
+
+[data-theme="light"] .pose-instruction {
+    background: rgba(248, 250, 252, 0.85);
+}
+
+.pose-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+@keyframes headSwing {
+    0% { transform: translateX(0) rotate(0deg); }
+    25% { transform: translateX(-6px) rotate(-6deg); }
+    50% { transform: translateX(0) rotate(0deg); }
+    75% { transform: translateX(6px) rotate(6deg); }
+    100% { transform: translateX(0) rotate(0deg); }
+}
+
+@keyframes arrowPulseLeft {
+    0%, 100% { opacity: 0.35; transform: translateX(0); }
+    35% { opacity: 1; transform: translateX(-4px); }
+    55% { opacity: 0.35; transform: translateX(0); }
+}
+
+@keyframes arrowPulseRight {
+    0%, 100% { opacity: 0.35; transform: translateX(0); }
+    35% { opacity: 1; transform: translateX(4px); }
+    55% { opacity: 0.35; transform: translateX(0); }
+}
+
 .camera-hint {
     display: flex;
     align-items: center;
@@ -1399,6 +1562,154 @@ body.attendance-modal-open .modal-backdrop {
     pointer-events: none;
 }
 
+/* Attendance modal layout override: responsive, scrollable, compact preview */
+#attendanceModal .attendance-modal-dialog {
+    width: min(96vw, 1420px);
+    max-width: min(96vw, 1420px);
+    margin: 1rem auto;
+}
+
+#attendanceModal .attendance-modal {
+    max-height: calc(100vh - 2rem);
+    display: flex;
+    flex-direction: column;
+}
+
+#attendanceModal .attendance-modal .modal-header {
+    flex-shrink: 0;
+}
+
+#attendanceModal .attendance-modal .modal-body {
+    max-height: calc(100vh - 170px);
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding-bottom: 12px;
+}
+
+#attendanceModal .attendance-modal .modal-footer {
+    flex-shrink: 0;
+    position: sticky;
+    bottom: 0;
+    z-index: 4;
+    background: linear-gradient(180deg, rgba(10, 15, 30, 0.45), rgba(10, 15, 30, 0.9));
+    backdrop-filter: blur(8px);
+}
+
+[data-theme="light"] #attendanceModal .attendance-modal .modal-footer {
+    background: linear-gradient(180deg, rgba(248, 250, 252, 0.55), rgba(248, 250, 252, 0.95));
+}
+
+#attendanceModal .attendance-photo-wrap {
+    aspect-ratio: 16 / 9;
+    min-height: 260px;
+    max-height: min(58vh, 560px);
+}
+
+#attendanceModal .attendance-photo-wrap img {
+    object-fit: contain;
+    object-position: center center;
+    background: rgba(2, 6, 23, 0.92);
+}
+
+#attendanceModal .attendance-photo-overlay {
+    right: 14px;
+    bottom: 14px;
+    width: min(46%, 520px);
+    max-height: min(48%, 260px);
+    border-radius: 16px;
+    border: 1px solid rgba(148, 163, 184, 0.42);
+    background: linear-gradient(150deg, rgba(12, 18, 35, 0.62), rgba(6, 11, 27, 0.86));
+    box-shadow: 0 14px 30px rgba(2, 6, 23, 0.46);
+    padding: 10px 12px;
+}
+
+#attendanceModal .attendance-photo-overlay .overlay-header {
+    font-size: 0.9rem;
+    margin-bottom: 8px;
+}
+
+#attendanceModal .attendance-photo-overlay .overlay-body {
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+}
+
+#attendanceModal .attendance-photo-overlay .overlay-info-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px 10px;
+}
+
+#attendanceModal .attendance-photo-overlay .geo-map {
+    width: 148px;
+    height: 96px;
+    border-radius: 10px;
+    border: 1px solid rgba(148, 163, 184, 0.45);
+}
+
+#attendanceModal .attendance-photo-overlay .overlay-metrics {
+    gap: 6px 8px;
+}
+
+@media (max-width: 1200px) {
+    #attendanceModal .attendance-modal-dialog {
+        width: min(98vw, 1240px);
+        max-width: min(98vw, 1240px);
+    }
+
+    #attendanceModal .attendance-photo-overlay {
+        width: min(62%, 560px);
+        max-height: min(62%, 320px);
+    }
+}
+
+@media (max-width: 992px) {
+    #attendanceModal .attendance-modal-dialog {
+        width: min(100vw, 1000px);
+        max-width: min(100vw, 1000px);
+        margin: 0;
+    }
+
+    #attendanceModal .attendance-modal {
+        border-radius: 0;
+        max-height: 100vh;
+    }
+
+    #attendanceModal .attendance-modal .modal-body {
+        max-height: calc(100vh - 148px);
+    }
+
+    #attendanceModal .attendance-photo-wrap {
+        max-height: 52vh;
+    }
+
+    #attendanceModal .attendance-photo-overlay {
+        width: min(88%, 620px);
+        max-height: min(62%, 360px);
+    }
+}
+
+@media (max-width: 768px) {
+    #attendanceModal .attendance-photo-wrap {
+        min-height: 220px;
+        max-height: 48vh;
+    }
+
+    #attendanceModal .attendance-photo-overlay {
+        left: 10px;
+        right: 10px;
+        width: auto;
+        max-height: min(68%, 340px);
+    }
+
+    #attendanceModal .attendance-photo-overlay .overlay-body {
+        grid-template-columns: 1fr;
+    }
+
+    #attendanceModal .attendance-photo-overlay .overlay-info-grid,
+    #attendanceModal .attendance-photo-overlay .geo-detail-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
 .memory-stats {
     display: grid;
     gap: 10px;
@@ -1451,6 +1762,14 @@ body.attendance-modal-open .modal-backdrop {
         flex-direction: column;
     }
 
+    .pose-actions {
+        flex-direction: column;
+    }
+
+    .pose-actions .btn {
+        width: 100%;
+    }
+
     .camera-header {
         flex-direction: column;
         align-items: flex-start;
@@ -1474,5 +1793,9 @@ body.attendance-modal-open .modal-backdrop {
     .camera-device-row select {
         flex: 1;
         min-width: 0;
+    }
+
+    .pose-progress-grid {
+        grid-template-columns: 1fr;
     }
 }
