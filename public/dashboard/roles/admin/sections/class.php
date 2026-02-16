@@ -125,6 +125,11 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 
 // Handle DELETE requests - SEDERHANAKAN SEPERTI TEACHER.PHP
 if (isset($_GET['action']) && $_GET['action'] == 'delete') {
+    if (isset($canDeleteMaster) && !$canDeleteMaster) {
+        $error = "Operator tidak memiliki izin menghapus data master.";
+        header("Location: admin.php?table=class&error=" . urlencode($error));
+        exit();
+    }
     // HAPUS KELAS
     if (isset($_GET['delete_class'])) {
         $class_id = intval($_GET['delete_class']);
@@ -362,18 +367,22 @@ $majors = $db->query("SELECT * FROM jurusan ORDER BY name")->fetchAll();
                                                 title="Edit Kelas">
                                             <i class="fas fa-pencil"></i>
                                         </button>
-                                        <?php if($student_count == 0 && $schedule_count == 0): ?>
-                                        <a href="admin.php?table=class&action=delete&delete_class=<?php echo $class['class_id']; ?>" 
-                                           class="btn btn-sm btn-danger" 
-                                           onclick="return confirm('Hapus kelas <?php echo addslashes($class['class_name']); ?>? Tindakan ini tidak dapat dibatalkan!')"
-                                           title="Hapus Kelas">
-                                            <i class="fas fa-trash"></i>
-                                        </a>
+                                        <?php if (isset($canDeleteMaster) && !$canDeleteMaster): ?>
+                                            <button class="btn btn-sm btn-danger" disabled title="Operator tidak dapat menghapus data master">
+                                                <i class="fas fa-trash"></i>
+                                            </button>
+                                        <?php elseif($student_count == 0 && $schedule_count == 0): ?>
+                                            <a href="admin.php?table=class&action=delete&delete_class=<?php echo $class['class_id']; ?>" 
+                                               class="btn btn-sm btn-danger" 
+                                               onclick="return confirm('Hapus kelas <?php echo addslashes($class['class_name']); ?>? Tindakan ini tidak dapat dibatalkan!')"
+                                               title="Hapus Kelas">
+                                                <i class="fas fa-trash"></i>
+                                            </a>
                                         <?php else: ?>
-                                        <button class="btn btn-sm btn-danger" disabled 
-                                                title="<?php echo $student_count > 0 ? "Kelas masih memiliki {$student_count} siswa" : "Kelas masih memiliki {$schedule_count} jadwal"; ?>">
-                                            <i class="fas fa-trash"></i>
-                                        </button>
+                                            <button class="btn btn-sm btn-danger" disabled 
+                                                    title="<?php echo $student_count > 0 ? "Kelas masih memiliki {$student_count} siswa" : "Kelas masih memiliki {$schedule_count} jadwal"; ?>">
+                                                <i class="fas fa-trash"></i>
+                                            </button>
                                         <?php endif; ?>
                                     </div>
                                 </td>
@@ -439,18 +448,22 @@ $majors = $db->query("SELECT * FROM jurusan ORDER BY name")->fetchAll();
                                                 title="Edit Jurusan">
                                             <i class="fas fa-pencil"></i>
                                         </button>
-                                        <?php if ($class_count == 0 && $student_count == 0): ?>
-                                        <a href="admin.php?table=class&action=delete&delete_jurusan=<?php echo $major['jurusan_id']; ?>" 
-                                           class="btn btn-sm btn-outline-danger" 
-                                           onclick="return confirm('Hapus jurusan <?php echo addslashes($major['code']); ?> - <?php echo addslashes($major['name']); ?>? Tindakan ini tidak dapat dibatalkan!')"
-                                           title="Hapus Jurusan">
-                                            <i class="fas fa-trash"></i>
-                                        </a>
+                                        <?php if (isset($canDeleteMaster) && !$canDeleteMaster): ?>
+                                            <button class="btn btn-sm btn-outline-danger" disabled title="Operator tidak dapat menghapus data master">
+                                                <i class="fas fa-trash"></i>
+                                            </button>
+                                        <?php elseif ($class_count == 0 && $student_count == 0): ?>
+                                            <a href="admin.php?table=class&action=delete&delete_jurusan=<?php echo $major['jurusan_id']; ?>" 
+                                               class="btn btn-sm btn-outline-danger" 
+                                               onclick="return confirm('Hapus jurusan <?php echo addslashes($major['code']); ?> - <?php echo addslashes($major['name']); ?>? Tindakan ini tidak dapat dibatalkan!')"
+                                               title="Hapus Jurusan">
+                                                <i class="fas fa-trash"></i>
+                                            </a>
                                         <?php else: ?>
-                                        <button class="btn btn-sm btn-outline-danger" disabled 
-                                                title="<?php echo $class_count > 0 ? "Jurusan masih memiliki {$class_count} kelas" : "Jurusan masih memiliki {$student_count} siswa"; ?>">
-                                            <i class="fas fa-trash"></i>
-                                        </button>
+                                            <button class="btn btn-sm btn-outline-danger" disabled 
+                                                    title="<?php echo $class_count > 0 ? "Jurusan masih memiliki {$class_count} kelas" : "Jurusan masih memiliki {$student_count} siswa"; ?>">
+                                                <i class="fas fa-trash"></i>
+                                            </button>
                                         <?php endif; ?>
                                     </div>
                                 </div>

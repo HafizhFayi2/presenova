@@ -10,6 +10,7 @@ try {
     require_once BASE_PATH . '/includes/config.php';
     require_once BASE_PATH . '/includes/auth.php';
     require_once BASE_PATH . '/includes/database.php';
+    require_once BASE_PATH . '/includes/functions.php';
     require_once BASE_PATH . '/helpers/jp_time_helper.php';
     require_once BASE_PATH . '/includes/database_helper.php';
 } catch (Exception $e) {
@@ -37,14 +38,24 @@ if (isset($_SESSION['teacher_id'])) {
     exit();
 }
 
-// Jika bukan admin, redirect ke login
-if (!isset($_SESSION['level']) || $_SESSION['level'] != 1) {
+// Jika bukan admin/operator, redirect ke login
+if (!isset($_SESSION['level']) || !in_array((int) $_SESSION['level'], [1, 2], true)) {
     header("Location: login.php");
     exit();
 }
 
+$isOperator = isset($_SESSION['level']) && (int) $_SESSION['level'] === 2;
+$canDeleteMaster = !$isOperator;
+
 require_once '../includes/database.php';
 $db = new Database();
+
+if (!isset($_SESSION['last_admin_dashboard_log']) || (time() - $_SESSION['last_admin_dashboard_log']) > 300) {
+    if (!empty($_SESSION['user_id'])) {
+        logActivity((int) $_SESSION['user_id'], 'admin', 'dashboard_access', 'Admin dashboard accessed');
+        $_SESSION['last_admin_dashboard_log'] = time();
+    }
+}
 
 // Handle actions
 $action = $_GET['action'] ?? '';
@@ -180,6 +191,11 @@ if (!function_exists('hasTeacherScheduleTriggers')) {
 // Handle form submissions
 if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     if ($table === 'student' && $action === 'delete') {
+        if (!empty($isOperator)) {
+            $error = "Operator tidak memiliki izin menghapus data master.";
+            header("Location: admin.php?table=student&error=" . urlencode($error));
+            exit();
+        }
         $studentId = isset($_POST['delete_student_id']) ? (int)$_POST['delete_student_id'] : 0;
         $reason = trim((string)($_POST['delete_reason'] ?? ''));
 
@@ -1122,6 +1138,11 @@ if ($action == 'delete') {
             break;
             
         case 'teacher':
+            if (!empty($isOperator)) {
+                $error = "Operator tidak memiliki izin menghapus data master.";
+                header("Location: admin.php?table=teacher&error=" . urlencode($error));
+                exit();
+            }
             $id = $_GET['id'];
             $sql = "DELETE FROM teacher WHERE id = ?";
             $db->query($sql, [$id]);
@@ -1132,6 +1153,11 @@ if ($action == 'delete') {
             break;
             
         case 'schedule':
+            if (!empty($isOperator)) {
+                $error = "Operator tidak memiliki izin menghapus data master.";
+                header("Location: admin.php?table=schedule&error=" . urlencode($error));
+                exit();
+            }
             $id = $_GET['id'];
             $db->beginTransaction();
             $db->query("DELETE FROM student_schedule WHERE teacher_schedule_id = ?", [$id]);
@@ -1442,6 +1468,18 @@ if ($active_admin_section_css !== null) {
                     <button id="themeToggle" title="Toggle Theme">
                         <i class="fas fa-moon"></i>
                     </button>
+
+                    <?php
+                    $adminRoleLabel = 'Administrator';
+                    if (isset($_SESSION['level']) && (int) $_SESSION['level'] === 2) {
+                        $adminRoleLabel = 'Operator';
+                    }
+                    $adminDisplayName = $_SESSION['fullname'] ?? ($_SESSION['username'] ?? 'User');
+                    ?>
+                    <div class="topbar-userinfo">
+                        <div class="topbar-user-name"><?php echo htmlspecialchars($adminDisplayName); ?></div>
+                        <div class="topbar-user-role"><?php echo htmlspecialchars($adminRoleLabel); ?></div>
+                    </div>
 
                     <!-- User -->
                     <div class="user">

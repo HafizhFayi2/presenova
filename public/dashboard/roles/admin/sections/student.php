@@ -120,13 +120,19 @@ $majors = $majorsResult->fetchAll();
                                         title="Reset Password">
                                     <i class="fas fa-key"></i>
                                 </button>
-                                <button class="btn btn-outline-danger delete-btn" 
-                                        data-id="<?php echo $student['id']; ?>"
-                                        data-table="student"
-                                        data-name="<?php echo htmlspecialchars($student['student_name']); ?>"
-                                        title="Hapus">
-                                    <i class="fas fa-trash"></i>
-                                </button>
+                                <?php if (isset($canDeleteMaster) && !$canDeleteMaster): ?>
+                                    <button class="btn btn-outline-danger" disabled title="Operator tidak dapat menghapus data master">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                <?php else: ?>
+                                    <button class="btn btn-outline-danger delete-btn" 
+                                            data-id="<?php echo $student['id']; ?>"
+                                            data-table="student"
+                                            data-name="<?php echo htmlspecialchars($student['student_name']); ?>"
+                                            title="Hapus">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                <?php endif; ?>
                             </div>
                         </td>
                     </tr>

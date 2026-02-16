@@ -215,6 +215,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 // Handle GET actions (delete / set default)
 if (isset($_GET['action']) && $_GET['action'] === 'delete' && isset($_GET['id'])) {
+    if (isset($canDeleteMaster) && !$canDeleteMaster) {
+        locationRedirect('error', 'Operator tidak memiliki izin menghapus data master.');
+    }
     $location_id = (int) $_GET['id'];
     if ($location_id <= 0) {
         locationRedirect('error', 'ID lokasi tidak valid.');
@@ -400,18 +403,24 @@ $mapLocation = $defaultLocation ?: (!empty($locations) ? $locations[0] : null);
                             <i class="fas fa-edit"></i> Edit
                         </button>
                         <?php if (empty($site['default_location_id']) || (int)$site['default_location_id'] !== (int)$location['location_id']): ?>
-                        <a href="?table=location&action=set_default&id=<?php echo $location['location_id']; ?>" 
-                           class="btn btn-sm btn-outline-primary" onclick="return confirm('Jadikan lokasi ini sebagai patokan GPS?')">
-                            <i class="fas fa-location-dot"></i> Jadikan Default
-                        </a>
-                        <a href="?table=location&action=delete&id=<?php echo $location['location_id']; ?>" 
-                           class="btn btn-sm btn-danger" onclick="return confirm('Hapus lokasi ini?')">
-                            <i class="fas fa-trash"></i> Hapus
-                        </a>
+                            <a href="?table=location&action=set_default&id=<?php echo $location['location_id']; ?>" 
+                               class="btn btn-sm btn-outline-primary" onclick="return confirm('Jadikan lokasi ini sebagai patokan GPS?')">
+                                <i class="fas fa-location-dot"></i> Jadikan Default
+                            </a>
+                            <?php if (isset($canDeleteMaster) && !$canDeleteMaster): ?>
+                                <button class="btn btn-sm btn-danger" disabled title="Operator tidak dapat menghapus data master">
+                                    <i class="fas fa-trash"></i> Hapus
+                                </button>
+                            <?php else: ?>
+                                <a href="?table=location&action=delete&id=<?php echo $location['location_id']; ?>" 
+                                   class="btn btn-sm btn-danger" onclick="return confirm('Hapus lokasi ini?')">
+                                    <i class="fas fa-trash"></i> Hapus
+                                </a>
+                            <?php endif; ?>
                         <?php else: ?>
-                        <button class="btn btn-sm btn-danger" disabled title="Lokasi default tidak dapat dihapus">
-                            <i class="fas fa-trash"></i> Hapus
-                        </button>
+                            <button class="btn btn-sm btn-danger" disabled title="Lokasi default tidak dapat dihapus">
+                                <i class="fas fa-trash"></i> Hapus
+                            </button>
                         <?php endif; ?>
                     </div>
                 </div>

@@ -10,6 +10,32 @@ class Auth {
         $this->db = new Database();
     }
 
+    private function userHasActiveColumn() {
+        static $hasColumn = null;
+        if ($hasColumn !== null) {
+            return $hasColumn;
+        }
+        try {
+            $stmt = $this->db->query("SHOW COLUMNS FROM user LIKE 'is_active'");
+            $hasColumn = $stmt && $stmt->fetch() ? true : false;
+        } catch (Exception $e) {
+            $hasColumn = false;
+        }
+        return $hasColumn;
+    }
+
+    private function isAdminActive($user_id) {
+        if (!$this->userHasActiveColumn()) {
+            return true;
+        }
+        $stmt = $this->db->query("SELECT is_active FROM user WHERE user_id = ? LIMIT 1", [$user_id]);
+        $row = $stmt ? $stmt->fetch() : null;
+        if (!$row) {
+            return false;
+        }
+        return ($row['is_active'] ?? 'Y') === 'Y';
+    }
+
     private function getFaceReferencePath($photo_reference) {
         if (empty($photo_reference)) {
             return null;
@@ -82,7 +108,7 @@ class Auth {
     
     // Login admin
     public function loginAdmin($username, $password) {
-        $sql = "SELECT * FROM user WHERE username = ? AND level = 1";
+        $sql = "SELECT * FROM user WHERE username = ? AND level IN (1, 2)";
         $stmt = $this->db->query($sql, [$username]);
         $user = $stmt->fetch();
         
@@ -90,6 +116,10 @@ class Auth {
             $hashed_password = hash('sha256', $password . PASSWORD_SALT);
             
             if ($hashed_password === $user['password']) {
+                if ($this->userHasActiveColumn() && isset($user['is_active']) && $user['is_active'] !== 'Y') {
+                    $this->logActivity($user['user_id'], 'admin', 'login_blocked', 'Admin account disabled');
+                    return false;
+                }
                 // Update last login
                 $this->updateLastLogin($user['user_id']);
                 
@@ -103,10 +133,6 @@ class Auth {
                 
                 // Log activity
                 $this->logActivity($user['user_id'], 'admin', 'login', 'Admin login successful');
-                
-                // Create JWT token
-                $token = $this->createJWT($user['user_id'], 'admin');
-                setcookie('attendance_token', $token, time() + (86400 * JWT_EXPIRE), "/");
                 
                 return true;
             } else {
@@ -143,10 +169,6 @@ class Auth {
                 
                 // Update last login
                 $this->updateStudentLogin($siswa['id']);
-                
-                // Create JWT token
-                $token = $this->createJWT($siswa['id'], 'student');
-                setcookie('attendance_token', $token, time() + (86400 * JWT_EXPIRE), "/");
                 
                 return [
                     'success' => true, 
@@ -185,10 +207,6 @@ class Auth {
                 
                 // Log activity
                 $this->logActivity($teacher['id'], 'guru', 'login', 'Guru login successful');
-                
-                // Create JWT token
-                $token = $this->createJWT($teacher['id'], 'guru');
-                setcookie('attendance_token', $token, time() + (86400 * JWT_EXPIRE), "/");
                 
                 return [
                     'success' => true,
@@ -251,6 +269,12 @@ class Auth {
     // Check if user is logged in
     public function isLoggedIn() {
         if (isset($_SESSION['logged_in']) && $_SESSION['logged_in'] === true) {
+            if (isset($_SESSION['role']) && $_SESSION['role'] === 'admin' && isset($_SESSION['user_id'])) {
+                if (!$this->isAdminActive($_SESSION['user_id'])) {
+                    $this->logout();
+                    return false;
+                }
+            }
             if (isset($_SESSION['role']) && $_SESSION['role'] == 'siswa' && isset($_SESSION['student_id'])) {
                 $stmt = $this->db->query(
                     "SELECT id, photo_reference FROM student WHERE id = ?",
@@ -264,7 +288,7 @@ class Auth {
         }
         
         // Check cookie token
-        if (isset($_COOKIE['attendance_token'])) {
+        if (isset($_COOKIE['attendance_token']) && isset($_COOKIE['remember_token'])) {
             $payload = $this->verifyJWT($_COOKIE['attendance_token']);
             if ($payload) {
                 // Restore session from token
@@ -304,6 +328,10 @@ class Auth {
                     $user = $stmt->fetch();
                     
                     if ($user) {
+                        if ($this->userHasActiveColumn() && ($user['is_active'] ?? 'Y') !== 'Y') {
+                            $this->logout();
+                            return false;
+                        }
                         $_SESSION['user_id'] = $user['user_id'];
                         $_SESSION['username'] = $user['username'];
                         $_SESSION['fullname'] = $user['fullname'];
@@ -317,6 +345,16 @@ class Auth {
         }
         
         return false;
+    }
+
+    public function issueRememberToken($user_id, $role = 'admin') {
+        $token = $this->createJWT($user_id, $role);
+        setcookie('attendance_token', $token, time() + (86400 * JWT_EXPIRE), "/");
+        return $token;
+    }
+
+    public function clearRememberToken() {
+        setcookie('attendance_token', '', time() - 3600, "/");
     }
     
     // Fungsi untuk log aktivitas

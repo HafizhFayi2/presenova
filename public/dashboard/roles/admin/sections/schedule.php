@@ -411,11 +411,17 @@ foreach ($teachers as $teacher) {
                             data-table="schedule">
                         <i class="fas fa-edit"></i>
                     </button>
-                    <a href="admin.php?table=schedule&action=delete&id=<?php echo $schedule['schedule_id'] ?? ''; ?>" 
-                       class="btn btn-outline-danger" 
-                       onclick="return confirm('Hapus jadwal ini?')">
-                        <i class="fas fa-trash"></i>
-                    </a>
+                    <?php if (isset($canDeleteMaster) && !$canDeleteMaster): ?>
+                        <button class="btn btn-outline-danger" disabled title="Operator tidak dapat menghapus data master">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    <?php else: ?>
+                        <a href="admin.php?table=schedule&action=delete&id=<?php echo $schedule['schedule_id'] ?? ''; ?>" 
+                           class="btn btn-outline-danger" 
+                           onclick="return confirm('Hapus jadwal ini?')">
+                            <i class="fas fa-trash"></i>
+                        </a>
+                    <?php endif; ?>
                 </div>
             </td>
         </tr>

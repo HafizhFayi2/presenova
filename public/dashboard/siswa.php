@@ -2,6 +2,7 @@
 require_once '../includes/config.php';
 require_once '../includes/auth.php';
 require_once '../includes/face_matcher.php';
+require_once '../includes/functions.php';
 require_once '../helpers/storage_path_helper.php';
 
 $auth = new Auth();
@@ -26,6 +27,13 @@ $page = isset($_GET['page']) ? $_GET['page'] : 'dashboard';
 
 require_once '../includes/database.php';
 $db = new Database();
+
+if (!isset($_SESSION['last_siswa_dashboard_log']) || (time() - $_SESSION['last_siswa_dashboard_log']) > 300) {
+    if (!empty($_SESSION['student_id'])) {
+        logActivity((int) $_SESSION['student_id'], 'student', 'dashboard_access', 'Student dashboard accessed');
+        $_SESSION['last_siswa_dashboard_log'] = time();
+    }
+}
 
 if (!function_exists('hasPoseCaptureDataset')) {
     function hasPoseCaptureDataset($studentNisn, $className, $studentName)

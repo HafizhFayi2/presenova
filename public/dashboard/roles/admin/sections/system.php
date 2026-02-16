@@ -1,13 +1,18 @@
 <?php
-// Get system users
-$sql = "SELECT u.*, ul.level_name FROM user u 
-        JOIN user_level ul ON u.level = ul.level_id 
-        ORDER BY u.level, u.username";
-$stmt = $db->query($sql);
-$users = $stmt->fetchAll();
+$forceLogout = false;
 
-// Get user levels
-$levels = $db->query("SELECT * FROM user_level")->fetchAll();
+// Ensure user active column exists
+$hasUserActiveColumn = false;
+try {
+    $colStmt = $db->query("SHOW COLUMNS FROM user LIKE 'is_active'");
+    $hasUserActiveColumn = $colStmt && $colStmt->fetch();
+    if (!$hasUserActiveColumn) {
+        $db->query("ALTER TABLE user ADD is_active ENUM('Y','N') NOT NULL DEFAULT 'Y'");
+        $hasUserActiveColumn = true;
+    }
+} catch (Exception $e) {
+    $hasUserActiveColumn = false;
+}
 
 // Handle user actions
 if ($_SERVER['REQUEST_METHOD'] == 'POST') {
@@ -21,9 +26,15 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         if ($user_id == 0) {
             // Add new user
             $password = hash('sha256', 'admin123' . PASSWORD_SALT);
-            $sql = "INSERT INTO user (username, email, password, fullname, level) 
-                    VALUES (?, ?, ?, ?, ?)";
-            $stmt = $db->query($sql, [$username, $email, $password, $fullname, $level]);
+            if ($hasUserActiveColumn) {
+                $sql = "INSERT INTO user (username, email, password, fullname, level, is_active) 
+                        VALUES (?, ?, ?, ?, ?, 'Y')";
+                $stmt = $db->query($sql, [$username, $email, $password, $fullname, $level]);
+            } else {
+                $sql = "INSERT INTO user (username, email, password, fullname, level) 
+                        VALUES (?, ?, ?, ?, ?)";
+                $stmt = $db->query($sql, [$username, $email, $password, $fullname, $level]);
+            }
             $success = "User berhasil ditambahkan! Password default: admin123";
         } else {
             // Update user
@@ -35,20 +46,51 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     }
 }
 
-// Handle password reset
-if (isset($_GET['reset_password'])) {
-    $user_id = $_GET['reset_password'];
-    $new_password = hash('sha256', 'admin123' . PASSWORD_SALT);
-    
+// Handle password reset (custom)
+if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['reset_user_id'])) {
+    if (isset($canDeleteMaster) && !$canDeleteMaster) {
+        $error = "Operator tidak memiliki izin mereset password user.";
+        header("Location: admin.php?table=system&error=" . urlencode($error));
+        exit();
+    }
+
+    $user_id = (int) ($_POST['reset_user_id'] ?? 0);
+    $new_plain = trim((string) ($_POST['new_password'] ?? ''));
+
+    if ($user_id <= 0) {
+        $error = "User tidak valid.";
+        header("Location: admin.php?table=system&error=" . urlencode($error));
+        exit();
+    }
+    if ($new_plain === '' || strlen($new_plain) < 6) {
+        $error = "Password minimal 6 karakter.";
+        header("Location: admin.php?table=system&error=" . urlencode($error));
+        exit();
+    }
+    if (strtolower($new_plain) === 'admin123') {
+        $error = "Password tidak boleh menggunakan default admin123.";
+        header("Location: admin.php?table=system&error=" . urlencode($error));
+        exit();
+    }
+
+    $new_password = hash('sha256', $new_plain . PASSWORD_SALT);
     $sql = "UPDATE user SET password = ? WHERE user_id = ?";
     $db->query($sql, [$new_password, $user_id]);
-    $success = "Password berhasil direset ke: admin123";
+    $success = "Password user berhasil diperbarui.";
+    header("Location: admin.php?table=system&success=" . urlencode($success));
+    exit();
 }
 
 // Handle delete
 if (isset($_GET['delete_user'])) {
     $user_id = $_GET['delete_user'];
     
+    if (isset($canDeleteMaster) && !$canDeleteMaster) {
+        $error = "Operator tidak memiliki izin menghapus data master.";
+        header("Location: admin.php?table=system&error=" . urlencode($error));
+        exit();
+    }
+
     if ($user_id != 1) { // Prevent deleting main admin
         $sql = "DELETE FROM user WHERE user_id = ?";
         $db->query($sql, [$user_id]);
@@ -60,6 +102,43 @@ if (isset($_GET['delete_user'])) {
         $error = "Tidak dapat menghapus admin utama!";
     }
 }
+
+// Toggle active status
+if (isset($_GET['toggle_user'])) {
+    $user_id = (int) $_GET['toggle_user'];
+    $currentStatus = ($_GET['status'] ?? 'Y') === 'Y' ? 'Y' : 'N';
+    $newStatus = $currentStatus === 'Y' ? 'N' : 'Y';
+
+    if (isset($canDeleteMaster) && !$canDeleteMaster) {
+        $error = "Operator tidak memiliki izin menonaktifkan user.";
+        header("Location: admin.php?table=system&error=" . urlencode($error));
+        exit();
+    }
+
+    if ($hasUserActiveColumn) {
+        $db->query("UPDATE user SET is_active = ? WHERE user_id = ?", [$newStatus, $user_id]);
+        $success = $newStatus === 'Y' ? 'User diaktifkan.' : 'User dinonaktifkan.';
+
+        if (!empty($_SESSION['user_id']) && (int) $_SESSION['user_id'] === $user_id && $newStatus === 'N') {
+            $forceLogout = true;
+        }
+    }
+}
+
+if ($forceLogout) {
+    header("Location: ../logout.php?disabled=1");
+    exit();
+}
+
+// Get user levels
+$levels = $db->query("SELECT * FROM user_level")->fetchAll();
+
+// Get system users (after actions)
+$sql = "SELECT u.*, ul.level_name FROM user u 
+        JOIN user_level ul ON u.level = ul.level_id 
+        ORDER BY u.level, u.username";
+$stmt = $db->query($sql);
+$users = $stmt->fetchAll();
 ?>
 
 <div class="row">
@@ -118,8 +197,13 @@ if (isset($_GET['delete_user'])) {
                 <div style="max-height: 200px; overflow-y: auto; font-size: 0.8rem;">
                     <?php
                     // Get recent logs
-                    $log_sql = "SELECT * FROM activity_logs 
-                                ORDER BY created_at DESC 
+                    $log_sql = "SELECT l.*,
+                                       COALESCE(u.fullname, t.teacher_name, s.student_name, l.user_type) AS actor_name
+                                FROM activity_logs l
+                                LEFT JOIN user u ON l.user_type = 'admin' AND l.user_id = u.user_id
+                                LEFT JOIN teacher t ON l.user_type = 'guru' AND l.user_id = t.id
+                                LEFT JOIN student s ON (l.user_type = 'student' OR l.user_type = 'siswa') AND l.user_id = s.id
+                                ORDER BY l.created_at DESC
                                 LIMIT 10";
                     $log_stmt = $db->query($log_sql);
                     $logs = $log_stmt->fetchAll();
@@ -128,7 +212,8 @@ if (isset($_GET['delete_user'])) {
                     ?>
                     <div class="border-bottom py-1">
                         <small>
-                            <strong><?php echo $log['user_type']; ?>:</strong> 
+                            <strong><?php echo htmlspecialchars($log['actor_name'] ?? $log['user_type']); ?></strong>
+                            <span class="text-muted">(<?php echo $log['user_type']; ?>)</span>
                             <?php echo $log['action']; ?><br>
                             <span class="text-muted"><?php echo date('H:i:s', strtotime($log['created_at'])); ?></span>
                         </small>
@@ -149,19 +234,21 @@ if (isset($_GET['delete_user'])) {
                 </div>
             </div>
             
-            <table class="table table-hover">
+            <table class="table table-hover table-admin-users">
                 <thead>
                     <tr>
                         <th>Username</th>
                         <th>Nama</th>
                         <th>Email</th>
                         <th>Level</th>
+                        <th>Status</th>
                         <th>Login Terakhir</th>
                         <th>Aksi</th>
                     </tr>
                 </thead>
                 <tbody>
                     <?php foreach($users as $user): ?>
+                    <?php $isActive = ($user['is_active'] ?? 'Y') === 'Y'; ?>
                     <tr>
                         <td><?php echo $user['username']; ?></td>
                         <td><?php echo $user['fullname']; ?></td>
@@ -169,6 +256,11 @@ if (isset($_GET['delete_user'])) {
                         <td>
                             <span class="badge <?php echo $user['level'] == 1 ? 'bg-danger' : 'bg-primary'; ?>">
                                 <?php echo $user['level_name']; ?>
+                            </span>
+                        </td>
+                        <td>
+                            <span class="badge <?php echo $isActive ? 'bg-success' : 'bg-secondary'; ?>">
+                                <?php echo $isActive ? 'Aktif' : 'Nonaktif'; ?>
                             </span>
                         </td>
                         <td>
@@ -187,15 +279,40 @@ if (isset($_GET['delete_user'])) {
                                     data-level="<?php echo $user['level']; ?>">
                                 <i class="bi bi-pencil"></i>
                             </button>
-                            <a href="?table=system&reset_password=<?php echo $user['user_id']; ?>" 
-                               class="btn btn-sm btn-info" onclick="return confirm('Reset password user ini?')">
-                                <i class="bi bi-key"></i>
-                            </a>
+                            <?php if (isset($canDeleteMaster) && !$canDeleteMaster): ?>
+                                <button class="btn btn-sm btn-info" disabled title="Operator tidak dapat mereset password user">
+                                    <i class="bi bi-key"></i>
+                                </button>
+                            <?php else: ?>
+                                <button type="button" class="btn btn-sm btn-info reset-user-btn"
+                                        data-id="<?php echo $user['user_id']; ?>"
+                                        data-name="<?php echo htmlspecialchars($user['fullname']); ?>">
+                                    <i class="bi bi-key"></i>
+                                </button>
+                            <?php endif; ?>
+                            <?php if (isset($canDeleteMaster) && !$canDeleteMaster): ?>
+                                <button class="btn btn-sm <?php echo $isActive ? 'btn-success' : 'btn-secondary'; ?>" disabled title="Operator tidak memiliki izin menonaktifkan user">
+                                    <i class="bi bi-power"></i>
+                                </button>
+                            <?php else: ?>
+                                <a href="?table=system&toggle_user=<?php echo $user['user_id']; ?>&status=<?php echo $isActive ? 'Y' : 'N'; ?>" 
+                                   class="btn btn-sm <?php echo $isActive ? 'btn-success' : 'btn-secondary'; ?>" 
+                                   onclick="return confirm('<?php echo $isActive ? 'Nonaktifkan' : 'Aktifkan'; ?> user ini?')"
+                                   title="<?php echo $isActive ? 'Nonaktifkan' : 'Aktifkan'; ?>">
+                                    <i class="bi bi-power"></i>
+                                </a>
+                            <?php endif; ?>
                             <?php if($user['user_id'] != 1): ?>
-                            <a href="?table=system&delete_user=<?php echo $user['user_id']; ?>" 
-                               class="btn btn-sm btn-danger" onclick="return confirm('Hapus user ini?')">
-                                <i class="bi bi-trash"></i>
-                            </a>
+                                <?php if (isset($canDeleteMaster) && !$canDeleteMaster): ?>
+                                    <button class="btn btn-sm btn-danger" disabled title="Operator tidak dapat menghapus data master">
+                                        <i class="bi bi-trash"></i>
+                                    </button>
+                                <?php else: ?>
+                                    <a href="?table=system&delete_user=<?php echo $user['user_id']; ?>" 
+                                       class="btn btn-sm btn-danger" onclick="return confirm('Hapus user ini?')">
+                                        <i class="bi bi-trash"></i>
+                                    </a>
+                                <?php endif; ?>
                             <?php else: ?>
                             <button class="btn btn-sm btn-danger" disabled title="Tidak dapat dihapus">
                                 <i class="bi bi-trash"></i>
@@ -300,6 +417,35 @@ if (isset($_GET['delete_user'])) {
     </div>
 </div>
 
+<!-- Reset Password Modal -->
+<div class="modal fade" id="resetUserPasswordModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Reset Password User</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="POST" action="?table=system" autocomplete="off">
+                <div class="modal-body">
+                    <input type="hidden" name="reset_user_id" id="resetUserId">
+                    <div class="mb-2 text-muted small">
+                        User: <strong id="resetUserName">-</strong>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Password Baru</label>
+                        <input type="password" class="form-control" name="new_password" id="resetUserPassword" minlength="6" required>
+                        <div class="form-text">Minimal 6 karakter.</div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Batal</button>
+                    <button type="submit" class="btn btn-primary">Simpan Password</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
 <script>
 $(document).ready(function() {
     // Search functionality
@@ -325,6 +471,16 @@ $(document).ready(function() {
         $('#editLevel').val(level);
         
         $('#editUserModal').modal('show');
+    });
+
+    // Reset password modal
+    $(document).on('click', '.reset-user-btn', function() {
+        const userId = $(this).data('id');
+        const userName = $(this).data('name');
+        $('#resetUserId').val(userId);
+        $('#resetUserName').text(userName || '-');
+        $('#resetUserPassword').val('');
+        $('#resetUserPasswordModal').modal('show');
     });
 
     function formatBytes(bytes) {

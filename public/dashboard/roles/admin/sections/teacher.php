@@ -65,10 +65,16 @@ $teachers = $stmt->fetchAll();
                             <button class="btn btn-outline-info" onclick="resetPassword(<?php echo $teacher['id']; ?>, 'teacher')">
                                 <i class="fas fa-key"></i>
                             </button>
-                            <a href="?table=teacher&action=delete&id=<?php echo $teacher['id']; ?>" 
-                               class="btn btn-outline-danger" onclick="return confirm('Hapus guru ini?')">
-                                <i class="fas fa-trash"></i>
-                            </a>
+                            <?php if (isset($canDeleteMaster) && !$canDeleteMaster): ?>
+                                <button class="btn btn-outline-danger" disabled title="Operator tidak dapat menghapus data master">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            <?php else: ?>
+                                <a href="?table=teacher&action=delete&id=<?php echo $teacher['id']; ?>" 
+                                   class="btn btn-outline-danger" onclick="return confirm('Hapus guru ini?')">
+                                    <i class="fas fa-trash"></i>
+                                </a>
+                            <?php endif; ?>
                         </div>
                     </td>
                 </tr>

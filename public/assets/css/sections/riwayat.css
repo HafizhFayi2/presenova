@@ -726,6 +726,28 @@
     color: inherit;
 }
 
+.riwayat-modal .table.table-sm {
+    background: transparent;
+    border-color: rgba(148, 163, 184, 0.3);
+}
+
+.riwayat-modal .table.table-sm th,
+.riwayat-modal .table.table-sm td {
+    background: rgba(30, 41, 59, 0.65);
+    border-color: rgba(148, 163, 184, 0.28);
+}
+
+[data-theme="light"] .riwayat-modal .table.table-sm {
+    border-color: #e2e8f0;
+}
+
+[data-theme="light"] .riwayat-modal .table.table-sm th,
+[data-theme="light"] .riwayat-modal .table.table-sm td {
+    background: #f8fafc;
+    border-color: #e2e8f0;
+    color: #1f2937;
+}
+
 #photoModal .modal-body {
     display: flex;
     flex-direction: column;

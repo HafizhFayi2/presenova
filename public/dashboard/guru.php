@@ -13,6 +13,13 @@ if (!$auth->isLoggedIn() || !isset($_SESSION['role']) || $_SESSION['role'] != 'g
 
 $db = new Database();
 
+if (!isset($_SESSION['last_guru_dashboard_log']) || (time() - $_SESSION['last_guru_dashboard_log']) > 300) {
+    if (!empty($_SESSION['teacher_id'])) {
+        logActivity((int) $_SESSION['teacher_id'], 'guru', 'dashboard_access', 'Guru dashboard accessed');
+        $_SESSION['last_guru_dashboard_log'] = time();
+    }
+}
+
 // Gunakan $_SESSION['teacher_id'] yang sudah diset di login
 $teacher_id = $_SESSION['teacher_id'];
 

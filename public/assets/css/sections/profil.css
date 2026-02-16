@@ -26,3 +26,27 @@
 [data-theme="dark"] .profile-stat-tidak-hadir {
     color: #f87171;
 }
+
+[data-theme="light"] .profile-stat-sakit {
+    color: #f97316;
+}
+
+[data-theme="light"] .profile-stat-izin {
+    color: #0ea5e9;
+}
+
+[data-theme="light"] .profile-stat-alpa {
+    color: #dc2626;
+}
+
+[data-theme="dark"] .profile-stat-sakit {
+    color: #fdba74;
+}
+
+[data-theme="dark"] .profile-stat-izin {
+    color: #7dd3fc;
+}
+
+[data-theme="dark"] .profile-stat-alpa {
+    color: #f87171;
+}

@@ -212,14 +212,22 @@ if (!isset($profileImageUrl)) {
                 <div class="progress-bar bg-success" style="width: <?php echo $attendance_rate; ?>%"></div>
             </div>
             
-            <div class="row text-center">
-                <div class="col-6">
+            <div class="row text-center g-2">
+                <div class="col-6 col-md-3">
                     <div class="fw-bold profile-stat-value profile-stat-hadir"><?php echo $countHadir; ?></div>
                     <div class="profile-stat-label profile-stat-hadir">Hadir</div>
                 </div>
-                <div class="col-6">
-                    <div class="fw-bold profile-stat-value profile-stat-tidak-hadir"><?php echo $countTidakHadir; ?></div>
-                    <div class="profile-stat-label profile-stat-tidak-hadir">Tidak Hadir</div>
+                <div class="col-6 col-md-3">
+                    <div class="fw-bold profile-stat-value profile-stat-sakit"><?php echo $countSakit; ?></div>
+                    <div class="profile-stat-label profile-stat-sakit">Sakit</div>
+                </div>
+                <div class="col-6 col-md-3">
+                    <div class="fw-bold profile-stat-value profile-stat-izin"><?php echo $countIzin; ?></div>
+                    <div class="profile-stat-label profile-stat-izin">Izin</div>
+                </div>
+                <div class="col-6 col-md-3">
+                    <div class="fw-bold profile-stat-value profile-stat-alpa"><?php echo $countAlpa; ?></div>
+                    <div class="profile-stat-label profile-stat-alpa">Alpa</div>
                 </div>
             </div>
         </div>

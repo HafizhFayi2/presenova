@@ -649,6 +649,38 @@ body {
   gap: 12px;
 }
 
+.topbar-userinfo {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  line-height: 1.1;
+  color: var(--text-primary);
+  max-width: 220px;
+}
+
+.topbar-user-name {
+  font-size: 0.9rem;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.topbar-user-role {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+[data-theme="dark"] .topbar-user-name {
+  color: #f8fafc;
+}
+
+[data-theme="dark"] .topbar-user-role {
+  color: #cbd5f5;
+}
+
 .toggle {
   position: relative;
   width: 60px;
@@ -3036,6 +3068,33 @@ body {
 
         [data-theme="dark"] .table-admin-users tbody tr:hover td {
             background-color: rgba(37, 99, 235, 0.15) !important;
+        }
+
+        /* Light mode fixes for admin user table */
+        [data-theme="light"] .table-admin-users {
+            background-color: var(--card-color) !important;
+            color: var(--text-color) !important;
+            border-color: var(--border) !important;
+        }
+
+        [data-theme="light"] .table-admin-users thead th {
+            background-color: rgba(37, 99, 235, 0.08) !important;
+            color: var(--primary-blue) !important;
+            border-bottom: 2px solid var(--border) !important;
+        }
+
+        [data-theme="light"] .table-admin-users tbody td {
+            background-color: var(--card-color) !important;
+            color: var(--text-color) !important;
+            border-bottom: 1px solid var(--border) !important;
+        }
+
+        [data-theme="light"] .table-admin-users tbody tr:nth-child(even) td {
+            background-color: #f8fafc !important;
+        }
+
+        [data-theme="light"] .table-admin-users tbody tr:hover td {
+            background-color: rgba(37, 99, 235, 0.06) !important;
         }
 
         /* Fix umum untuk semua tabel dalam section content */

@@ -542,16 +542,17 @@ CREATE TABLE `user` (
   `session` varchar(100) DEFAULT '-',
   `ip` varchar(50) DEFAULT '0',
   `browser` varchar(100) DEFAULT 'Unknown',
-  `level` int(11) NOT NULL
+  `level` int(11) NOT NULL,
+  `is_active` enum('Y','N') DEFAULT 'Y'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 --
 -- Dumping data for table `user`
 --
 
-INSERT INTO `user` (`user_id`, `username`, `email`, `password`, `fullname`, `registered`, `created_login`, `last_login`, `session`, `ip`, `browser`, `level`) VALUES
-(1, 'adm', 'admin@smkn1cikarang.sch.id', '0e8910802f4d94f33b73469695c7ac7783941e8134c24005e706d6760a228276', 'Administrator', '2026-01-29 23:34:21', '2026-01-29 23:34:21', '2026-02-09 10:34:42', '-', '127.0.0.1', 'Chrome', 1),
-(2, 'operator', 'operator@smkn1cikarang.sch.id', '0c5acac0738a76bbf05236de1854533ef1413f54fed126ce2ed788f237330370', 'Operator', '2026-01-29 23:34:21', '2026-01-29 23:34:21', '2026-01-29 23:34:21', '-', '127.0.0.1', 'Chrome', 2);
+INSERT INTO `user` (`user_id`, `username`, `email`, `password`, `fullname`, `registered`, `created_login`, `last_login`, `session`, `ip`, `browser`, `level`, `is_active`) VALUES
+(1, 'adm', 'admin@smkn1cikarang.sch.id', '0e8910802f4d94f33b73469695c7ac7783941e8134c24005e706d6760a228276', 'Administrator', '2026-01-29 23:34:21', '2026-01-29 23:34:21', '2026-02-09 10:34:42', '-', '127.0.0.1', 'Chrome', 1, 'Y'),
+(2, 'operator', 'operator@smkn1cikarang.sch.id', '0c5acac0738a76bbf05236de1854533ef1413f54fed126ce2ed788f237330370', 'Operator', '2026-01-29 23:34:21', '2026-01-29 23:34:21', '2026-01-29 23:34:21', '-', '127.0.0.1', 'Chrome', 2, 'Y');
 
 -- --------------------------------------------------------
 
