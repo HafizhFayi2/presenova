@@ -15,7 +15,7 @@ if (!$student_schedule_id) {
 
 // Cek apakah foto referensi sudah ada
 $sql = "
-    SELECT s.student_nisn, s.student_name, s.id
+    SELECT s.student_nisn, s.student_name, s.id, s.photo_reference
     FROM student_schedule ss
     JOIN student s ON ss.student_id = s.id
     WHERE ss.student_schedule_id = ?
@@ -25,9 +25,12 @@ $stmt = $db->query($sql, [$student_schedule_id, $_SESSION['student_id']]);
 $student = $stmt ? $stmt->fetch(PDO::FETCH_ASSOC) : null;
 
 $faceMatcher = new FaceMatcher();
-$referencePath = $faceMatcher->getReferencePath($student['student_nisn']);
+$referencePath = $faceMatcher->getReferencePath(
+    $student['student_nisn'] ?? '',
+    $student['photo_reference'] ?? ''
+);
 $hasReference = $referencePath !== null;
-$referenceUrl = $referencePath ?: '';
+$referenceUrl = $referencePath ? $faceMatcher->toPublicUrl($referencePath, '..') : '';
 ?>
 
 <div class="attendance-form-container">

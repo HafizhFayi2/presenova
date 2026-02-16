@@ -28,12 +28,14 @@ $student_nisn = $_SESSION['student_nisn'] ?? null;
 $student_name = $_SESSION['student_name'] ?? null;
 
 $db = new Database();
+$photo_reference = $_SESSION['photo_reference'] ?? null;
 if (!$student_nisn || !$student_name) {
-    $stmt = $db->query('SELECT student_nisn, student_name FROM student WHERE id = ?', [$student_id]);
+    $stmt = $db->query('SELECT student_nisn, student_name, photo_reference FROM student WHERE id = ?', [$student_id]);
     $student = $stmt ? $stmt->fetch(PDO::FETCH_ASSOC) : null;
     if ($student) {
         $student_nisn = $student_nisn ?: $student['student_nisn'];
         $student_name = $student_name ?: $student['student_name'];
+        $photo_reference = $photo_reference ?: ($student['photo_reference'] ?? null);
     }
 }
 
@@ -43,7 +45,7 @@ if (!$student_nisn) {
 }
 
 $faceMatcher = new FaceMatcher();
-$referencePath = $faceMatcher->getReferencePath($student_nisn);
+$referencePath = $faceMatcher->getReferencePath($student_nisn, $photo_reference);
 if (!$referencePath) {
     echo json_encode(['success' => false, 'message' => 'Foto referensi tidak ditemukan']);
     exit;

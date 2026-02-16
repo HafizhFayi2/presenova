@@ -3,9 +3,15 @@ require_once '../includes/face_matcher.php';
 
 $faceMatcher = new FaceMatcher();
 $nisn = $_SESSION['student_nisn'] ?? '';
+$photoReference = '';
+if (isset($student) && is_array($student) && !empty($student['photo_reference'])) {
+    $photoReference = (string) $student['photo_reference'];
+} elseif (!empty($_SESSION['photo_reference'])) {
+    $photoReference = (string) $_SESSION['photo_reference'];
+}
 $studentKey = $nisn ?: ($_SESSION['student_id'] ?? '');
-$referencePath = $nisn ? $faceMatcher->getReferencePath($nisn) : null;
-$referenceUrl = $referencePath ?: '';
+$referencePath = ($nisn || $photoReference) ? $faceMatcher->getReferencePath($nisn, $photoReference) : null;
+$referenceUrl = $referencePath ? $faceMatcher->toPublicUrl($referencePath, '..') : '';
 $referenceFile = $referencePath ? basename($referencePath) : '';
 
 $scheduleInfo = null;

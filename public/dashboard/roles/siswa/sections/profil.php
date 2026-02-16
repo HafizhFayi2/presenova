@@ -36,9 +36,12 @@ if (!isset($profileImageUrl)) {
     }
     if (!$profileImageUrl && !empty($student['student_nisn']) && class_exists('FaceMatcher')) {
         $faceMatcher = new FaceMatcher();
-        $referencePath = $faceMatcher->getReferencePath($student['student_nisn']);
+        $referencePath = $faceMatcher->getReferencePath(
+            $student['student_nisn'],
+            $student['photo_reference'] ?? ''
+        );
         if ($referencePath) {
-            $profileImageUrl = $referencePath;
+            $profileImageUrl = $faceMatcher->toPublicUrl($referencePath, '..');
         }
     }
     if (!$profileImageUrl) {

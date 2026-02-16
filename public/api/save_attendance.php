@@ -90,7 +90,7 @@ try {
     // 1. Validasi jadwal dan waktu
     $sql_schedule = "
         SELECT ss.*, ss.time_in, ss.time_out, sh.shift_name, ts.subject,
-               s.student_nisn, s.student_name, s.class_id,
+               s.student_nisn, s.student_name, s.class_id, s.photo_reference,
                t.teacher_name, t.teacher_code, d.day_name
         FROM student_schedule ss
         JOIN teacher_schedule ts ON ss.teacher_schedule_id = ts.schedule_id
@@ -187,7 +187,10 @@ try {
     }
     
     // Cari foto referensi
-    $referencePath = $faceMatcher->getReferencePath($schedule['student_nisn']);
+    $referencePath = $faceMatcher->getReferencePath(
+        $schedule['student_nisn'] ?? '',
+        $schedule['photo_reference'] ?? ''
+    );
     if (!$referencePath) {
         // Hapus selfie temporary
         if (file_exists($selfieResult['path'])) {
@@ -204,7 +207,10 @@ try {
         if (file_exists($selfieResult['path'])) {
             @unlink($selfieResult['path']);
         }
-        respondJson(['success' => false, 'message' => 'Gagal proses face matching'], 500);
+        respondJson([
+            'success' => false,
+            'message' => $matchResult['error'] ?? 'Gagal proses face matching'
+        ], 500);
     }
 
     $serverPassed = !empty($matchResult['passed']);

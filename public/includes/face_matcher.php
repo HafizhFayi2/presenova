@@ -2,14 +2,33 @@
 // face_matcher.php
 class FaceMatcher {
     private $threshold = 70; // Minimum similarity percentage
-    private $tempDir = '../uploads/temp/';
-    private $facesDir = '../uploads/faces/';
-    private $attendanceDir = '../uploads/attendance/';
+    private $tempDir = '';
+    private $facesDir = '';
+    private $attendanceDir = '';
     private $pythonBin = 'python';
     private $pythonScript = null;
     private $pythonEnabled = false;
+    private $allowLegacy = false;
+    private $deepfaceModel = 'SFace';
+    private $deepfaceDetector = 'opencv';
+    private $deepfaceMetric = 'cosine';
+    private $deepfaceEnforceDetection = true;
+    private $deepfaceMaxReferences = 1;
+    private $deepfaceUseBackup = true;
+    private $deepfaceBackupModel = 'Facenet512';
+    private $deepfaceBackupDetector = 'retinaface';
+    private $deepfaceBackupMaxReferences = 3;
     
     public function __construct() {
+        $uploadsBase = realpath(__DIR__ . '/../uploads');
+        if ($uploadsBase === false) {
+            $uploadsBase = dirname(__DIR__) . DIRECTORY_SEPARATOR . 'uploads';
+        }
+        $uploadsBase = rtrim($uploadsBase, '/\\') . DIRECTORY_SEPARATOR;
+        $this->tempDir = $uploadsBase . 'temp' . DIRECTORY_SEPARATOR;
+        $this->facesDir = $uploadsBase . 'faces' . DIRECTORY_SEPARATOR;
+        $this->attendanceDir = $uploadsBase . 'attendance' . DIRECTORY_SEPARATOR;
+
         // Create directories if not exist
         $this->createDirectories();
 
@@ -18,6 +37,36 @@ class FaceMatcher {
         }
         if (defined('PYTHON_BIN') && PYTHON_BIN) {
             $this->pythonBin = PYTHON_BIN;
+        }
+        if (defined('FACE_MATCH_ALLOW_LEGACY')) {
+            $this->allowLegacy = filter_var((string) FACE_MATCH_ALLOW_LEGACY, FILTER_VALIDATE_BOOLEAN);
+        }
+        if (defined('FACE_MATCH_MODEL') && FACE_MATCH_MODEL) {
+            $this->deepfaceModel = (string) FACE_MATCH_MODEL;
+        }
+        if (defined('FACE_MATCH_DETECTOR') && FACE_MATCH_DETECTOR) {
+            $this->deepfaceDetector = (string) FACE_MATCH_DETECTOR;
+        }
+        if (defined('FACE_MATCH_DISTANCE_METRIC') && FACE_MATCH_DISTANCE_METRIC) {
+            $this->deepfaceMetric = (string) FACE_MATCH_DISTANCE_METRIC;
+        }
+        if (defined('FACE_MATCH_ENFORCE_DETECTION')) {
+            $this->deepfaceEnforceDetection = filter_var((string) FACE_MATCH_ENFORCE_DETECTION, FILTER_VALIDATE_BOOLEAN);
+        }
+        if (defined('FACE_MATCH_MAX_REFERENCES')) {
+            $this->deepfaceMaxReferences = max(1, (int) FACE_MATCH_MAX_REFERENCES);
+        }
+        if (defined('FACE_MATCH_USE_BACKUP')) {
+            $this->deepfaceUseBackup = filter_var((string) FACE_MATCH_USE_BACKUP, FILTER_VALIDATE_BOOLEAN);
+        }
+        if (defined('FACE_MATCH_BACKUP_MODEL') && FACE_MATCH_BACKUP_MODEL) {
+            $this->deepfaceBackupModel = (string) FACE_MATCH_BACKUP_MODEL;
+        }
+        if (defined('FACE_MATCH_BACKUP_DETECTOR') && FACE_MATCH_BACKUP_DETECTOR) {
+            $this->deepfaceBackupDetector = (string) FACE_MATCH_BACKUP_DETECTOR;
+        }
+        if (defined('FACE_MATCH_BACKUP_MAX_REFERENCES')) {
+            $this->deepfaceBackupMaxReferences = max(1, (int) FACE_MATCH_BACKUP_MAX_REFERENCES);
         }
 
         $scriptPath = realpath(__DIR__ . '/../face/faces_conf/face_match.py');
@@ -58,33 +107,132 @@ class FaceMatcher {
     }
     
     /**
-     * Dapatkan path foto referensi berdasarkan NISN
+     * Dapatkan path foto referensi aktif (terbaru) berdasarkan NISN / filename database.
      */
-    public function getReferencePath($nisn) {
-        // Cari file berdasarkan pattern NISN
-        $patterns = [
-            $this->facesDir . $nisn . ".jpg",
-            $this->facesDir . $nisn . ".jpeg",
-            $this->facesDir . $nisn . ".png"
-        ];
-        
-        foreach ($patterns as $pattern) {
-            if (file_exists($pattern)) {
-                return $pattern;
+    public function getReferencePath($nisn, $photoReference = null) {
+        $candidates = $this->getReferenceCandidates($nisn, $photoReference);
+        return !empty($candidates) ? $candidates[0] : null;
+    }
+
+    /**
+     * Dapatkan daftar kandidat foto referensi siswa.
+     */
+    public function getReferenceCandidates($nisn, $photoReference = null) {
+        $nisn = trim((string) $nisn);
+        $files = [];
+
+        $photoReference = trim((string) $photoReference);
+        if ($photoReference !== '') {
+            $directCandidates = [
+                $photoReference,
+                $this->facesDir . ltrim($photoReference, '/\\')
+            ];
+            foreach ($directCandidates as $candidate) {
+                if (is_file($candidate)) {
+                    $files[] = $candidate;
+                }
             }
         }
-        
-        // Jika tidak ditemukan, cari berdasarkan file yang mengandung NISN
-        $files = glob($this->facesDir . "*{$nisn}*");
-        if (!empty($files)) {
-            return $files[0];
+
+        if ($nisn !== '') {
+            $exactPatterns = [
+                $this->facesDir . $nisn . '.jpg',
+                $this->facesDir . $nisn . '.jpeg',
+                $this->facesDir . $nisn . '.png',
+                $this->facesDir . $nisn . '.webp',
+                $this->facesDir . $nisn . DIRECTORY_SEPARATOR . '*.jpg',
+                $this->facesDir . $nisn . DIRECTORY_SEPARATOR . '*.jpeg',
+                $this->facesDir . $nisn . DIRECTORY_SEPARATOR . '*.png',
+                $this->facesDir . $nisn . DIRECTORY_SEPARATOR . '*.webp'
+            ];
+            foreach ($exactPatterns as $pattern) {
+                $matches = glob($pattern) ?: [];
+                foreach ($matches as $match) {
+                    $files[] = $match;
+                }
+            }
+
+            $broadPatterns = [
+                $this->facesDir . $nisn . '-*',
+                $this->facesDir . $nisn . '_*'
+            ];
+            foreach ($broadPatterns as $pattern) {
+                $matches = glob($pattern) ?: [];
+                foreach ($matches as $match) {
+                    $files[] = $match;
+                }
+            }
         }
-        
-        return null;
+
+        $files = array_values(array_unique(array_filter($files, function($path) {
+            if (!is_file($path)) {
+                return false;
+            }
+            $ext = strtolower(pathinfo($path, PATHINFO_EXTENSION));
+            return in_array($ext, ['jpg', 'jpeg', 'png', 'webp', 'bmp'], true);
+        })));
+
+        usort($files, function($a, $b) {
+            $mtimeA = @filemtime($a) ?: 0;
+            $mtimeB = @filemtime($b) ?: 0;
+            if ($mtimeA === $mtimeB) {
+                return strcmp($a, $b);
+            }
+            return ($mtimeB <=> $mtimeA);
+        });
+
+        return $files;
+    }
+
+    /**
+     * Konversi absolute file path di folder public menjadi URL relatif untuk browser.
+     * Contoh:
+     *   C:\xampp\htdocs\presenova\public\uploads\faces\a.jpg -> ../uploads/faces/a.jpg
+     */
+    public function toPublicUrl($filePath, $prefix = '..') {
+        $filePath = trim((string) $filePath);
+        if ($filePath === '') {
+            return '';
+        }
+
+        // Sudah berupa URL/data URI atau path web relatif.
+        if (preg_match('#^(https?:)?//#i', $filePath) || stripos($filePath, 'data:') === 0) {
+            return $filePath;
+        }
+
+        $normalized = str_replace('\\', '/', $filePath);
+        $isAbsoluteWindows = (bool) preg_match('#^[A-Za-z]:/#', $normalized);
+        $isAbsoluteUnix = strpos($normalized, '/') === 0;
+
+        if (!$isAbsoluteWindows && !$isAbsoluteUnix) {
+            return $normalized;
+        }
+
+        $publicRoot = realpath(__DIR__ . '/..');
+        if ($publicRoot === false) {
+            return $normalized;
+        }
+        $publicRoot = rtrim(str_replace('\\', '/', $publicRoot), '/');
+
+        if (stripos($normalized, $publicRoot . '/') !== 0) {
+            return $normalized;
+        }
+
+        $relative = ltrim(substr($normalized, strlen($publicRoot)), '/');
+        if ($relative === '') {
+            return $normalized;
+        }
+
+        $prefix = rtrim((string) $prefix, '/');
+        if ($prefix === '' || $prefix === '.') {
+            return $relative;
+        }
+
+        return $prefix . '/' . $relative;
     }
     
     /**
-     * Face matching (Python LBPH + fallback ke histogram)
+     * Face matching utama berbasis DeepFace via script Python.
      */
     public function matchFaces($referencePath, $selfiePath, $options = []) {
         if (!file_exists($referencePath) || !file_exists($selfiePath)) {
@@ -93,7 +241,9 @@ class FaceMatcher {
 
         $label = isset($options['label']) ? trim((string) $options['label']) : '';
         $annotate = !empty($options['annotate']);
-        $allowLegacy = !empty($options['allow_legacy']);
+        $allowLegacy = array_key_exists('allow_legacy', $options)
+            ? !empty($options['allow_legacy'])
+            : $this->allowLegacy;
 
         if ($this->pythonEnabled) {
             $pythonResult = $this->matchFacesWithPython($referencePath, $selfiePath, $label, [
@@ -139,10 +289,20 @@ class FaceMatcher {
         $selfiePath = realpath($selfiePath) ?: $selfiePath;
 
         $cmd = escapeshellarg($this->pythonBin)
+            . ' -u'
             . ' ' . escapeshellarg($this->pythonScript)
             . ' --reference ' . escapeshellarg($referencePath)
             . ' --candidate ' . escapeshellarg($selfiePath)
-            . ' --threshold ' . escapeshellarg((string) $threshold);
+            . ' --threshold ' . escapeshellarg((string) $threshold)
+            . ' --model ' . escapeshellarg($this->deepfaceModel)
+            . ' --detector ' . escapeshellarg($this->deepfaceDetector)
+            . ' --metric ' . escapeshellarg($this->deepfaceMetric)
+            . ' --enforce-detection ' . escapeshellarg($this->deepfaceEnforceDetection ? 'true' : 'false')
+            . ' --max-references ' . escapeshellarg((string) $this->deepfaceMaxReferences)
+            . ' --use-backup ' . escapeshellarg($this->deepfaceUseBackup ? 'true' : 'false')
+            . ' --backup-model ' . escapeshellarg($this->deepfaceBackupModel)
+            . ' --backup-detector ' . escapeshellarg($this->deepfaceBackupDetector)
+            . ' --backup-max-references ' . escapeshellarg((string) $this->deepfaceBackupMaxReferences);
 
         if ($label !== '') {
             $cmd .= ' --label ' . escapeshellarg($label);
@@ -157,12 +317,7 @@ class FaceMatcher {
         exec($cmd, $output, $exitCode);
         $raw = trim(implode("\n", $output));
 
-        $data = json_decode($raw, true);
-        if (!is_array($data) && $raw !== '') {
-            $lines = array_values(array_filter(explode("\n", $raw)));
-            $lastLine = $lines ? $lines[count($lines) - 1] : '';
-            $data = json_decode($lastLine, true);
-        }
+        $data = $this->parsePythonJson($raw);
         if (!is_array($data)) {
             return [
                 'success' => false,
@@ -174,13 +329,19 @@ class FaceMatcher {
         if (empty($data['success'])) {
             return [
                 'success' => false,
-                'error' => $data['error'] ?? 'Python matcher gagal'
+                'error' => $data['error'] ?? 'DeepFace matcher gagal'
             ];
         }
 
         $details = isset($data['details']) && is_array($data['details']) ? $data['details'] : [];
-        $details['source'] = 'python-lbph';
+        $details['source'] = $details['source'] ?? 'python-deepface';
         $details['threshold'] = $threshold;
+        $details['model'] = $this->deepfaceModel;
+        $details['detector'] = $this->deepfaceDetector;
+        $details['metric'] = $this->deepfaceMetric;
+        $details['backup_enabled'] = $this->deepfaceUseBackup;
+        $details['backup_model'] = $this->deepfaceBackupModel;
+        $details['backup_detector'] = $this->deepfaceBackupDetector;
 
         $result = [
             'success' => true,
@@ -194,6 +355,41 @@ class FaceMatcher {
         }
 
         return $result;
+    }
+
+    private function parsePythonJson($raw) {
+        if (!is_string($raw) || trim($raw) === '') {
+            return null;
+        }
+
+        $decoded = json_decode($raw, true);
+        if (is_array($decoded)) {
+            return $decoded;
+        }
+
+        $lines = preg_split('/\R/', $raw) ?: [];
+        for ($i = count($lines) - 1; $i >= 0; $i--) {
+            $line = trim($lines[$i]);
+            if ($line === '') {
+                continue;
+            }
+            $decoded = json_decode($line, true);
+            if (is_array($decoded)) {
+                return $decoded;
+            }
+        }
+
+        $firstBrace = strpos($raw, '{');
+        $lastBrace = strrpos($raw, '}');
+        if ($firstBrace !== false && $lastBrace !== false && $lastBrace > $firstBrace) {
+            $candidate = substr($raw, $firstBrace, $lastBrace - $firstBrace + 1);
+            $decoded = json_decode($candidate, true);
+            if (is_array($decoded)) {
+                return $decoded;
+            }
+        }
+
+        return null;
     }
 
     private function matchFacesLegacy($referencePath, $selfiePath) {

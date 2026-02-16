@@ -37,6 +37,80 @@ File `public/includes/config.php` sudah diubah agar membaca `.env` Laravel terle
 3. Import database `public/presenova.sql` ke MySQL (jika belum ada).
 4. Akses aplikasi di `http://localhost/presenova`.
 
+## Setup DeepFace (Face Recognition)
+
+Sistem face recognition server-side sekarang memakai **DeepFace** pada script:
+
+- `public/face/faces_conf/face_match.py`
+
+Rekomendasi untuk Linux VPS production: jalankan script setup otomatis.
+
+```bash
+# dari root project
+bash scripts/setup_deepface.sh --write-env
+
+# jika butuh install dependency OS (Debian/Ubuntu)
+bash scripts/setup_deepface.sh --install-system-deps --write-env
+```
+
+Script ini bisa dijalankan dari folder mana pun:
+
+```bash
+bash /var/www/presenova/scripts/setup_deepface.sh --write-env
+```
+
+Manual setup (jika tidak pakai script): gunakan virtual environment khusus project.
+
+```bash
+python3 -m venv public/face/.venv
+public/face/.venv/bin/python -m pip install -r public/face/faces_conf/requirements.txt
+```
+
+Jika tidak memakai venv, instalasi library Python mengikuti panduan resmi DeepFace:
+
+```bash
+pip install deepface
+# jika muncul error keras3 pada retinaface:
+pip install tf-keras
+```
+
+Atau lewat source code DeepFace:
+
+```bash
+git clone https://github.com/serengil/deepface.git
+cd deepface
+pip install -e .
+```
+
+Alternatif praktis untuk project ini:
+
+```bash
+pip install -r public/face/faces_conf/requirements.txt
+```
+
+Konfigurasi DeepFace dapat diatur dari `.env`:
+
+- `LEGACY_PYTHON_BIN=/var/www/presenova/public/face/.venv/bin/python` (Linux VPS)
+- `LEGACY_PYTHON_BIN=public/face/.venv/Scripts/python.exe` (Windows/XAMPP)
+- `LEGACY_FACE_MATCH_THRESHOLD=89`
+- `LEGACY_FACE_MATCH_MODEL=Facenet512`
+- `LEGACY_FACE_MATCH_DETECTOR=retinaface`
+- `LEGACY_FACE_MATCH_DISTANCE_METRIC=cosine`
+- `LEGACY_FACE_MATCH_ENFORCE_DETECTION=true`
+- `LEGACY_FACE_MATCH_MAX_REFERENCES=1`
+- `LEGACY_FACE_MATCH_USE_BACKUP=true`
+- `LEGACY_FACE_MATCH_BACKUP_MODEL=Facenet512`
+- `LEGACY_FACE_MATCH_BACKUP_DETECTOR=retinaface`
+- `LEGACY_FACE_MATCH_BACKUP_MAX_REFERENCES=3`
+- `LEGACY_FACE_MATCH_ALLOW_LEGACY=false`
+
+Catatan:
+
+- Foto referensi siswa tetap disimpan di `public/uploads/faces/`.
+- Matcher DeepFace otomatis membaca referensi dari `photo_reference` siswa (jika ada), fallback ke pola NISN, lalu mengevaluasi beberapa foto referensi saat verifikasi absensi.
+- `public/includes/config.php` otomatis memakai `public/face/.venv/Scripts/python.exe` jika file itu tersedia dan `LEGACY_PYTHON_BIN` tidak diisi.
+- Saat run pertama, DeepFace akan mengunduh bobot model ke `~/.deepface/weights` sehingga proses awal bisa lebih lama.
+
 ## Catatan
 
 - Endpoint verifikasi kernel Laravel tersedia di: `http://localhost/presenova/laravel-health`.

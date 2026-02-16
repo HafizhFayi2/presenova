@@ -21,12 +21,6 @@ Siswa klik notifikasi → langsung masuk halaman absensi. Di sini sistem melakuk
 2. _Validasi Lokasi_: Sistem minta akses GPS lewat browser (Geolocation API). Koordinat siswa dibandingkan dengan koordinat sekolah yang sudah disetting admin. Pakai perhitungan jarak _Haversine formula_ dengan toleransi radius tertentu (misal 100-200 meter). Ini cukup akurat untuk memastikan siswa ada di area sekolah.
 3. _Face Recognition_: Kamera browser aktif otomatis (pakai MediaDevices API). Siswa selfie sekali klik. Foto selfie langsung diproses di _server_ pakai library face recognition (misal face-api.js di frontend untuk deteksi wajah, lalu kirim ke backend untuk matching pakai Python + face_recognition library atau TensorFlow). Sistem melakukan perbandingan _1:1_ antara foto selfie dengan pas foto siswa yang sudah tersimpan. Kalau similarity score di atas threshold tertentu (misal 70-80%), dianggap cocok.
 
-Jika ketiga validasi lolos, data absensi tersimpan ke database dengan struktur seperti ini:
-
-```
-ID Absensi | NIS | Nama | ID Mapel | Nama Mapel | Kelas | Waktu Absen | Koordinat | URL Foto Selfie | Status | Face Match Score
-```
-
 Foto selfie juga di-upload ke cloud storage, di database cuma nyimpen URL-nya. Ini penting biar database nggak bengkak dan loading tetap cepat meskipun ribuan siswa absen setiap hari.
 
 _Dashboard Guru & Admin:_
