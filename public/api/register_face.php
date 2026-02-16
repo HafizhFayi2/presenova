@@ -3,6 +3,7 @@ require_once '../includes/config.php';
 require_once '../includes/auth.php';
 require_once '../includes/functions.php';
 require_once '../includes/face_recognition.php';
+require_once '../helpers/storage_path_helper.php';
 
 header('Content-Type: application/json');
 
@@ -15,7 +16,10 @@ $db = new Database();
 $student_id = $_SESSION['student_id'];
 
 // Cek apakah sudah memiliki wajah terdaftar
-$stmt = $db->query("SELECT photo_reference FROM student WHERE id = ?", [$student_id]);
+$stmt = $db->query("SELECT s.photo_reference, s.student_name, s.student_nisn, c.class_name
+    FROM student s
+    LEFT JOIN class c ON s.class_id = c.class_id
+    WHERE s.id = ?", [$student_id]);
 $student = $stmt->fetch();
 
 if ($student && !empty($student['photo_reference'])) {
@@ -29,8 +33,15 @@ if (empty($image_data)) {
 }
 
 // Simpan gambar ke server
-$filename = 'face_' . $student_id . '_' . time() . '.jpg';
-$filepath = '../uploads/faces/' . $filename;
+$classFolder = storage_class_folder($student['class_name'] ?? 'kelas');
+$studentFolder = storage_student_folder($student['student_name'] ?? ('siswa_' . $student_id));
+$filename = storage_face_reference_filename($student['student_nisn'] ?? $student_id, $student['student_name'] ?? 'siswa');
+$relativePath = $classFolder . '/' . $studentFolder . '/' . $filename;
+$faceDir = '../uploads/faces/' . $classFolder . '/' . $studentFolder . '/';
+if (!is_dir($faceDir)) {
+    mkdir($faceDir, 0777, true);
+}
+$filepath = $faceDir . $filename;
 
 // Decode base64 image
 $image_data = str_replace('data:image/jpeg;base64,', '', $image_data);
@@ -55,7 +66,7 @@ $face_embedding = FaceRecognition::registerFace($image_data);
 
 // Update database
 $sql = "UPDATE student SET photo_reference = ?, face_embedding = ?, last_face_update = NOW() WHERE id = ?";
-$stmt = $db->query($sql, [$filename, $face_embedding, $student_id]);
+$stmt = $db->query($sql, [$relativePath, $face_embedding, $student_id]);
 
 if ($stmt) {
     // Update session

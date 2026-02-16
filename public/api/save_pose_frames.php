@@ -2,6 +2,7 @@
 session_start();
 require_once '../includes/config.php';
 require_once '../includes/database.php';
+require_once '../helpers/storage_path_helper.php';
 
 header('Content-Type: application/json');
 
@@ -54,7 +55,13 @@ function decode_pose_image($dataUrl)
 
 $db = new Database();
 $studentId = (int) $_SESSION['student_id'];
-$studentStmt = $db->query('SELECT student_nisn FROM student WHERE id = ? LIMIT 1', [$studentId]);
+$studentStmt = $db->query(
+    'SELECT s.student_nisn, s.student_name, c.class_name
+     FROM student s
+     LEFT JOIN class c ON s.class_id = c.class_id
+     WHERE s.id = ? LIMIT 1',
+    [$studentId]
+);
 $student = $studentStmt ? $studentStmt->fetch(PDO::FETCH_ASSOC) : null;
 $nisn = trim((string) ($student['student_nisn'] ?? ''));
 if ($nisn === '') {
@@ -67,7 +74,9 @@ $facesBase = realpath(__DIR__ . '/../uploads/faces');
 if ($facesBase === false) {
     $facesBase = dirname(__DIR__) . DIRECTORY_SEPARATOR . 'uploads' . DIRECTORY_SEPARATOR . 'faces';
 }
-$poseDir = rtrim($facesBase, '/\\') . DIRECTORY_SEPARATOR . 'pose' . DIRECTORY_SEPARATOR . $nisn . DIRECTORY_SEPARATOR . 'latest';
+$classFolder = storage_class_folder($student['class_name'] ?? 'kelas');
+$studentFolder = storage_student_folder($student['student_name'] ?? ('siswa_' . $nisn));
+$poseDir = rtrim($facesBase, '/\\') . DIRECTORY_SEPARATOR . $classFolder . DIRECTORY_SEPARATOR . $studentFolder . DIRECTORY_SEPARATOR . 'pose';
 if (!is_dir($poseDir) && !mkdir($poseDir, 0777, true) && !is_dir($poseDir)) {
     http_response_code(500);
     echo json_encode(['success' => false, 'message' => 'Gagal membuat folder pose']);

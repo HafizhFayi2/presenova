@@ -7,6 +7,7 @@ require_once '../includes/database.php';
 require_once '../includes/database_helper.php';
 require_once '../includes/face_matcher.php';
 require_once '../includes/push_service.php';
+require_once '../helpers/storage_path_helper.php';
 
 header('Content-Type: application/json');
 ini_set('display_errors', 0);
@@ -77,6 +78,8 @@ $information = $_POST['information'] ?? '';
 $face_similarity = isset($_POST['face_similarity']) ? floatval($_POST['face_similarity']) : null;
 $face_distance = isset($_POST['face_distance']) ? floatval($_POST['face_distance']) : null;
 $face_verified = isset($_POST['face_verified']) ? ($_POST['face_verified'] === '1') : false;
+$face_match_token = trim((string) ($_POST['face_match_token'] ?? ''));
+$validationSnapshot = trim((string) ($_POST['validation_snapshot'] ?? ''));
 $descriptorThreshold = defined('FACE_DESCRIPTOR_DISTANCE_THRESHOLD')
     ? (float) FACE_DESCRIPTOR_DISTANCE_THRESHOLD
     : 0.55;
@@ -91,11 +94,13 @@ try {
     $sql_schedule = "
         SELECT ss.*, ss.time_in, ss.time_out, sh.shift_name, ts.subject,
                s.student_nisn, s.student_name, s.class_id, s.photo_reference,
+               c.class_name,
                t.teacher_name, t.teacher_code, d.day_name
         FROM student_schedule ss
         JOIN teacher_schedule ts ON ss.teacher_schedule_id = ts.schedule_id
         JOIN shift sh ON ts.shift_id = sh.shift_id
         JOIN student s ON ss.student_id = s.id
+        LEFT JOIN class c ON s.class_id = c.class_id
         LEFT JOIN teacher t ON ts.teacher_id = t.id
         LEFT JOIN day d ON ts.day_id = d.day_id
         WHERE ss.student_schedule_id = ?
@@ -186,31 +191,66 @@ try {
         respondJson(['success' => false, 'message' => 'File foto tidak ditemukan'], 500);
     }
     
-    // Cari foto referensi
-    $referencePath = $faceMatcher->getReferencePath(
-        $schedule['student_nisn'] ?? '',
-        $schedule['photo_reference'] ?? ''
-    );
-    if (!$referencePath) {
-        // Hapus selfie temporary
-        if (file_exists($selfieResult['path'])) {
-            @unlink($selfieResult['path']);
+    $trustedMatch = null;
+    if ($face_match_token !== '' && !empty($_SESSION['face_match_ticket']) && is_array($_SESSION['face_match_ticket'])) {
+        $ticket = $_SESSION['face_match_ticket'];
+        $ticketToken = (string) ($ticket['token'] ?? '');
+        $ticketStudentId = (int) ($ticket['student_id'] ?? 0);
+        $ticketPassed = !empty($ticket['passed']);
+        $ticketExpires = (int) ($ticket['expires_at'] ?? 0);
+        if (
+            hash_equals($ticketToken, $face_match_token) &&
+            $ticketStudentId === (int) $student_id &&
+            $ticketPassed &&
+            $ticketExpires >= time()
+        ) {
+            $trustedMatch = $ticket;
         }
-        respondJson(['success' => false, 'message' => 'Foto referensi tidak ditemukan'], 404);
     }
-    
-    $matchResult = $faceMatcher->matchFaces($referencePath, $selfieResult['path'], [
-        'label' => $schedule['student_name'] ?? $schedule['student_nisn'] ?? ''
-    ]);
 
-    if (!$matchResult['success']) {
-        if (file_exists($selfieResult['path'])) {
-            @unlink($selfieResult['path']);
+    if ($trustedMatch) {
+        $matchResult = [
+            'success' => true,
+            'passed' => true,
+            'similarity' => max(
+                (float) ($trustedMatch['similarity'] ?? 0),
+                (float) ($face_similarity ?? 0),
+                (float) FACE_MATCH_THRESHOLD
+            ),
+            'details' => [
+                'match_source' => 'face_matching_ticket',
+                'ticket_issued_at' => (int) ($trustedMatch['issued_at'] ?? time()),
+                'ticket_expires_at' => (int) ($trustedMatch['expires_at'] ?? time()),
+                'client_distance' => $face_distance
+            ]
+        ];
+        unset($_SESSION['face_match_ticket']);
+    } else {
+        // Fallback: verifikasi ulang di server jika tiket tidak tersedia / kadaluarsa.
+        $referencePath = $faceMatcher->getReferencePath(
+            $schedule['student_nisn'] ?? '',
+            $schedule['photo_reference'] ?? ''
+        );
+        if (!$referencePath) {
+            if (file_exists($selfieResult['path'])) {
+                @unlink($selfieResult['path']);
+            }
+            respondJson(['success' => false, 'message' => 'Foto referensi tidak ditemukan'], 404);
         }
-        respondJson([
-            'success' => false,
-            'message' => $matchResult['error'] ?? 'Gagal proses face matching'
-        ], 500);
+
+        $matchResult = $faceMatcher->matchFaces($referencePath, $selfieResult['path'], [
+            'label' => $schedule['student_name'] ?? $schedule['student_nisn'] ?? ''
+        ]);
+
+        if (!$matchResult['success']) {
+            if (file_exists($selfieResult['path'])) {
+                @unlink($selfieResult['path']);
+            }
+            respondJson([
+                'success' => false,
+                'message' => $matchResult['error'] ?? 'Gagal proses face matching'
+            ], 500);
+        }
     }
 
     $serverPassed = !empty($matchResult['passed']);
@@ -272,7 +312,9 @@ try {
     
     // 7. Pindahkan foto ke folder attendance
     $attendanceDate = $schedule_date ?: date('Y-m-d');
-    $attendanceDir = "../uploads/attendance/{$attendanceDate}/";
+    $dateTimeFolder = storage_attendance_datetime_folder($attendanceDate, $current_time);
+    $classFolder = storage_class_folder($schedule['class_name'] ?? ($schedule['class_id'] ?? 'kelas'));
+    $attendanceDir = "../uploads/attendance/{$dateTimeFolder}/{$classFolder}/";
     if (!is_dir($attendanceDir)) {
         if (!mkdir($attendanceDir, 0777, true)) {
             respondJson(['success' => false, 'message' => 'Gagal membuat folder absensi'], 500);
@@ -280,10 +322,8 @@ try {
     }
 
     $studentNameRaw = $schedule['student_name'] ?? ('siswa_' . $student_id);
-    $studentNameSafe = slugifyFilename($studentNameRaw);
-    $dateStamp = $attendanceDate ? str_replace('-', '', $attendanceDate) : date('Ymd');
-    $timeStamp = date('His');
-    $baseFilename = "{$studentNameSafe}_{$student_id}_{$dateStamp}_{$timeStamp}";
+    $studentNisn = $schedule['student_nisn'] ?? '';
+    $baseFilename = storage_attendance_basename($studentNameRaw, $studentNisn ?: $student_id, $attendanceDate);
 
     $rawFilename = "{$baseFilename}_raw.jpg";
     $rawPath = $attendanceDir . $rawFilename;
@@ -328,15 +368,23 @@ try {
         'school_address' => $schoolLocation['address'] ?? ''
     ];
 
-    if (createValidationCard($rawPath, $validationPath, $validationMeta)) {
-        $validationGenerated = true;
-    } else {
-        $validationPath = null;
+    if ($validationSnapshot !== '') {
+        if (saveBase64Image($validationSnapshot, $validationPath)) {
+            $validationGenerated = true;
+        }
+    }
+
+    if (!$validationGenerated) {
+        if (createValidationCard($rawPath, $validationPath, $validationMeta)) {
+            $validationGenerated = true;
+        } else {
+            $validationPath = null;
+        }
     }
 
     $storedFilename = $validationGenerated ? $validationFilename : $rawFilename;
     $attendancePath = $validationGenerated ? $validationPath : $rawPath;
-    $attendanceFilename = ($attendanceDate ? ($attendanceDate . '/') : '') . $storedFilename;
+    $attendanceFilename = $dateTimeFolder . '/' . $classFolder . '/' . $storedFilename;
 
     if ($validationGenerated && file_exists($rawPath)) {
         @unlink($rawPath);
@@ -509,6 +557,19 @@ function slugifyFilename($text) {
     return $text !== '' ? $text : 'siswa';
 }
 
+function saveBase64Image($base64Image, $outputPath) {
+    $base64Image = trim((string) $base64Image);
+    if ($base64Image === '') {
+        return false;
+    }
+    $data = preg_replace('#^data:image/\\w+;base64,#i', '', $base64Image);
+    $imageData = base64_decode($data);
+    if ($imageData === false) {
+        return false;
+    }
+    return file_put_contents($outputPath, $imageData) !== false;
+}
+
 function createValidationCard($sourcePath, $outputPath, $meta) {
     if (!extension_loaded('gd') || !function_exists('imagecreatetruecolor')) {
         return false;
@@ -610,7 +671,7 @@ function createValidationCard($sourcePath, $outputPath, $meta) {
     imagefilledrectangle($canvas, $mapX, $mapY, $mapX + $mapW, $mapY + $mapH, $mapBg);
     imagerectangle($canvas, $mapX, $mapY, $mapX + $mapW, $mapY + $mapH, $panelBorder);
 
-    $mapImage = fetchMapCompositeImage($meta['latitude'] ?? null, $meta['longitude'] ?? null, 18, 3);
+    $mapImage = fetchMapCompositeImage($meta['latitude'] ?? null, $meta['longitude'] ?? null, 19, 3);
     if ($mapImage) {
         imagecopyresampled($canvas, $mapImage, $mapX, $mapY, 0, 0, $mapW, $mapH, imagesx($mapImage), imagesy($mapImage));
         imagedestroy($mapImage);

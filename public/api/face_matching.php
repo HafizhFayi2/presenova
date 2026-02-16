@@ -92,8 +92,26 @@ $payload = [
 ];
 
 if (!$passed) {
+    unset($_SESSION['face_match_ticket']);
     $payload['message'] = 'Verifikasi wajah belum lolos';
 } else {
+    try {
+        $matchToken = bin2hex(random_bytes(16));
+    } catch (Throwable $e) {
+        $matchToken = sha1($student_id . '|' . microtime(true) . '|' . mt_rand());
+    }
+    $expiresAt = time() + 600;
+    $_SESSION['face_match_ticket'] = [
+        'token' => $matchToken,
+        'student_id' => (int) $student_id,
+        'passed' => true,
+        'similarity' => (float) $similarity,
+        'threshold' => (float) (defined('FACE_MATCH_THRESHOLD') ? FACE_MATCH_THRESHOLD : 70),
+        'issued_at' => time(),
+        'expires_at' => $expiresAt
+    ];
+    $payload['match_token'] = $matchToken;
+    $payload['token_expires_at'] = $expiresAt;
     $payload['message'] = 'Verifikasi wajah berhasil';
 }
 

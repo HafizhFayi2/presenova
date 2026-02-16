@@ -3,6 +3,7 @@ require_once '../includes/config.php';
 require_once '../includes/auth.php';
 require_once '../includes/functions.php';
 require_once '../includes/face_recognition.php';
+require_once '../helpers/storage_path_helper.php';
 
 header('Content-Type: application/json');
 
@@ -35,7 +36,10 @@ if ($distance > ATTENDANCE_RADIUS) {
 // Implementasi: cek jadwal dan waktu saat ini
 
 // Validasi wajah
-$stmt = $db->query("SELECT photo_reference, face_embedding FROM student WHERE id = ?", [$student_id]);
+$stmt = $db->query("SELECT s.photo_reference, s.face_embedding, s.student_name, s.student_nisn, c.class_name
+    FROM student s
+    LEFT JOIN class c ON s.class_id = c.class_id
+    WHERE s.id = ?", [$student_id]);
 $student = $stmt->fetch();
 
 if (!$student || empty($student['photo_reference'])) {
@@ -51,8 +55,17 @@ if (!$face_result['match']) {
 }
 
 // Simpan gambar absensi
-$attendance_filename = 'attendance_' . $student_id . '_' . time() . '.jpg';
-$attendance_path = '../uploads/attendance/' . $attendance_filename;
+$attendanceDate = date('Y-m-d', strtotime($timestamp));
+$attendanceTime = date('H:i:s', strtotime($timestamp));
+$dateTimeFolder = storage_attendance_datetime_folder($attendanceDate, $attendanceTime);
+$classFolder = storage_class_folder($student['class_name'] ?? 'kelas');
+$attendanceDir = '../uploads/attendance/' . $dateTimeFolder . '/' . $classFolder . '/';
+if (!is_dir($attendanceDir)) {
+    mkdir($attendanceDir, 0777, true);
+}
+$baseFilename = storage_attendance_basename($student['student_name'] ?? ('siswa_' . $student_id), $student['student_nisn'] ?? $student_id, $attendanceDate);
+$attendance_filename = $baseFilename . '.jpg';
+$attendance_path = $attendanceDir . $attendance_filename;
 
 $image_data = str_replace('data:image/jpeg;base64,', '', $image_data);
 $image_data = str_replace('data:image/png;base64,', '', $image_data);
@@ -79,11 +92,12 @@ $sql = "INSERT INTO presence (student_id, presence_date, time_in, picture_in, pr
         latitude_in, longitude_in, distance_in, is_late, late_time, information) 
         VALUES (?, DATE(?), TIME(?), ?, 1, ?, ?, ?, ?, ?, ?)";
         
+ $attendance_relative = $dateTimeFolder . '/' . $classFolder . '/' . $attendance_filename;
 $params = [
     $student_id,
     $timestamp,
     $timestamp,
-    $attendance_filename,
+    $attendance_relative,
     $latitude,
     $longitude,
     round($distance),
