@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 // api/face_matching.php
 session_start();
 require_once '../includes/config.php';
@@ -6,6 +6,11 @@ require_once '../includes/database.php';
 require_once '../includes/face_matcher.php';
 
 header('Content-Type: application/json');
+
+if (function_exists('set_time_limit')) {
+    $runtimeBudget = defined('FACE_MATCH_TIMEOUT_SECONDS') ? ((int) FACE_MATCH_TIMEOUT_SECONDS + 20) : 120;
+    @set_time_limit(max(120, $runtimeBudget));
+}
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     echo json_encode(['success' => false, 'message' => 'Method not allowed']);

@@ -93,15 +93,17 @@ Konfigurasi DeepFace dapat diatur dari `.env`:
 - `LEGACY_PYTHON_BIN=/var/www/presenova/public/face/.venv/bin/python` (Linux VPS)
 - `LEGACY_PYTHON_BIN=public/face/.venv/Scripts/python.exe` (Windows/XAMPP)
 - `LEGACY_FACE_MATCH_THRESHOLD=89`
-- `LEGACY_FACE_MATCH_MODEL=Facenet512`
-- `LEGACY_FACE_MATCH_DETECTOR=retinaface`
+- `LEGACY_FACE_MATCH_MODEL=SFace`
+- `LEGACY_FACE_MATCH_DETECTOR=opencv`
 - `LEGACY_FACE_MATCH_DISTANCE_METRIC=cosine`
 - `LEGACY_FACE_MATCH_ENFORCE_DETECTION=true`
 - `LEGACY_FACE_MATCH_MAX_REFERENCES=1`
 - `LEGACY_FACE_MATCH_USE_BACKUP=true`
-- `LEGACY_FACE_MATCH_BACKUP_MODEL=Facenet512`
-- `LEGACY_FACE_MATCH_BACKUP_DETECTOR=retinaface`
-- `LEGACY_FACE_MATCH_BACKUP_MAX_REFERENCES=3`
+- `LEGACY_FACE_MATCH_BACKUP_MODEL=SFace`
+- `LEGACY_FACE_MATCH_BACKUP_DETECTOR=mtcnn`
+- `LEGACY_FACE_MATCH_BACKUP_MAX_REFERENCES=1`
+- `LEGACY_FACE_MATCH_DETECTOR_FALLBACKS=false`
+- `LEGACY_FACE_MATCH_TIMEOUT_SECONDS=60`
 - `LEGACY_FACE_MATCH_ALLOW_LEGACY=false`
 
 Catatan:
@@ -110,6 +112,7 @@ Catatan:
 - Matcher DeepFace otomatis membaca referensi dari `photo_reference` siswa (jika ada), fallback ke pola NISN, lalu mengevaluasi beberapa foto referensi saat verifikasi absensi.
 - `public/includes/config.php` otomatis memakai `public/face/.venv/Scripts/python.exe` jika file itu tersedia dan `LEGACY_PYTHON_BIN` tidak diisi.
 - Saat run pertama, DeepFace akan mengunduh bobot model ke `~/.deepface/weights` sehingga proses awal bisa lebih lama.
+- Runtime Python dibatasi oleh `LEGACY_FACE_MATCH_TIMEOUT_SECONDS` agar request tidak mentok di `Maximum execution time`.
 
 ## Catatan
 

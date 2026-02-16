@@ -15,9 +15,11 @@ class FaceMatcher {
     private $deepfaceEnforceDetection = true;
     private $deepfaceMaxReferences = 1;
     private $deepfaceUseBackup = true;
-    private $deepfaceBackupModel = 'Facenet512';
-    private $deepfaceBackupDetector = 'retinaface';
-    private $deepfaceBackupMaxReferences = 3;
+    private $deepfaceBackupModel = 'SFace';
+    private $deepfaceBackupDetector = 'mtcnn';
+    private $deepfaceBackupMaxReferences = 1;
+    private $deepfaceDetectorFallbacks = false;
+    private $pythonTimeoutSeconds = 60;
     
     public function __construct() {
         $uploadsBase = realpath(__DIR__ . '/../uploads');
@@ -67,6 +69,12 @@ class FaceMatcher {
         }
         if (defined('FACE_MATCH_BACKUP_MAX_REFERENCES')) {
             $this->deepfaceBackupMaxReferences = max(1, (int) FACE_MATCH_BACKUP_MAX_REFERENCES);
+        }
+        if (defined('FACE_MATCH_DETECTOR_FALLBACKS')) {
+            $this->deepfaceDetectorFallbacks = filter_var((string) FACE_MATCH_DETECTOR_FALLBACKS, FILTER_VALIDATE_BOOLEAN);
+        }
+        if (defined('FACE_MATCH_TIMEOUT_SECONDS')) {
+            $this->pythonTimeoutSeconds = max(15, (int) FACE_MATCH_TIMEOUT_SECONDS);
         }
 
         $scriptPath = realpath(__DIR__ . '/../face/faces_conf/face_match.py');
@@ -302,7 +310,9 @@ class FaceMatcher {
             . ' --use-backup ' . escapeshellarg($this->deepfaceUseBackup ? 'true' : 'false')
             . ' --backup-model ' . escapeshellarg($this->deepfaceBackupModel)
             . ' --backup-detector ' . escapeshellarg($this->deepfaceBackupDetector)
-            . ' --backup-max-references ' . escapeshellarg((string) $this->deepfaceBackupMaxReferences);
+            . ' --backup-max-references ' . escapeshellarg((string) $this->deepfaceBackupMaxReferences)
+            . ' --detector-fallbacks ' . escapeshellarg($this->deepfaceDetectorFallbacks ? 'true' : 'false')
+            . ' --max-runtime-seconds ' . escapeshellarg((string) $this->pythonTimeoutSeconds);
 
         if ($label !== '') {
             $cmd .= ' --label ' . escapeshellarg($label);
@@ -311,18 +321,21 @@ class FaceMatcher {
             $cmd .= ' --output ' . escapeshellarg($outputPath);
         }
 
-        $cmd .= ' 2>&1';
-        $output = [];
-        $exitCode = 0;
-        exec($cmd, $output, $exitCode);
-        $raw = trim(implode("\n", $output));
+        $run = $this->runPythonCommand($cmd, $this->pythonTimeoutSeconds + 5);
+        if (!empty($run['timed_out'])) {
+            return [
+                'success' => false,
+                'error' => 'Verifikasi wajah timeout di server. Coba ulangi dengan pencahayaan lebih baik.'
+            ];
+        }
+        $raw = trim((string) ($run['output'] ?? ''));
 
         $data = $this->parsePythonJson($raw);
         if (!is_array($data)) {
             return [
                 'success' => false,
                 'error' => 'Output python tidak valid',
-                'raw' => $raw
+                'raw' => $this->truncateDebugText($raw)
             ];
         }
 
@@ -355,6 +368,103 @@ class FaceMatcher {
         }
 
         return $result;
+    }
+
+    private function runPythonCommand($command, $timeoutSeconds = 60) {
+        $timeoutSeconds = max(5, (int) $timeoutSeconds);
+        $command = trim((string) $command);
+
+        if ($command === '') {
+            return [
+                'output' => '',
+                'exit_code' => 1,
+                'timed_out' => false
+            ];
+        }
+
+        if (!function_exists('proc_open')) {
+            $output = [];
+            $exitCode = 0;
+            exec($command . ' 2>&1', $output, $exitCode);
+            return [
+                'output' => trim(implode("\n", $output)),
+                'exit_code' => $exitCode,
+                'timed_out' => false
+            ];
+        }
+
+        $descriptors = [
+            1 => ['pipe', 'w'],
+            2 => ['pipe', 'w']
+        ];
+
+        $process = @proc_open($command, $descriptors, $pipes);
+        if (!is_resource($process)) {
+            return [
+                'output' => '',
+                'exit_code' => 1,
+                'timed_out' => false
+            ];
+        }
+
+        foreach ($pipes as $pipe) {
+            stream_set_blocking($pipe, false);
+        }
+
+        $stdout = '';
+        $stderr = '';
+        $timedOut = false;
+        $started = microtime(true);
+
+        while (true) {
+            $status = proc_get_status($process);
+            $stdout .= stream_get_contents($pipes[1]);
+            $stderr .= stream_get_contents($pipes[2]);
+
+            if (!$status['running']) {
+                break;
+            }
+
+            if ((microtime(true) - $started) >= $timeoutSeconds) {
+                $timedOut = true;
+                @proc_terminate($process);
+                break;
+            }
+
+            usleep(100000);
+        }
+
+        $stdout .= stream_get_contents($pipes[1]);
+        $stderr .= stream_get_contents($pipes[2]);
+
+        foreach ($pipes as $pipe) {
+            fclose($pipe);
+        }
+
+        $exitCode = proc_close($process);
+        if ($timedOut && $exitCode === 0) {
+            $exitCode = 124;
+        }
+
+        $output = trim($stdout . ($stderr !== '' ? "\n" . $stderr : ''));
+
+        return [
+            'output' => $output,
+            'exit_code' => $exitCode,
+            'timed_out' => $timedOut
+        ];
+    }
+
+    private function truncateDebugText($text, $maxLength = 600) {
+        $text = trim((string) $text);
+        if ($text === '') {
+            return '';
+        }
+        if (strlen($text) <= $maxLength) {
+            return $text;
+        }
+
+        return substr($text, 0, $maxLength) . '...';
     }
 
     private function parsePythonJson($raw) {

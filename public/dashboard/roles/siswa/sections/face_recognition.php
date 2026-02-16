@@ -462,6 +462,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const descriptorDistanceThreshold = parseFloat(page.dataset.descriptorThreshold || '0.55');
     const descriptorStrongThreshold = Math.max(0.38, descriptorDistanceThreshold - 0.08);
     const descriptorMaxDistance = 0.9;
+    const descriptorHardFailDistance = Math.max(0.85, descriptorMaxDistance - 0.02);
     const faceLabel = page.dataset.faceLabel || '';
     const modelBase = '../face/faces_logics/models';
     const studentKey = (page.dataset.studentKey || '').trim() || 'anon';
@@ -1926,6 +1927,29 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
+    function buildServerCaptureData(sourceCanvas) {
+        if (!sourceCanvas || !sourceCanvas.width || !sourceCanvas.height) {
+            return sourceCanvas ? sourceCanvas.toDataURL('image/jpeg', 0.85) : '';
+        }
+
+        const maxSide = 720;
+        const srcW = sourceCanvas.width;
+        const srcH = sourceCanvas.height;
+        const longestSide = Math.max(srcW, srcH);
+        const scale = longestSide > maxSide ? (maxSide / longestSide) : 1;
+
+        if (scale >= 1) {
+            return sourceCanvas.toDataURL('image/jpeg', 0.84);
+        }
+
+        const resized = document.createElement('canvas');
+        resized.width = Math.max(1, Math.round(srcW * scale));
+        resized.height = Math.max(1, Math.round(srcH * scale));
+        const resizedCtx = resized.getContext('2d');
+        resizedCtx.drawImage(sourceCanvas, 0, 0, resized.width, resized.height);
+        return resized.toDataURL('image/jpeg', 0.84);
+    }
+
     async function requestServerMatch(imageData) {
         const payload = new URLSearchParams();
         payload.append('captured_image', imageData);
@@ -2082,7 +2106,8 @@ document.addEventListener('DOMContentLoaded', function() {
 
         let serverResult;
         try {
-            serverResult = await requestServerMatch(capturedData);
+            const serverPayloadImage = buildServerCaptureData(canvas);
+            serverResult = await requestServerMatch(serverPayloadImage || capturedData);
         } catch (error) {
             setBadge('error', 'Gagal');
             setStatus(error.message || 'Gagal memproses verifikasi.');
@@ -2092,38 +2117,38 @@ document.addEventListener('DOMContentLoaded', function() {
             return false;
         }
 
-        const thresholdValue = serverResult.threshold || threshold;
+        const thresholdValue = parseFloat(serverResult.threshold || threshold);
         const serverSimilarity = parseFloat(serverResult.similarity || 0);
         const localDescriptor = evaluateDescriptor(detection);
-        let combinedSimilarity = serverSimilarity;
-        let passed = !!(serverResult.passed && serverSimilarity >= thresholdValue);
+        const deepfacePassed = !!(serverResult.passed && serverSimilarity >= thresholdValue);
+        let passed = deepfacePassed;
 
         if (localDescriptor) {
             lastFaceDistance = localDescriptor.distance;
             lastDescriptorSimilarity = localDescriptor.similarity;
-            combinedSimilarity = Math.max(
-                0,
-                Math.min(
-                    100,
-                    (serverSimilarity * 0.58) + (localDescriptor.similarity * 0.42)
-                )
-            );
 
-            const serverNearThreshold = serverSimilarity >= Math.max(45, thresholdValue - 30);
-            passed = localDescriptor.passed && serverNearThreshold;
+            // Local descriptor is only a guardrail, not the main decision.
+            // DeepFace server remains the primary source of truth.
+            if (deepfacePassed && localDescriptor.distance >= descriptorHardFailDistance) {
+                passed = false;
+            }
         } else {
             lastFaceDistance = null;
             lastDescriptorSimilarity = 0;
         }
 
-        setSimilarity(combinedSimilarity);
+        setSimilarity(serverSimilarity);
 
         if (passed) {
             setBadge('success', 'Lolos');
             if (localDescriptor) {
-                setStatus('Verifikasi berhasil (descriptor + server). Anda bisa lanjut ke absensi.');
+                if (!localDescriptor.passed) {
+                    setStatus('Verifikasi berhasil (DeepFace server). Anda bisa lanjut ke absensi.');
+                } else {
+                    setStatus('Verifikasi berhasil (DeepFace + descriptor). Anda bisa lanjut ke absensi.');
+                }
             } else {
-                setStatus('Verifikasi berhasil. Anda bisa lanjut ke absensi.');
+                setStatus('Verifikasi berhasil (DeepFace server). Anda bisa lanjut ke absensi.');
             }
             drawFaceLabel(resized.detection.box, faceLabel);
             matchPassed = true;
@@ -2139,10 +2164,13 @@ document.addEventListener('DOMContentLoaded', function() {
         setBadge('error', 'Gagal');
         const quality = analyzeCaptureQuality(canvas);
         const extraHint = quality.issues.length ? ` ${quality.issues.join('. ')}.` : '';
-        if (localDescriptor && !localDescriptor.passed) {
+        if (deepfacePassed && localDescriptor && localDescriptor.distance >= descriptorHardFailDistance) {
+            const current = localDescriptor.distance.toFixed(3);
+            setStatus(`Validasi lokal menemukan jarak descriptor terlalu jauh (${current}). Silakan ulangi dengan posisi wajah lurus.${extraHint}`);
+        } else if (localDescriptor && !localDescriptor.passed && serverSimilarity >= Math.max(45, thresholdValue - 30)) {
             const limit = descriptorDistanceThreshold.toFixed(2);
             const current = localDescriptor.distance.toFixed(3);
-            setStatus(`Wajah tidak sesuai dengan foto referensi (jarak descriptor ${current}, batas ${limit}). Silakan ulangi.${extraHint}`);
+            setStatus(`Similarity server belum stabil. Jarak descriptor ${current} (batas panduan ${limit}). Silakan ulangi dengan pencahayaan lebih merata.${extraHint}`);
         } else {
             setStatus(`Similarity server di bawah batas validasi. Silakan ulangi pengambilan foto.${extraHint}`);
         }

@@ -2,6 +2,7 @@ import argparse
 import json
 import os
 import sys
+import time
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
@@ -18,9 +19,9 @@ DEFAULT_MODEL = "SFace"
 DEFAULT_DETECTOR = "opencv"
 DEFAULT_METRIC = "cosine"
 DEFAULT_MAX_REFERENCES = 1
-DEFAULT_BACKUP_MODEL = "Facenet512"
-DEFAULT_BACKUP_DETECTOR = "retinaface"
-DEFAULT_BACKUP_MAX_REFERENCES = 3
+DEFAULT_BACKUP_MODEL = "SFace"
+DEFAULT_BACKUP_DETECTOR = "mtcnn"
+DEFAULT_BACKUP_MAX_REFERENCES = 1
 
 
 def emit(payload: Dict, code: int = 0) -> None:
@@ -150,16 +151,20 @@ def deepface_verify(deepface, kwargs: Dict) -> Dict:
         return deepface.verify(**fallback_kwargs)
 
 
-def build_detector_candidates(primary_detector: str, stage: str) -> List[str]:
+def build_detector_candidates(primary_detector: str, stage: str, include_fallbacks: bool) -> List[str]:
     detector = (primary_detector or DEFAULT_DETECTOR).strip() or DEFAULT_DETECTOR
     candidates = [detector]
 
-    # Keep primary stage fast: only one detector.
-    if stage == "primary":
+    # Default mode: use exactly the configured detector for deterministic speed.
+    if not include_fallbacks:
         return candidates
 
-    # Backup stage is for difficult cases: add broader detector fallbacks.
-    for fallback in ["retinaface", "mtcnn", "opencv", "mediapipe"]:
+    # Optional fallback mode for difficult cases.
+    if stage == "primary":
+        fallback_pool = ["mtcnn", "retinaface", "opencv"]
+    else:
+        fallback_pool = ["mtcnn", "retinaface", "opencv", "ssd"]
+    for fallback in fallback_pool:
         if fallback not in candidates:
             candidates.append(fallback)
     return candidates
@@ -188,6 +193,17 @@ def main() -> None:
         default=DEFAULT_BACKUP_MAX_REFERENCES,
         help="Max references for backup stage",
     )
+    parser.add_argument(
+        "--detector-fallbacks",
+        default="false",
+        help="true/false. If true, try multiple detector backends when needed",
+    )
+    parser.add_argument(
+        "--max-runtime-seconds",
+        type=float,
+        default=45.0,
+        help="Safety time budget for one verification request",
+    )
     args = parser.parse_args()
 
     reference = Path(args.reference).expanduser().resolve()
@@ -211,6 +227,8 @@ def main() -> None:
     primary_max_refs = max(1, int(args.max_references))
     backup_max_refs = max(1, int(args.backup_max_references))
     use_backup = str(args.use_backup).strip().lower() not in {"0", "false", "no", "off"}
+    detector_fallbacks = str(args.detector_fallbacks).strip().lower() not in {"0", "false", "no", "off"}
+    max_runtime_seconds = max(5.0, float(args.max_runtime_seconds))
 
     references = scan_references(reference, max_refs=max(primary_max_refs, backup_max_refs))
     if not references:
@@ -246,16 +264,22 @@ def main() -> None:
 
     attempts = []
     best = None
+    started_at = time.perf_counter()
+    runtime_limited = False
 
     for strategy in strategies:
         stage = strategy["stage"]
         model_name = strategy["model"]
         stage_detector = strategy["detector"]
         stage_references = references[: max(1, int(strategy["max_refs"]))]
-        detector_candidates = build_detector_candidates(stage_detector, stage)
+        detector_candidates = build_detector_candidates(stage_detector, stage, detector_fallbacks)
 
         for ref in stage_references:
             for detector in detector_candidates:
+                if (time.perf_counter() - started_at) >= max_runtime_seconds:
+                    runtime_limited = True
+                    break
+
                 kwargs = {
                     "img1_path": str(ref),
                     "img2_path": str(candidate),
@@ -318,15 +342,29 @@ def main() -> None:
                     elif item["verified"] == best["verified"] and item["distance"] < best["distance"]:
                         best = item
 
-                # Early stop for strong verified result.
-                if verified and similarity >= 95:
+                # Stop as soon as DeepFace already verified above configured threshold.
+                if verified and similarity >= float(args.threshold):
                     break
-            if best is not None and best["verified"] and best["similarity"] >= 95:
+            if runtime_limited:
                 break
-        if best is not None and best["verified"] and best["similarity"] >= 95:
+            if best is not None and best["verified"] and best["similarity"] >= float(args.threshold):
+                break
+        if runtime_limited:
+            break
+        if best is not None and best["verified"] and best["similarity"] >= float(args.threshold):
             break
 
     if best is None:
+        if runtime_limited:
+            fail(
+                "Verifikasi wajah timeout. Coba ulangi sekali lagi dengan posisi wajah lebih dekat.",
+                details={
+                    "attempts": attempts[-6:],
+                    "model": primary_model,
+                    "detector": primary_detector,
+                    "runtime_limited": True,
+                },
+            )
         fail(
             "Gagal memproses wajah dengan DeepFace",
             details={
@@ -357,6 +395,7 @@ def main() -> None:
             "reference_image": best["reference_image"],
             "total_references_scanned": len(references),
             "total_attempts": len(attempts),
+            "runtime_limited": runtime_limited,
             "backup_enabled": use_backup,
             "backup_model": backup_model if use_backup else "",
             "backup_detector": backup_detector if use_backup else "",
