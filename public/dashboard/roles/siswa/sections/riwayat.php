@@ -56,6 +56,23 @@ function resolveLateInfo(array $item, int $time_tolerance): array {
     return ['is_late' => $isLate, 'late_minutes' => $lateMinutes, 'late_beyond' => $lateBeyond];
 }
 
+function resolveAttendancePhotoUrl($rawPhoto, $presenceDate = null): string {
+    if (!$rawPhoto) {
+        return '';
+    }
+
+    if (strpos($rawPhoto, 'uploads/attendance') === false && !preg_match('~^https?://~', $rawPhoto)) {
+        $cleanPhoto = ltrim($rawPhoto, '/');
+        if (strpos($cleanPhoto, '/') === false && !empty($presenceDate)) {
+            $dateDir = date('Y-m-d', strtotime((string) $presenceDate));
+            return '../uploads/attendance/' . $dateDir . '/' . $cleanPhoto;
+        }
+        return '../uploads/attendance/' . $cleanPhoto;
+    }
+
+    return $rawPhoto;
+}
+
 // Gunakan COALESCE untuk memastikan urutan prioritas data
 
 $sql = "SELECT 
@@ -603,20 +620,8 @@ $riwayat_izin = array_values(array_filter($riwayat, fn($i) => (int)($i['present_
                                                         <td><?= $item['time_in'] ? date('H:i', strtotime($item['time_in'])) : '-' ?></td>
                                                         <td><span class="badge <?= $status_class ?>"><?= $status_text ?></span></td>
                                                         <td>
-                                                                <?php if ($item['picture_in']): ?>
-                                                                <?php
-                                                                    $rawPhoto = $item['picture_in'];
-                                                                    $photoUrl = $rawPhoto;
-                                                                    if ($rawPhoto && strpos($rawPhoto, 'uploads/attendance') === false && !preg_match('~^https?://~', $rawPhoto)) {
-                                                                        $cleanPhoto = ltrim($rawPhoto, '/');
-                                                                        if (strpos($cleanPhoto, '/') === false && !empty($item['presence_date'])) {
-                                                                            $dateDir = date('Y-m-d', strtotime($item['presence_date']));
-                                                                            $photoUrl = '../uploads/attendance/' . $dateDir . '/' . $cleanPhoto;
-                                                                        } else {
-                                                                            $photoUrl = '../uploads/attendance/' . $cleanPhoto;
-                                                                        }
-                                                                    }
-                                                                ?>
+                                                            <?php $photoUrl = resolveAttendancePhotoUrl($item['picture_in'] ?? '', $item['presence_date'] ?? null); ?>
+                                                            <?php if ($photoUrl): ?>
                                                                 <button class="btn btn-sm btn-primary btn-view-photo" 
                                                                         data-photo="<?= htmlspecialchars($photoUrl, ENT_QUOTES) ?>"
                                                                         data-bs-toggle="modal" 
@@ -671,6 +676,8 @@ $riwayat_izin = array_values(array_filter($riwayat, fn($i) => (int)($i['present_
                                 <th>Guru</th>
                                 <th width="100">Jam Absen</th>
                                 <th width="120">Status</th>
+                                <th width="100">Foto</th>
+                                <th width="120">Aksi</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -686,6 +693,27 @@ $riwayat_izin = array_values(array_filter($riwayat, fn($i) => (int)($i['present_
                                     <td><?= htmlspecialchars($item['teacher_name'] ?? '-') ?></td>
                                     <td><?= $item['time_in'] ? date('H:i', strtotime($item['time_in'])) : '-' ?></td>
                                     <td><span class="badge bg-warning">Sakit</span></td>
+                                    <td>
+                                        <?php $photoUrl = resolveAttendancePhotoUrl($item['picture_in'] ?? '', $item['presence_date'] ?? null); ?>
+                                        <?php if ($photoUrl): ?>
+                                            <button class="btn btn-sm btn-primary btn-view-photo" 
+                                                    data-photo="<?= htmlspecialchars($photoUrl, ENT_QUOTES) ?>"
+                                                    data-bs-toggle="modal" 
+                                                    data-bs-target="#photoModal">
+                                                <i class="fas fa-image"></i>
+                                            </button>
+                                        <?php else: ?>
+                                            <span class="text-muted">-</span>
+                                        <?php endif; ?>
+                                    </td>
+                                    <td>
+                                        <button class="btn btn-sm btn-info btn-view-detail" 
+                                                data-id="<?= $item['presence_id'] ?>"
+                                                data-bs-toggle="modal" 
+                                                data-bs-target="#detailModal">
+                                            <i class="fas fa-eye"></i> Detail
+                                        </button>
+                                    </td>
                                 </tr>
                             <?php endforeach; ?>
                         </tbody>
@@ -715,6 +743,8 @@ $riwayat_izin = array_values(array_filter($riwayat, fn($i) => (int)($i['present_
                                 <th>Guru</th>
                                 <th width="100">Jam Absen</th>
                                 <th width="120">Status</th>
+                                <th width="100">Foto</th>
+                                <th width="120">Aksi</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -730,6 +760,27 @@ $riwayat_izin = array_values(array_filter($riwayat, fn($i) => (int)($i['present_
                                     <td><?= htmlspecialchars($item['teacher_name'] ?? '-') ?></td>
                                     <td><?= $item['time_in'] ? date('H:i', strtotime($item['time_in'])) : '-' ?></td>
                                     <td><span class="badge bg-info">Izin</span></td>
+                                    <td>
+                                        <?php $photoUrl = resolveAttendancePhotoUrl($item['picture_in'] ?? '', $item['presence_date'] ?? null); ?>
+                                        <?php if ($photoUrl): ?>
+                                            <button class="btn btn-sm btn-primary btn-view-photo" 
+                                                    data-photo="<?= htmlspecialchars($photoUrl, ENT_QUOTES) ?>"
+                                                    data-bs-toggle="modal" 
+                                                    data-bs-target="#photoModal">
+                                                <i class="fas fa-image"></i>
+                                            </button>
+                                        <?php else: ?>
+                                            <span class="text-muted">-</span>
+                                        <?php endif; ?>
+                                    </td>
+                                    <td>
+                                        <button class="btn btn-sm btn-info btn-view-detail" 
+                                                data-id="<?= $item['presence_id'] ?>"
+                                                data-bs-toggle="modal" 
+                                                data-bs-target="#detailModal">
+                                            <i class="fas fa-eye"></i> Detail
+                                        </button>
+                                    </td>
                                 </tr>
                             <?php endforeach; ?>
                         </tbody>
@@ -821,7 +872,7 @@ $riwayat_izin = array_values(array_filter($riwayat, fn($i) => (int)($i['present_
 </div>
 
 <!-- Modal Photo Viewer -->
-<div class="modal fade" id="photoModal" tabindex="-1">
+<div class="modal fade riwayat-modal" id="photoModal" tabindex="-1" aria-hidden="true" data-bs-backdrop="true" data-bs-keyboard="true">
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
             <div class="modal-header">
@@ -839,7 +890,7 @@ $riwayat_izin = array_values(array_filter($riwayat, fn($i) => (int)($i['present_
 </div>
 
 <!-- Modal Detail -->
-<div class="modal fade" id="detailModal" tabindex="-1">
+<div class="modal fade riwayat-modal" id="detailModal" tabindex="-1" aria-hidden="true" data-bs-backdrop="true" data-bs-keyboard="true">
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
             <div class="modal-header">
@@ -868,6 +919,26 @@ $riwayat_izin = array_values(array_filter($riwayat, fn($i) => (int)($i['present_
             let stream = null;
             let capturedImage = '';
             let currentLocation = null;
+
+            ['photoModal', 'detailModal', 'absensiModal'].forEach((modalId) => {
+                const modalEl = document.getElementById(modalId);
+                if (modalEl && modalEl.parentElement !== document.body) {
+                    document.body.appendChild(modalEl);
+                }
+            });
+
+            const updateRiwayatModalState = () => {
+                const openCount = document.querySelectorAll('.riwayat-modal.show').length;
+                document.body.classList.toggle('riwayat-modal-open', openCount > 0);
+            };
+
+            $('#photoModal, #detailModal').on('shown.bs.modal hidden.bs.modal', updateRiwayatModalState);
+
+            $(document).on('click', '.riwayat-modal', function(event) {
+                if (event.target === this) {
+                    $(this).modal('hide');
+                }
+            });
     
     // Absensi Button Click -> arahkan ke validasi wajah
     $('.btn-absensi-now').click(function(e) {

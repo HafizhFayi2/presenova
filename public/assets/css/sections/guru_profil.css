@@ -1,0 +1,36 @@
+/* Extracted from sections/guru_profil.php */
+
+.timeline {
+    position: relative;
+    padding-left: 30px;
+}
+
+.timeline::before {
+    content: '';
+    position: absolute;
+    left: 15px;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    background: var(--border);
+}
+
+.timeline-item {
+    position: relative;
+}
+
+.timeline-icon {
+    position: absolute;
+    left: -30px;
+    top: 5px;
+    z-index: 1;
+}
+
+.timeline-content {
+    padding-bottom: 15px;
+    border-bottom: 1px solid var(--border);
+}
+
+.timeline-item:last-child .timeline-content {
+    border-bottom: none;
+}

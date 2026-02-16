@@ -180,6 +180,31 @@ class FaceMatcher {
             return in_array($ext, ['jpg', 'jpeg', 'png', 'webp', 'bmp'], true);
         })));
 
+        if (empty($files) && $nisn !== '') {
+            try {
+                $iterator = new RecursiveIteratorIterator(
+                    new RecursiveDirectoryIterator($this->facesDir, FilesystemIterator::SKIP_DOTS)
+                );
+                foreach ($iterator as $fileInfo) {
+                    if (!$fileInfo->isFile()) {
+                        continue;
+                    }
+                    $filename = $fileInfo->getFilename();
+                    if (stripos($filename, $nisn) === false) {
+                        continue;
+                    }
+                    $ext = strtolower($fileInfo->getExtension());
+                    if (!in_array($ext, ['jpg', 'jpeg', 'png', 'webp', 'bmp'], true)) {
+                        continue;
+                    }
+                    $files[] = $fileInfo->getPathname();
+                }
+                $files = array_values(array_unique($files));
+            } catch (Exception $e) {
+                // ignore recursive scan failures
+            }
+        }
+
         usort($files, function($a, $b) {
             $mtimeA = @filemtime($a) ?: 0;
             $mtimeB = @filemtime($b) ?: 0;

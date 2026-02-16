@@ -1,6 +1,7 @@
 <?php
 require_once 'config.php';
 require_once 'database.php';
+require_once dirname(__DIR__) . '/helpers/storage_path_helper.php';
 
 class Auth {
     private $db;
@@ -14,6 +15,10 @@ class Auth {
             return null;
         }
         $baseDir = rtrim(dirname(__DIR__), '/\\');
+        $photo_reference = ltrim((string) $photo_reference, '/\\');
+        if (stripos($photo_reference, 'uploads/faces/') === 0) {
+            $photo_reference = substr($photo_reference, strlen('uploads/faces/'));
+        }
         $path = $baseDir . '/uploads/faces/' . $photo_reference;
         return file_exists($path) ? $path : null;
     }
@@ -43,6 +48,36 @@ class Auth {
         }
 
         return false;
+    }
+
+    private function hasPoseCaptureDataset($studentNisn) {
+        $studentNisn = trim((string) $studentNisn);
+        if ($studentNisn === '') {
+            return false;
+        }
+
+        $studentStmt = $this->db->query(
+            "SELECT s.student_name, c.class_name
+             FROM student s
+             LEFT JOIN class c ON s.class_id = c.class_id
+             WHERE s.student_nisn = ? LIMIT 1",
+            [$studentNisn]
+        );
+        $student = $studentStmt ? $studentStmt->fetch() : null;
+        $classFolder = storage_class_folder($student['class_name'] ?? 'kelas');
+        $studentFolder = storage_student_folder($student['student_name'] ?? ('siswa_' . $studentNisn));
+
+        $baseDir = rtrim(dirname(__DIR__), '/\\');
+        $poseDir = $baseDir . '/uploads/faces/' . $classFolder . '/' . $studentFolder . '/pose';
+        if (!is_dir($poseDir)) {
+            return false;
+        }
+
+        $right = glob($poseDir . '/right_*.jpg') ?: [];
+        $left = glob($poseDir . '/left_*.jpg') ?: [];
+        $front = glob($poseDir . '/front_*.jpg') ?: [];
+
+        return count($right) >= 5 && count($left) >= 5 && count($front) >= 1;
     }
     
     // Login admin
@@ -103,6 +138,7 @@ class Auth {
                 $_SESSION['class_id'] = $siswa['class_id'];
                 $_SESSION['role'] = 'siswa'; // Tambahkan role
                 $_SESSION['has_face'] = $has_face;
+                $_SESSION['has_pose_capture'] = $this->hasPoseCaptureDataset($siswa['student_nisn'] ?? '');
                 $_SESSION['logged_in'] = true;
                 
                 // Update last login
@@ -117,7 +153,8 @@ class Auth {
                     'id' => $siswa['id'],
                     'name' => $siswa['student_name'],
                     'class' => $siswa['class_id'],
-                    'has_face' => $has_face
+                    'has_face' => $has_face,
+                    'has_pose_capture' => $_SESSION['has_pose_capture']
                 ];
             }
         }
@@ -221,6 +258,7 @@ class Auth {
                 );
                 $siswa = $stmt ? $stmt->fetch() : null;
                 $_SESSION['has_face'] = $this->ensureStudentFaceReference($siswa);
+                $_SESSION['has_pose_capture'] = $this->hasPoseCaptureDataset($siswa['student_nisn'] ?? '');
             }
             return true;
         }
@@ -241,6 +279,7 @@ class Auth {
                         $_SESSION['student_name'] = $siswa['student_name'];
                         $_SESSION['class_id'] = $siswa['class_id'];
                         $_SESSION['has_face'] = $this->ensureStudentFaceReference($siswa);
+                        $_SESSION['has_pose_capture'] = $this->hasPoseCaptureDataset($siswa['student_nisn'] ?? '');
                         $_SESSION['role'] = 'siswa';
                         $_SESSION['logged_in'] = true;
                         return true;

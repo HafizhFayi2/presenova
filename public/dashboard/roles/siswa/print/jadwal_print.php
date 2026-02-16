@@ -237,7 +237,7 @@ if ($orientation === 'portrait') {
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="../../../../assets/css/legacy-dashboard/print/jadwal-print.css?v=20260213i">
+    <link rel="stylesheet" href="../../../../assets/css/print/jadwal-print.css?v=20260213i">
     <?php if ($page_size_css !== ''): ?>
     <style><?php echo $page_size_css; ?></style>
     <?php endif; ?>

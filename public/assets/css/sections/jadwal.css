@@ -1,0 +1,350 @@
+/* Extracted from sections/jadwal.php */
+
+/* Jadwal Section Styles */
+.jadwal-section {
+    animation: fadeIn 0.5s ease-out;
+}
+
+.section-header {
+    background: linear-gradient(135deg, rgba(53, 121, 246, 0.9) 0%, rgba(255, 159, 107, 0.9) 100%);
+    color: white;
+    padding: 1.5rem;
+    border-radius: 18px;
+    margin-bottom: 1.5rem;
+    border: 1px solid rgba(255, 255, 255, 0.35);
+    box-shadow: var(--glass-shadow);
+    backdrop-filter: blur(var(--blur)) saturate(140%);
+}
+
+.section-title {
+    color: white;
+    font-weight: 600;
+    margin-bottom: 0;
+}
+
+/* Student Info Card */
+.student-info-card {
+    background: var(--card-color);
+    border-radius: 18px;
+    padding: 1.5rem;
+    box-shadow: var(--glass-shadow);
+    border: 1px solid var(--border);
+    backdrop-filter: blur(var(--blur)) saturate(140%);
+    margin-bottom: 1.5rem;
+}
+
+.info-item {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    transition: transform 0.25s ease, box-shadow 0.25s ease;
+}
+
+.info-item:hover {
+    transform: translateY(-2px);
+}
+
+.info-icon {
+    width: 50px;
+    height: 50px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-size: 1.25rem;
+}
+
+.info-content {
+    flex: 1;
+}
+
+.info-content small {
+    font-size: 0.85rem;
+    color: var(--text-secondary-color);
+    display: block;
+}
+
+.info-content strong {
+    font-size: 1rem;
+    color: var(--text-color);
+}
+
+[data-theme="dark"] .student-info-card {
+    background: rgba(15, 23, 42, 0.72);
+}
+
+[data-theme="dark"] .student-info-card .info-content small,
+[data-theme="dark"] .student-info-card .info-content .text-muted {
+    color: #94a3b8 !important;
+    opacity: 1 !important;
+}
+
+[data-theme="dark"] .student-info-card .info-content strong {
+    color: #f8fafc !important;
+}
+
+/* Schedule Table */
+.schedule-table {
+    background: transparent;
+    border-radius: 18px;
+    overflow: hidden;
+    box-shadow: var(--glass-shadow);
+    border: 1px solid var(--glass-border);
+    backdrop-filter: blur(var(--blur)) saturate(140%);
+}
+
+.schedule-table thead th {
+    border: none;
+    font-weight: 600;
+    font-size: 0.9rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    padding: 1rem;
+    background: var(--liquid-head-bg, rgba(255, 255, 255, 0.55));
+    color: var(--text-color);
+}
+
+.schedule-table tbody td {
+    padding: 0.75rem;
+    vertical-align: middle;
+    background: transparent;
+}
+
+.schedule-table tbody tr {
+    background: var(--liquid-row-bg, rgba(255, 255, 255, 0.55));
+    transition: background-color 0.25s ease, transform 0.25s ease, box-shadow 0.25s ease;
+}
+
+.schedule-table tbody tr:hover {
+    background: var(--liquid-row-hover, rgba(255, 255, 255, 0.75));
+}
+
+.schedule-status {
+    font-weight: 600;
+    letter-spacing: 0.3px;
+    padding: 8px 12px;
+}
+
+.status-muted {
+    background: rgba(148, 163, 184, 0.3);
+    color: var(--text-color);
+}
+
+.status-countdown {
+    background: rgba(14, 165, 233, 0.85);
+    color: #fff;
+}
+
+.status-active {
+    background: rgba(37, 99, 235, 0.9);
+    color: #fff;
+}
+
+.status-overdue {
+    background: rgba(245, 158, 11, 0.9);
+    color: #fff;
+}
+
+.status-closed {
+    background: rgba(239, 68, 68, 0.9);
+    color: #fff;
+}
+
+.status-success {
+    background: rgba(16, 185, 129, 0.9);
+    color: #fff;
+}
+
+.day-cell {
+    background: rgba(53, 121, 246, 0.1);
+    border-right: 3px solid rgba(53, 121, 246, 0.2);
+}
+
+.day-content {
+    padding: 0.5rem;
+}
+
+.day-content.today {
+    background: rgba(53, 121, 246, 0.16);
+    border-radius: 8px;
+    padding: 0.75rem;
+}
+
+/* Prevent stacked shadow layers when a day spans multiple rows */
+.jadwal-section .liquidGlass-wrapper .schedule-table tbody tr {
+    box-shadow: none;
+}
+
+.jadwal-section .liquidGlass-wrapper .schedule-table tbody tr:hover {
+    transform: none;
+    box-shadow: none;
+}
+
+.time-cell {
+    font-weight: 500;
+    color: var(--text-secondary-color);
+    white-space: nowrap;
+}
+
+.subject-cell {
+    font-weight: 600;
+    color: var(--text-color);
+}
+
+.teacher-cell {
+    color: var(--text-secondary-color);
+}
+
+.teacher-name {
+    font-weight: 500;
+    color: var(--text-color);
+}
+
+.today-row {
+    background-color: rgba(53, 121, 246, 0.08) !important;
+}
+
+.today-row:hover {
+    background-color: rgba(53, 121, 246, 0.14) !important;
+}
+
+/* Stat Cards */
+.stat-card {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    background: var(--card-color);
+    padding: 1.25rem;
+    border-radius: 18px;
+    box-shadow: var(--glass-shadow);
+    transition: transform 0.3s ease;
+    height: 100%;
+    border: 1px solid var(--border);
+    backdrop-filter: blur(var(--blur)) saturate(140%);
+}
+
+.stat-card:hover {
+    transform: translateY(-5px);
+    box-shadow: var(--glass-shadow-strong);
+}
+
+.stat-icon {
+    width: 60px;
+    height: 60px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-size: 1.5rem;
+}
+
+.stat-content h3 {
+    margin: 0;
+    font-size: 1.75rem;
+    font-weight: 700;
+    color: var(--text-color);
+}
+
+.stat-content p {
+    margin: 0.25rem 0 0 0;
+    color: var(--text-secondary-color);
+    font-size: 0.9rem;
+}
+
+/* Today Summary */
+.today-summary-card {
+    background: var(--card-color);
+    border-radius: 18px;
+    overflow: hidden;
+    box-shadow: var(--glass-shadow);
+    border: 1px solid var(--border);
+    backdrop-filter: blur(var(--blur)) saturate(140%);
+}
+
+.summary-item {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 1rem;
+    transition: transform 0.25s ease, box-shadow 0.25s ease;
+}
+
+.summary-item:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--glass-shadow);
+}
+
+.summary-icon {
+    width: 50px;
+    height: 50px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-size: 1.25rem;
+}
+
+.summary-content h4 {
+    margin: 0;
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--text-color);
+}
+
+.summary-content p {
+    margin: 0.25rem 0 0 0;
+    color: var(--text-secondary-color);
+    font-size: 0.9rem;
+}
+
+/* Empty State */
+.empty-state {
+    padding: 3rem 1rem;
+    text-align: center;
+    color: var(--text-secondary-color);
+}
+
+.empty-state h5 {
+    margin: 1rem 0 0.5rem 0;
+    color: var(--text-color);
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .info-item {
+        margin-bottom: 1rem;
+    }
+    
+    .schedule-table {
+        font-size: 0.85rem;
+    }
+    
+    .stat-card {
+        padding: 1rem;
+    }
+    
+    .stat-icon {
+        width: 50px;
+        height: 50px;
+        font-size: 1.25rem;
+    }
+    
+    .stat-content h3 {
+        font-size: 1.5rem;
+    }
+}
+
+/* Animation */
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}

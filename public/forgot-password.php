@@ -174,7 +174,7 @@ if (!empty($siteInfo['site_email'])) {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Lupa password - presenova</title>
     <meta name="color-scheme" content="light">
-    <meta name="theme-color" content="#f8fafc">
+    <meta name="theme-color" content="#ffffff">
     <link rel="apple-touch-icon" href="assets/images/apple-touch-icon_login.png?v=20260212c">
     <link rel="icon" type="image/png" sizes="16x16" href="assets/images/favicon-16x16_login.png?v=20260212c">
     <link rel="icon" type="image/png" sizes="32x32" href="assets/images/favicon-32x32_login.png?v=20260212c">
@@ -322,7 +322,7 @@ if (!empty($siteInfo['site_email'])) {
             font-size: 0.95rem;
             transition: all 0.2s ease;
             font-family: 'Inter', sans-serif;
-            background: #ffffff;
+            background: #f3f2f2;
             color: var(--text-dark);
         }
 
@@ -396,7 +396,7 @@ if (!empty($siteInfo['site_email'])) {
                 <img src="assets/images/presenova.png" alt="Presenova">
             </div>
             <h1 class="login-title">Lupa Password</h1>
-            <p class="login-subtitle">Reset password untuk akun siswa dengan validasi ketat.</p>
+            <p class="login-subtitle">Presenova Present</p>
         </div>
 
         <div class="login-card">
@@ -415,8 +415,8 @@ if (!empty($siteInfo['site_email'])) {
             <?php endif; ?>
 
             <div class="info-box">
-                <strong>Catatan:</strong> halaman publik ini hanya untuk reset akun <strong>Siswa</strong>.
-                Akun Guru/Admin wajib direset oleh admin dari dashboard.
+                <strong>Catatan:</strong> halaman ini hanya untuk reset akun <strong>Siswa</strong>.
+                Akun Guru wajib direset oleh admin.
                 <?php if (!empty($contactParts)) : ?>
                     <br>
                     <strong>Kontak:</strong> <?php echo implode(' | ', $contactParts); ?>
@@ -427,12 +427,12 @@ if (!empty($siteInfo['site_email'])) {
                 <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars($csrfToken, ENT_QUOTES, 'UTF-8'); ?>">
 
                 <div class="form-group">
-                    <label class="form-label" for="role">Peran</label>
+                    <label class="form-label" for="role">Role</label>
                     <select class="form-control" id="role" name="role">
                         <option value="siswa" selected>Siswa</option>
                         <option value="guru" disabled>Guru (reset via admin)</option>
                     </select>
-                    <p class="role-help">Pilihan Guru ditutup demi keamanan publik.</p>
+                    <p class="role-help">Guru harap mereset melalui admin.</p>
                 </div>
 
                 <div class="form-group">
@@ -459,7 +459,7 @@ if (!empty($siteInfo['site_email'])) {
                            maxlength="120"
                            placeholder="Masukkan nama persis seperti di database"
                            required>
-                    <p class="role-help">Wajib sama persis dengan data database (beda 1 huruf akan ditolak).</p>
+                    <p class="role-help">Wajib sama persis dengan data NISN anda (beda 1 huruf akan ditolak).</p>
                 </div>
 
                 <button type="submit" class="btn-submit">

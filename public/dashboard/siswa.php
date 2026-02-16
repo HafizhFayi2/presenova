@@ -2,6 +2,7 @@
 require_once '../includes/config.php';
 require_once '../includes/auth.php';
 require_once '../includes/face_matcher.php';
+require_once '../helpers/storage_path_helper.php';
 
 $auth = new Auth();
 
@@ -21,8 +22,34 @@ if (!isset($_SESSION['has_face']) || !$_SESSION['has_face']) {
     exit();
 }
 
+$page = isset($_GET['page']) ? $_GET['page'] : 'dashboard';
+
 require_once '../includes/database.php';
 $db = new Database();
+
+if (!function_exists('hasPoseCaptureDataset')) {
+    function hasPoseCaptureDataset($studentNisn, $className, $studentName)
+    {
+        $studentNisn = trim((string) $studentNisn);
+        if ($studentNisn === '') {
+            return false;
+        }
+        $baseDir = realpath(__DIR__ . '/../uploads/faces');
+        if ($baseDir === false) {
+            $baseDir = dirname(__DIR__) . DIRECTORY_SEPARATOR . 'uploads' . DIRECTORY_SEPARATOR . 'faces';
+        }
+        $classFolder = storage_class_folder($className ?: 'kelas');
+        $studentFolder = storage_student_folder($studentName ?: ('siswa_' . $studentNisn));
+        $poseDir = rtrim($baseDir, '/\\') . DIRECTORY_SEPARATOR . $classFolder . DIRECTORY_SEPARATOR . $studentFolder . DIRECTORY_SEPARATOR . 'pose';
+        if (!is_dir($poseDir)) {
+            return false;
+        }
+        $right = glob($poseDir . DIRECTORY_SEPARATOR . 'right_*.jpg') ?: [];
+        $left = glob($poseDir . DIRECTORY_SEPARATOR . 'left_*.jpg') ?: [];
+        $front = glob($poseDir . DIRECTORY_SEPARATOR . 'front_*.jpg') ?: [];
+        return count($right) >= 5 && count($left) >= 5 && count($front) >= 1;
+    }
+}
 
 // Get student info
 $student_id = $_SESSION['student_id'];
@@ -33,6 +60,35 @@ $sql = "SELECT s.*, c.class_name, j.name as jurusan_name
         WHERE s.id = ?";
 $stmt = $db->query($sql, [$student_id]);
 $student = $stmt->fetch();
+
+if (!$student) {
+    header("Location: ../login.php");
+    exit();
+}
+
+$faceMatcherGate = new FaceMatcher();
+$resolvedReferencePath = $faceMatcherGate->getReferencePath(
+    $student['student_nisn'] ?? '',
+    $student['photo_reference'] ?? ''
+);
+if (!$resolvedReferencePath) {
+    $_SESSION['has_face'] = false;
+    $_SESSION['face_reference_notice'] = 'Foto referensi wajah belum lengkap. Silakan lakukan register ulang.';
+    header("Location: ../register.php?upload_face=1");
+    exit();
+}
+$_SESSION['has_face'] = true;
+$hasPoseCapture = hasPoseCaptureDataset(
+    $student['student_nisn'] ?? '',
+    $student['class_name'] ?? '',
+    $student['student_name'] ?? ''
+);
+$_SESSION['has_pose_capture'] = $hasPoseCapture;
+if (!$hasPoseCapture) {
+    $_SESSION['face_pose_notice'] = 'Lengkapi capture pose kepala (kanan, kiri, depan) sebelum menggunakan dashboard.';
+    header("Location: ../register.php?upload_face=1&pose_only=1");
+    exit();
+}
 
 // Resolve student profile photo for sidebar logo
 $profileImageUrl = null;
@@ -61,9 +117,6 @@ if (!$profileImageUrl && !empty($student['student_nisn'])) {
 if (!$profileImageUrl) {
     $profileImageUrl = '../assets/images/presenova.png';
 }
-
-// Get page parameter for navigation
-$page = isset($_GET['page']) ? $_GET['page'] : 'dashboard';
 
 // Get today's schedule for dashboard
 $today = date('Y-m-d');
@@ -147,9 +200,9 @@ $active_siswa_section_css = $siswa_section_css[$page] ?? null;
     </script>
     
     
-<link rel="stylesheet" href="../assets/css/legacy-dashboard/siswa.css" data-inline-style="extracted">
+<link rel="stylesheet" href="../assets/css/siswa.css" data-inline-style="extracted">
     <?php if ($active_siswa_section_css !== null): ?>
-    <link rel="stylesheet" href="../assets/css/legacy-dashboard/sections/<?php echo $active_siswa_section_css; ?>">
+    <link rel="stylesheet" href="../assets/css/sections/<?php echo $active_siswa_section_css; ?>">
     <?php endif; ?>
 
 </head>

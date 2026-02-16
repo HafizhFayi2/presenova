@@ -1,0 +1,74 @@
+[
+    {
+        "timestamp": "2026-02-16 10:33:16",
+        "student_id": 10,
+        "similarity": 94.49,
+        "passed": false,
+        "details": {
+            "source": "python-deepface",
+            "model_name": "SFace",
+            "distance_metric": "cosine",
+            "detector_backend": "mtcnn",
+            "stage_used": "backup",
+            "distance": 0.326668,
+            "deepface_threshold": 0.593,
+            "verified_by_deepface": true,
+            "reference_image": "123456-HAPIS_1770691597.jpg",
+            "total_references_scanned": 1,
+            "total_attempts": 2,
+            "runtime_limited": false,
+            "backup_enabled": true,
+            "backup_model": "SFace",
+            "backup_detector": "mtcnn",
+            "attempts": [
+                {
+                    "stage": "primary",
+                    "model_name": "SFace",
+                    "reference_image": "123456-HAPIS_1770691597.jpg",
+                    "detector_backend": "opencv",
+                    "distance": 0.766159,
+                    "threshold": 0.593,
+                    "verified": false,
+                    "similarity": 63.72
+                },
+                {
+                    "stage": "backup",
+                    "model_name": "SFace",
+                    "reference_image": "123456-HAPIS_1770691597.jpg",
+                    "detector_backend": "mtcnn",
+                    "distance": 0.326668,
+                    "threshold": 0.593,
+                    "verified": true,
+                    "similarity": 94.49
+                }
+            ],
+            "face_box": {
+                "x": 230,
+                "y": 154,
+                "w": 190,
+                "h": 256
+            },
+            "threshold": 86,
+            "model": "SFace",
+            "detector": "opencv",
+            "metric": "cosine",
+            "client_distance": 0.6588,
+            "client_distance_threshold": 0.55,
+            "client_descriptor_rejected": true
+        }
+    },
+    {
+        "timestamp": "2026-02-16 12:13:50",
+        "student_id": 10,
+        "similarity": 91.5,
+        "passed": true,
+        "details": {
+            "match_source": "face_matching_ticket",
+            "ticket_issued_at": 1771218765,
+            "ticket_expires_at": 1771219365,
+            "client_distance": 0.6296,
+            "client_distance_threshold": 0.55,
+            "client_descriptor_mismatch": true
+        }
+    }
+]

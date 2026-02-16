@@ -452,6 +452,7 @@ if (isset($db)) {
 <script src="../face/faces_logics/face-api.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r134/three.min.js"></script>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     const page = document.querySelector('.face-recognition-page');
@@ -601,6 +602,7 @@ document.addEventListener('DOMContentLoaded', function() {
     let attendanceMap = null;
     let attendanceMapMarker = null;
     let lastCapturedData = '';
+    let lastServerMatchToken = '';
     let matchPassed = false;
     let attendanceSubmitting = false;
     let attendanceDone = false;
@@ -1153,11 +1155,12 @@ document.addEventListener('DOMContentLoaded', function() {
                 minZoom: 14,
                 tileSize: 512,
                 zoomOffset: -1,
-                detectRetina: true
+                detectRetina: true,
+                crossOrigin: true
             }).addTo(attendanceMap);
         }
         const center = L.latLng(lat, lng);
-        attendanceMap.setView(center, 18);
+        attendanceMap.setView(center, 19);
         if (!attendanceMapMarker) {
             attendanceMapMarker = L.circleMarker(center, {
                 radius: 6,
@@ -1174,6 +1177,29 @@ document.addEventListener('DOMContentLoaded', function() {
                 attendanceMap.invalidateSize();
             }
         });
+    }
+
+    async function captureAttendanceSnapshot() {
+        if (typeof html2canvas !== 'function') {
+            return '';
+        }
+        const target = attendanceModalEl ? attendanceModalEl.querySelector('.attendance-photo-wrap') : null;
+        if (!target) {
+            return '';
+        }
+        ensureAttendanceMap(currentLat, currentLng);
+        await new Promise((resolve) => setTimeout(resolve, 160));
+        try {
+            const canvas = await html2canvas(target, {
+                backgroundColor: null,
+                scale: Math.min(2, window.devicePixelRatio || 1.5),
+                useCORS: true,
+                allowTaint: false
+            });
+            return canvas.toDataURL('image/jpeg', 0.9);
+        } catch (err) {
+            return '';
+        }
     }
 
     function buildAttendanceInfo() {
@@ -2391,6 +2417,7 @@ document.addEventListener('DOMContentLoaded', function() {
         setSimilarity(0);
         lastFaceDistance = null;
         lastDescriptorSimilarity = 0;
+        lastServerMatchToken = '';
         matchPassed = false;
         attendanceDone = false;
         proceedBtn.disabled = true;
@@ -2626,6 +2653,7 @@ document.addEventListener('DOMContentLoaded', function() {
             setSimilarity(0);
             lastFaceDistance = null;
             lastDescriptorSimilarity = 0;
+            lastServerMatchToken = '';
             return false;
         }
 
@@ -2645,8 +2673,10 @@ document.addEventListener('DOMContentLoaded', function() {
             setSimilarity(0);
             lastFaceDistance = null;
             lastDescriptorSimilarity = 0;
+            lastServerMatchToken = '';
             return false;
         }
+        lastServerMatchToken = serverResult?.match_token ? String(serverResult.match_token) : '';
 
         const thresholdValue = parseFloat(serverResult.threshold || threshold);
         const serverSimilarity = parseFloat(serverResult.similarity || 0);
@@ -2707,6 +2737,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         proceedBtn.disabled = true;
         matchPassed = false;
+        lastServerMatchToken = '';
         lastDescriptorSimilarity = localDescriptor ? localDescriptor.similarity : 0;
         return false;
     }
@@ -2805,6 +2836,7 @@ document.addEventListener('DOMContentLoaded', function() {
         setSimilarity(0);
         lastFaceDistance = null;
         lastDescriptorSimilarity = 0;
+        lastServerMatchToken = '';
         matchPassed = false;
         proceedBtn.disabled = true;
         previewWrap.classList.remove('show');
@@ -2848,6 +2880,10 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         if (!lastCapturedData) {
             setStatus('Foto verifikasi belum tersedia. Silakan ambil ulang.');
+            return;
+        }
+        if (!lastServerMatchToken) {
+            setStatus('Sesi verifikasi wajah sudah tidak valid. Silakan Ambil & Cocokkan ulang.');
             return;
         }
         const hasGeo = !gpsEnabled || (Number.isFinite(currentLat) && Number.isFinite(currentLng));
@@ -2923,13 +2959,15 @@ document.addEventListener('DOMContentLoaded', function() {
         attendanceSubmitting = false;
         updateAttendanceInfo();
         if (attendanceSubmitBtn) {
-            const canSubmit = matchPassed && studentScheduleId && lastCapturedData && (!requiresGeo || hasGeo) && (!requiresRadius || geoVerified);
+            const canSubmit = matchPassed && studentScheduleId && lastCapturedData && lastServerMatchToken && (!requiresGeo || hasGeo) && (!requiresRadius || geoVerified);
             attendanceSubmitBtn.disabled = !canSubmit;
             if (!canSubmit) {
                 if (!studentScheduleId) {
                     setAttendanceModalMessage('Jadwal belum dipilih. Kembali ke menu Jadwal.', 'danger');
                 } else if (!lastCapturedData) {
                     setAttendanceModalMessage('Foto verifikasi belum tersedia.', 'danger');
+                } else if (!lastServerMatchToken) {
+                    setAttendanceModalMessage('Sesi verifikasi habis. Silakan Ambil & Cocokkan ulang.', 'danger');
                 } else if (requiresGeo && !hasGeo) {
                     setAttendanceModalMessage('Lokasi belum tersedia. Pastikan GPS aktif.', 'danger');
                 } else if (requiresRadius && !geoVerified) {
@@ -2958,6 +2996,10 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         if (!lastCapturedData) {
             setAttendanceModalMessage('Foto belum tersedia. Silakan ambil ulang.', 'danger');
+            return;
+        }
+        if (!lastServerMatchToken) {
+            setAttendanceModalMessage('Sesi verifikasi habis. Silakan Ambil & Cocokkan ulang.', 'danger');
             return;
         }
         const hasGeo = !gpsEnabled || (Number.isFinite(currentLat) && Number.isFinite(currentLng));
@@ -2990,9 +3032,16 @@ document.addEventListener('DOMContentLoaded', function() {
         payload.append('face_similarity', lastSimilarity.toFixed(2));
         payload.append('face_verified', matchPassed ? '1' : '0');
         payload.append('face_distance', Number.isFinite(lastFaceDistance) ? lastFaceDistance.toFixed(4) : '');
+        if (lastServerMatchToken) {
+            payload.append('face_match_token', lastServerMatchToken);
+        }
         payload.append('present_id', String(getPresentId(absenceMode)));
         if (attendanceInfoText) {
             payload.append('information', attendanceInfoText);
+        }
+        const snapshotData = await captureAttendanceSnapshot();
+        if (snapshotData) {
+            payload.append('validation_snapshot', snapshotData);
         }
 
         try {
@@ -3025,6 +3074,7 @@ document.addEventListener('DOMContentLoaded', function() {
             setAttendanceModalMessage(`Absensi berhasil (${statusLabel || 'SUCCESS'}).`, 'success');
             setBadge('success', 'Selesai');
             setStatus('Absensi berhasil. Status jadwal diperbarui.');
+            lastServerMatchToken = '';
             if (attendanceInfoStatus) {
                 const baseLabel = getModeLabel(absenceMode);
                 attendanceInfoStatus.textContent = statusLabel ? `${baseLabel} (${statusLabel})` : baseLabel;

@@ -114,9 +114,9 @@ $active_guru_section_css = $guru_section_css[$page] ?? null;
     </script>
     
     
-<link rel="stylesheet" href="../assets/css/legacy-dashboard/guru.css" data-inline-style="extracted">
+<link rel="stylesheet" href="../assets/css/guru.css" data-inline-style="extracted">
     <?php if ($active_guru_section_css !== null): ?>
-    <link rel="stylesheet" href="../assets/css/legacy-dashboard/sections/<?php echo $active_guru_section_css; ?>">
+    <link rel="stylesheet" href="../assets/css/sections/<?php echo $active_guru_section_css; ?>">
     <?php endif; ?>
 
 </head>

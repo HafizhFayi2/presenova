@@ -1,0 +1,66 @@
+/* Extracted from sections/location.php */
+
+.map-controls {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 10px;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.map-type-group {
+    display: inline-flex;
+    gap: 6px;
+    align-items: center;
+}
+
+.map-controls .btn.active {
+    background: var(--primary-blue);
+    color: #fff;
+    border-color: var(--primary-blue);
+}
+
+.map-frame {
+    border-radius: 12px;
+    overflow: hidden;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    position: relative;
+    width: 100%;
+    min-height: 260px;
+    height: 340px;
+}
+
+.map-canvas {
+    width: 100%;
+    height: 100%;
+}
+
+.map-open-link {
+    position: absolute;
+    top: 10px;
+    right: 12px;
+    z-index: 3;
+    background: rgba(15, 23, 42, 0.75);
+    color: #fff;
+    padding: 6px 10px;
+    border-radius: 999px;
+    font-size: 0.75rem;
+    text-decoration: none;
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    backdrop-filter: blur(6px);
+}
+
+.map-open-link:hover {
+    color: #fff;
+    background: rgba(30, 41, 59, 0.85);
+}
+
+.map-meta {
+    margin-top: 10px;
+    display: flex;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 8px;
+    font-size: 0.85rem;
+    color: var(--text-secondary-color);
+}

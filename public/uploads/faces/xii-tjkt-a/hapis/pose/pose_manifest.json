@@ -1,0 +1,10 @@
+{
+    "student_id": 10,
+    "student_nisn": "123456",
+    "saved_at": "2026-02-16T10:10:28+07:00",
+    "counts": {
+        "right": 5,
+        "left": 5,
+        "front": 1
+    }
+}

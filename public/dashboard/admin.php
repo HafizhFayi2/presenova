@@ -817,6 +817,10 @@ function resolveAttendanceFile($basePath, $date, $filename) {
         if (is_file($candidate)) {
             return $candidate;
         }
+        $candidate = rtrim($basePath, '/\\') . DIRECTORY_SEPARATOR . 'uploads' . DIRECTORY_SEPARATOR . 'attendance' . DIRECTORY_SEPARATOR . $filename;
+        if (is_file($candidate)) {
+            return $candidate;
+        }
     }
     if ($date) {
         $candidate = rtrim($basePath, '/\\') . DIRECTORY_SEPARATOR . 'uploads' . DIRECTORY_SEPARATOR . 'attendance' . DIRECTORY_SEPARATOR . $date . DIRECTORY_SEPARATOR . $filename;
@@ -1238,9 +1242,9 @@ $admin_section_css = [
 $active_admin_section_css = $admin_section_css[$table] ?? null;
 $active_admin_section_css_href = null;
 if ($active_admin_section_css !== null) {
-    $active_admin_section_css_file = __DIR__ . '/../assets/css/legacy-dashboard/sections/' . $active_admin_section_css;
+    $active_admin_section_css_file = __DIR__ . '/../assets/css/sections/' . $active_admin_section_css;
     $active_admin_section_css_version = is_file($active_admin_section_css_file) ? (string) filemtime($active_admin_section_css_file) : date('YmdHis');
-    $active_admin_section_css_href = '../assets/css/legacy-dashboard/sections/' . $active_admin_section_css . '?v=' . rawurlencode($active_admin_section_css_version);
+    $active_admin_section_css_href = '../assets/css/sections/' . $active_admin_section_css . '?v=' . rawurlencode($active_admin_section_css_version);
 }
 ?>
 <!DOCTYPE html>
@@ -1320,8 +1324,6 @@ if ($active_admin_section_css !== null) {
     </script>
     
     
-<link rel="stylesheet" href="../assets/css/legacy-dashboard/admin.css" data-inline-style="extracted">
-
     <?php if ($active_admin_section_css_href !== null): ?>
     <link rel="stylesheet" href="<?php echo htmlspecialchars($active_admin_section_css_href, ENT_QUOTES, 'UTF-8'); ?>">
     <?php endif; ?>
