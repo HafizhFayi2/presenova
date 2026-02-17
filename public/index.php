@@ -79,6 +79,7 @@ $loginGuruUrl = $loginUrl . '?role=teacher';
             --text-primary: #ffffff;
             --text-secondary: #8b92a8;
             --gradient-neon: linear-gradient(135deg, #00ff88 0%, #00d4ff 100%);
+            --gradient-white: linear-gradient(135deg, #bfc3c180 0%, #474b4a 80%);
             --gradient-purple: linear-gradient(135deg, #b47aff 0%, #ff00ff 100%);
             --glow-green: 0 0 20px rgba(0, 255, 136, 0.5);
             --glow-blue: 0 0 20px rgba(0, 212, 255, 0.5);
@@ -381,7 +382,7 @@ $loginGuruUrl = $loginUrl . '?role=teacher';
         }
 
         .btn-neon {
-            background: var(--gradient-white);
+            background: var(--gradient-white, linear-gradient(135deg, #f3fff9 0%, #d9fff0 100%));
             color: var(--dark-bg);
             padding: 0.8rem 2rem;
             border-radius: 10px;
@@ -398,6 +399,25 @@ $loginGuruUrl = $loginUrl . '?role=teacher';
             letter-spacing: 1.5px;
             position: relative;
             overflow: hidden;
+        }
+
+        .btn-neon i {
+            color: currentColor;
+            font-size: 1rem;
+            line-height: 1;
+        }
+
+        .btn-neon.d-lg-none {
+            min-width: 72px;
+            min-height: 46px;
+            justify-content: center;
+            padding: 0.72rem 0.95rem;
+            gap: 0;
+            border-radius: 12px;
+            background: rgba(0, 255, 136, 0.14);
+            border-color: rgba(0, 255, 136, 0.42);
+            color: var(--neon-green);
+            box-shadow: 0 0 18px rgba(0, 255, 136, 0.26);
         }
 
         .btn-neon::before {
@@ -1164,6 +1184,16 @@ $loginGuruUrl = $loginUrl . '?role=teacher';
             .section-title { font-size: 1.8rem; }
             .device-mockup { width: 344px; height: 520px; }
             .feature-card, .step-card { padding: 2rem; }
+
+            .btn-neon.d-lg-none {
+                min-width: 64px;
+                min-height: 42px;
+                padding: 0.62rem 0.78rem;
+            }
+
+            .btn-neon.d-lg-none i {
+                font-size: 1.04rem;
+            }
         }
     </style>
 </head>

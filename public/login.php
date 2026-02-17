@@ -479,41 +479,56 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 
         /* Home Link */
         .home-link {
-            position: absolute;
-            top: 20px;
-            left: 20px;
+            position: fixed;
+            top: 18px;
+            left: 18px;
+            z-index: 30;
+            padding: 0.5rem 0.85rem;
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.96);
+            border: 1px solid rgba(16, 185, 129, 0.2);
+            box-shadow: 0 8px 18px rgba(15, 23, 42, 0.1);
             color: var(--primary-green);
             text-decoration: none;
             font-weight: 500;
             display: flex;
             align-items: center;
-            gap: 0.5rem;
-            font-size: 0.9rem;
+            gap: 0.45rem;
+            font-size: 0.88rem;
             transition: all 0.2s ease;
         }
 
+        .home-link i {
+            font-size: 0.82rem;
+        }
+
         .home-link:hover {
-            transform: translateX(-3px);
+            transform: translateY(-1px);
+            box-shadow: 0 12px 24px rgba(15, 23, 42, 0.14);
         }
 
         /* Responsive */
         @media (max-width: 576px) {
             body {
                 align-items: flex-start;
+                flex-direction: column;
                 padding: 16px;
             }
 
             .login-container {
                 max-width: 100%;
+                width: 100%;
             }
 
             .login-header {
                 margin-bottom: 1.5rem;
+                text-align: left;
             }
 
             .logo-container {
                 gap: 10px;
                 margin-bottom: 1rem;
+                justify-content: flex-start;
             }
 
             .logo-container img {
@@ -541,13 +556,20 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 position: relative;
                 top: 0;
                 left: 0;
-                margin-bottom: 0.75rem;
-                width: 100%;
-                justify-content: center;
+                margin-bottom: 0.9rem;
+                align-self: flex-start;
+                width: auto;
+                max-width: 100%;
+                justify-content: flex-start;
+                padding: 0.5rem 0.82rem;
             }
         }
 
         @media (max-width: 480px) {
+            body {
+                padding: 12px;
+            }
+
             .login-card {
                 padding: 1.25rem;
             }
@@ -564,8 +586,9 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 position: relative;
                 top: 0;
                 left: 0;
-                margin-bottom: 1rem;
-                justify-content: center;
+                margin-bottom: 0.85rem;
+                font-size: 0.84rem;
+                padding: 0.46rem 0.72rem;
             }
         }
     </style>
