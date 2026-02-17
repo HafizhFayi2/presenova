@@ -7,9 +7,19 @@ require_once '../includes/face_matcher.php';
 
 header('Content-Type: application/json');
 
+if (function_exists('ignore_user_abort')) {
+    @ignore_user_abort(true);
+}
+
 if (function_exists('set_time_limit')) {
-    $runtimeBudget = defined('FACE_MATCH_TIMEOUT_SECONDS') ? ((int) FACE_MATCH_TIMEOUT_SECONDS + 20) : 120;
-    @set_time_limit(max(120, $runtimeBudget));
+    $pythonTimeout = defined('FACE_MATCH_TIMEOUT_SECONDS') ? max(30, (int) FACE_MATCH_TIMEOUT_SECONDS) : 60;
+    $serverTimeout = defined('FACE_MATCH_SERVER_TIMEOUT_SECONDS')
+        ? max($pythonTimeout + 45, (int) FACE_MATCH_SERVER_TIMEOUT_SECONDS)
+        : max(180, $pythonTimeout + 90);
+    @set_time_limit($serverTimeout);
+    @ini_set('max_execution_time', (string) $serverTimeout);
+    @ini_set('max_input_time', (string) $serverTimeout);
+    @ini_set('default_socket_timeout', (string) max(120, $serverTimeout));
 }
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {

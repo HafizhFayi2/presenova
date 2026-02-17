@@ -573,6 +573,15 @@ document.addEventListener('DOMContentLoaded', function() {
     const locationSampleWindow = 3;
     const stableWithinThreshold = 1;
     const stableOutsideThreshold = 2;
+    const memoryMonitorIntervalMs = 1500;
+    const memoryWarningPercent = 72;
+    const memoryCriticalPercent = 85;
+    const memoryRecoverPercent = 62;
+    const memoryWarningLagMs = 260;
+    const memoryCriticalLagMs = 700;
+    const memoryRecoverLagMs = 140;
+    const memoryCriticalHoldMs = 2800;
+    const memoryRecoverRequiredTicks = 2;
 
     let stream = null;
     let modelsReady = false;
@@ -644,6 +653,14 @@ document.addEventListener('DOMContentLoaded', function() {
     let poseLastDirection = 'front';
     let poseSaving = false;
     let poseSaved = false;
+    let memoryPressureState = 'normal';
+    let memoryGuardHoldUntil = 0;
+    let memoryRecoverStableTicks = 0;
+    let memoryLastTickAt = 0;
+    let memoryLastLagMs = 0;
+    let memoryLastPercent = 0;
+    let memoryLastNotifyAt = 0;
+    let poseMonitorSkipTick = 0;
 
     if (page) {
         page.classList.add('mode-hadir');
@@ -673,6 +690,104 @@ document.addEventListener('DOMContentLoaded', function() {
 
     function setCameraStatus(text) {
         cameraStatus.textContent = text;
+    }
+
+    function isMemoryGuardActive() {
+        return memoryPressureState === 'critical' || Date.now() < memoryGuardHoldUntil;
+    }
+
+    function shouldThrottlePoseLoop() {
+        if (isMemoryGuardActive()) {
+            return true;
+        }
+        if (memoryPressureState === 'warning') {
+            poseMonitorSkipTick = (poseMonitorSkipTick + 1) % 2;
+            return poseMonitorSkipTick === 1;
+        }
+        poseMonitorSkipTick = 0;
+        return false;
+    }
+
+    async function waitForMemoryResponsive(maxWaitMs = 9000) {
+        if (!isMemoryGuardActive()) {
+            return true;
+        }
+        const deadline = Date.now() + Math.max(1500, maxWaitMs);
+        while (Date.now() < deadline) {
+            if (!isMemoryGuardActive()) {
+                return true;
+            }
+            await new Promise((resolve) => setTimeout(resolve, 280));
+        }
+        return !isMemoryGuardActive();
+    }
+
+    function notifyMemoryHold(message) {
+        const now = Date.now();
+        if ((now - memoryLastNotifyAt) < 2200) {
+            return;
+        }
+        memoryLastNotifyAt = now;
+        setStatus(message);
+    }
+
+    function updateMemoryDrivenButtons() {
+        updateStartButtonState();
+        if (isMemoryGuardActive()) {
+            captureBtn.disabled = true;
+            if (poseFlowEnabled && poseStartBtn) {
+                poseStartBtn.disabled = true;
+            }
+            return;
+        }
+        updateCaptureButtonByPose();
+        refreshPoseButtons();
+    }
+
+    function setMemoryPressureState(nextState, context = {}) {
+        if (!memoryBarFill || !memorySupportBadge || !memoryStatusMessage) {
+            return;
+        }
+
+        const supportsHeap = !!context.supportsHeap;
+        const percent = Number.isFinite(context.percent) ? context.percent : memoryLastPercent;
+        const lagMs = Number.isFinite(context.lagMs) ? context.lagMs : memoryLastLagMs;
+        const previousState = memoryPressureState;
+        memoryPressureState = nextState;
+
+        memoryBarFill.classList.remove('warning', 'danger');
+
+        if (nextState === 'critical') {
+            memorySupportBadge.className = 'match-badge error';
+            memorySupportBadge.textContent = 'Menahan';
+            memoryBarFill.classList.add('danger');
+            const info = supportsHeap
+                ? `Heap ${percent.toFixed(1)}% | Lag ${Math.round(lagMs)} ms`
+                : `Lag ${Math.round(lagMs)} ms`;
+            memoryStatusMessage.textContent = `Tekanan tinggi terdeteksi (${info}). Proses berat dijeda sementara.`;
+        } else if (nextState === 'warning') {
+            memorySupportBadge.className = 'match-badge warning';
+            memorySupportBadge.textContent = 'Throttle';
+            memoryBarFill.classList.add('warning');
+            const info = supportsHeap
+                ? `Heap ${percent.toFixed(1)}% | Lag ${Math.round(lagMs)} ms`
+                : `Lag ${Math.round(lagMs)} ms`;
+            memoryStatusMessage.textContent = `Beban meningkat (${info}). Sistem memperlambat proses agar tetap responsif.`;
+        } else {
+            if (supportsHeap) {
+                memorySupportBadge.className = 'match-badge ready';
+                memorySupportBadge.textContent = 'Aktif';
+                memoryStatusMessage.textContent = `Penggunaan RAM aman (Heap ${percent.toFixed(1)}% | Lag ${Math.round(lagMs)} ms).`;
+            } else {
+                memorySupportBadge.className = 'match-badge warning';
+                memorySupportBadge.textContent = 'Terbatas';
+                memoryStatusMessage.textContent = `Browser tidak memberi data heap. Monitoring responsivitas aktif (Lag ${Math.round(lagMs)} ms).`;
+            }
+        }
+
+        if (previousState !== nextState || nextState === 'critical') {
+            updateMemoryDrivenButtons();
+        }
     }
 
     function setSimilarity(value) {
@@ -1045,6 +1160,12 @@ document.addEventListener('DOMContentLoaded', function() {
             if (!poseStarted || poseCompleted || poseMonitorBusy || !stream || !video.videoWidth) {
                 return;
             }
+            if (shouldThrottlePoseLoop()) {
+                if (isMemoryGuardActive()) {
+                    notifyMemoryHold('Perangkat sedang sibuk. Validasi pose dijeda sementara hingga stabil.');
+                }
+                return;
+            }
             poseMonitorBusy = true;
             try {
                 const sample = await detectPoseSample({ includeImage: true });
@@ -1180,6 +1301,10 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     async function captureAttendanceSnapshot() {
+        const canCapture = await waitForMemoryResponsive(5000);
+        if (!canCapture) {
+            return '';
+        }
         if (typeof html2canvas !== 'function') {
             return '';
         }
@@ -1371,39 +1496,71 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     function updateMemoryMonitor() {
-        if (!memoryUsedText || !memoryLimitText || !memoryBarFill) return;
-        if (!performance || !performance.memory) {
-            memorySupportBadge.className = 'match-badge error';
-            memorySupportBadge.textContent = 'Tidak didukung';
-            memoryUsedText.textContent = '-';
-            memoryLimitText.textContent = '-';
-            memoryBarFill.style.width = '0%';
-            memoryStatusMessage.textContent = 'Browser tidak mendukung monitoring RAM.';
-            return;
+        if (!memoryUsedText || !memoryLimitText || !memoryBarFill || !memoryStatusMessage || !memorySupportBadge) return;
+
+        const now = Date.now();
+        if (!memoryLastTickAt) {
+            memoryLastTickAt = now;
         }
+        const elapsed = now - memoryLastTickAt;
+        memoryLastTickAt = now;
+        const lagMs = Math.max(0, elapsed - memoryMonitorIntervalMs);
 
-        const used = performance.memory.usedJSHeapSize || 0;
-        const limit = performance.memory.jsHeapSizeLimit || 0;
-        const total = performance.memory.totalJSHeapSize || 0;
-        const percent = limit ? Math.min(100, (used / limit) * 100) : 0;
+        const perfMemory = (typeof performance !== 'undefined' && performance && performance.memory) ? performance.memory : null;
+        const used = perfMemory?.usedJSHeapSize || 0;
+        const limit = perfMemory?.jsHeapSizeLimit || 0;
+        const total = perfMemory?.totalJSHeapSize || 0;
+        const supportsHeap = Number.isFinite(limit) && limit > 0;
+        const percent = supportsHeap ? Math.min(100, (used / limit) * 100) : 0;
 
-        memoryUsedText.textContent = formatMB(used);
-        memoryLimitText.textContent = limit ? formatMB(limit) : formatMB(total);
-        memoryBarFill.style.width = limit ? percent.toFixed(1) + '%' : '0%';
+        memoryUsedText.textContent = supportsHeap ? formatMB(used) : '-';
+        memoryLimitText.textContent = supportsHeap
+            ? formatMB(limit)
+            : ((Number.isFinite(total) && total > 0) ? formatMB(total) : '-');
+        memoryBarFill.style.width = supportsHeap
+            ? (percent.toFixed(1) + '%')
+            : (Math.min(100, lagMs / 10).toFixed(1) + '%');
 
-        if (limit && percent >= 85) {
-            memoryStatusMessage.textContent = 'Penggunaan RAM tinggi. Pertimbangkan menutup tab lain.';
-            memoryBarFill.classList.add('danger');
+        let nextState = 'normal';
+        if ((supportsHeap && percent >= memoryCriticalPercent) || lagMs >= memoryCriticalLagMs) {
+            nextState = 'critical';
+            memoryGuardHoldUntil = Math.max(memoryGuardHoldUntil, now + memoryCriticalHoldMs);
+            memoryRecoverStableTicks = 0;
+        } else if ((supportsHeap && percent >= memoryWarningPercent) || lagMs >= memoryWarningLagMs) {
+            nextState = 'warning';
+            memoryRecoverStableTicks = 0;
         } else {
-            memoryStatusMessage.textContent = 'Penggunaan RAM dalam batas aman.';
-            memoryBarFill.classList.remove('danger');
+            const safeByHeap = !supportsHeap || percent <= memoryRecoverPercent;
+            const safeByLag = lagMs <= memoryRecoverLagMs;
+            if (safeByHeap && safeByLag) {
+                memoryRecoverStableTicks += 1;
+            } else {
+                memoryRecoverStableTicks = 0;
+            }
+
+            if (now < memoryGuardHoldUntil) {
+                nextState = 'critical';
+            } else if (memoryRecoverStableTicks < memoryRecoverRequiredTicks && memoryPressureState !== 'normal') {
+                nextState = 'warning';
+            } else if (memoryRecoverStableTicks >= memoryRecoverRequiredTicks) {
+                memoryGuardHoldUntil = 0;
+            }
         }
+
+        memoryLastPercent = supportsHeap ? percent : 0;
+        memoryLastLagMs = lagMs;
+        setMemoryPressureState(nextState, {
+            supportsHeap,
+            percent,
+            lagMs
+        });
     }
 
     function startMemoryMonitor() {
         if (memoryIntervalId) return;
+        memoryLastTickAt = Date.now();
         updateMemoryMonitor();
-        memoryIntervalId = setInterval(updateMemoryMonitor, 2000);
+        memoryIntervalId = setInterval(updateMemoryMonitor, memoryMonitorIntervalMs);
     }
 
     function stopMemoryMonitor() {
@@ -1411,6 +1568,10 @@ document.addEventListener('DOMContentLoaded', function() {
             clearInterval(memoryIntervalId);
             memoryIntervalId = null;
         }
+        memoryPressureState = 'normal';
+        memoryGuardHoldUntil = 0;
+        memoryRecoverStableTicks = 0;
+        poseMonitorSkipTick = 0;
     }
 
     function setScrollLock(locked) {
@@ -1763,6 +1924,10 @@ document.addEventListener('DOMContentLoaded', function() {
         if (!startBtn) return;
         const referenceAvailable = !!referenceUrl;
         if (!referenceAvailable) {
+            startBtn.disabled = true;
+            return;
+        }
+        if (isMemoryGuardActive()) {
             startBtn.disabled = true;
             return;
         }
@@ -2490,7 +2655,9 @@ document.addEventListener('DOMContentLoaded', function() {
             return sourceCanvas ? sourceCanvas.toDataURL('image/jpeg', 0.85) : '';
         }
 
-        const maxSide = 720;
+        const maxSide = memoryPressureState === 'critical'
+            ? 420
+            : (memoryPressureState === 'warning' ? 560 : 720);
         const srcW = sourceCanvas.width;
         const srcH = sourceCanvas.height;
         const longestSide = Math.max(srcW, srcH);
@@ -2625,6 +2792,12 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     async function performMatch(capturedData) {
+        const canProcess = await waitForMemoryResponsive(8000);
+        if (!canProcess) {
+            setBadge('warning', 'Menahan');
+            setStatus('RAM/CPU masih tinggi. Verifikasi ditunda sementara, coba lagi beberapa detik.');
+            return false;
+        }
         if (!modelsReady) {
             await loadModels();
         }
@@ -2756,6 +2929,18 @@ document.addEventListener('DOMContentLoaded', function() {
             setStatus(msg);
             return;
         }
+        if (isMemoryGuardActive()) {
+            startBtn.disabled = true;
+            setBadge('warning', 'Menahan');
+            setStatus('Perangkat sedang sibuk. Menunggu RAM/CPU stabil sebelum menyalakan kamera...');
+            const ready = await waitForMemoryResponsive(7000);
+            if (!ready) {
+                setBadge('warning', 'Tertunda');
+                setStatus('Perangkat masih sibuk. Coba aktifkan kamera lagi beberapa saat.');
+                updateStartButtonState();
+                return;
+            }
+        }
         startBtn.disabled = true;
         setBadge('loading', 'Memuat');
         setStatus('Memuat model dan menyiapkan kamera...');
@@ -2799,6 +2984,17 @@ document.addEventListener('DOMContentLoaded', function() {
             setBadge('warning', 'Pose Diperlukan');
             setStatus('Selesaikan validasi pose otomatis terlebih dahulu.');
             return;
+        }
+        if (isMemoryGuardActive()) {
+            setBadge('warning', 'Menahan');
+            setStatus('Perangkat sedang sibuk. Menunggu memori stabil sebelum verifikasi...');
+            const ready = await waitForMemoryResponsive(8000);
+            if (!ready) {
+                setBadge('warning', 'Tertunda');
+                setStatus('RAM/CPU masih tinggi. Tunggu sebentar lalu coba lagi.');
+                updateCaptureButtonByPose();
+                return;
+            }
         }
         captureBtn.disabled = true;
         setBadge('loading', 'Memeriksa');

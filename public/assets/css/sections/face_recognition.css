@@ -1773,6 +1773,10 @@ body.attendance-modal-open .modal-backdrop {
     background: linear-gradient(90deg, rgba(220, 53, 69, 0.9), rgba(255, 159, 107, 0.9));
 }
 
+.memory-bar span.warning {
+    background: linear-gradient(90deg, rgba(245, 158, 11, 0.95), rgba(59, 130, 246, 0.9));
+}
+
 @media (max-width: 992px) {
     .face-layout {
         grid-template-columns: 1fr;

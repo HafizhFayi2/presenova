@@ -41,5 +41,8 @@ ErrorDocument 504 /presenova/404.php
 <IfModule php_module>
     php_flag display_errors Off
     php_flag display_startup_errors Off
+    php_value max_execution_time 240
+    php_value max_input_time 240
+    php_value default_socket_timeout 240
     php_value auto_prepend_file "C:/xampp/htdocs/presenova/public/includes/global_error_handler.php"
 </IfModule>

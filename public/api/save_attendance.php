@@ -13,6 +13,20 @@ header('Content-Type: application/json');
 ini_set('display_errors', 0);
 error_reporting(E_ALL);
 
+if (function_exists('ignore_user_abort')) {
+    @ignore_user_abort(true);
+}
+if (function_exists('set_time_limit')) {
+    $pythonTimeout = defined('FACE_MATCH_TIMEOUT_SECONDS') ? max(30, (int) FACE_MATCH_TIMEOUT_SECONDS) : 60;
+    $serverTimeout = defined('FACE_MATCH_SERVER_TIMEOUT_SECONDS')
+        ? max($pythonTimeout + 45, (int) FACE_MATCH_SERVER_TIMEOUT_SECONDS)
+        : max(180, $pythonTimeout + 90);
+    @set_time_limit($serverTimeout);
+    @ini_set('max_execution_time', (string) $serverTimeout);
+    @ini_set('max_input_time', (string) $serverTimeout);
+    @ini_set('default_socket_timeout', (string) max(120, $serverTimeout));
+}
+
 $logFile = __DIR__ . '/../uploads/temp/attendance_error.log';
 
 function logAttendanceError($message, array $context = []) {

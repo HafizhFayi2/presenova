@@ -6,6 +6,28 @@
     gap: 16px;
 }
 
+.attendance-chart-wrap {
+    position: relative;
+    width: 100%;
+    min-height: 260px;
+    height: clamp(260px, 38vh, 420px);
+}
+
+#attendanceChart {
+    display: block;
+    width: 100% !important;
+    height: 100% !important;
+}
+
+.attendance-daily-summary-table {
+    width: 100%;
+}
+
+.attendance-daily-summary-table th,
+.attendance-daily-summary-table td {
+    white-space: nowrap;
+}
+
 .attendance-stat-card {
     position: relative;
     border-radius: 14px;
@@ -315,6 +337,10 @@ html[data-theme="dark"] #filterStatus,
     .attendance-stats-grid {
         grid-template-columns: repeat(3, minmax(0, 1fr));
     }
+
+    .attendance-chart-wrap {
+        height: clamp(240px, 34vh, 360px);
+    }
 }
 
 @media (max-width: 768px) {
@@ -325,10 +351,24 @@ html[data-theme="dark"] #filterStatus,
     .attendance-stat-card {
         padding: 12px;
     }
+
+    .attendance-chart-wrap {
+        min-height: 220px;
+        height: 240px;
+    }
+
+    .attendance-daily-summary-table {
+        min-width: 360px;
+    }
 }
 
 @media (max-width: 480px) {
     .attendance-stats-grid {
         grid-template-columns: 1fr;
+    }
+
+    .attendance-chart-wrap {
+        min-height: 200px;
+        height: 220px;
     }
 }
