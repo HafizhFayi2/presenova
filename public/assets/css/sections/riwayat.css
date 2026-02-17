@@ -138,9 +138,20 @@
     background: linear-gradient(135deg, rgba(53, 121, 246, 0.2), rgba(255, 159, 107, 0.15));
 }
 
+.riwayat-filter-wrap {
+    margin-bottom: 1.1rem !important;
+}
+
+.accordion-button .d-flex.justify-content-between {
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
 .section-shell > .table-responsive {
     border-radius: 16px;
-    overflow: hidden;
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
     border: 1px solid var(--border);
     background: rgba(255, 255, 255, 0.6);
     box-shadow: var(--glass-shadow);
@@ -155,6 +166,45 @@
     border-collapse: separate;
     border-spacing: 0 8px;
     background: transparent;
+}
+
+.section-shell .table-responsive {
+    -webkit-overflow-scrolling: touch;
+}
+
+.riwayat-table-responsive {
+    overflow-x: scroll;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-x;
+    max-width: 100%;
+    padding-bottom: 6px;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(53, 121, 246, 0.95) rgba(148, 163, 184, 0.25);
+}
+
+.riwayat-table-responsive::-webkit-scrollbar {
+    height: 8px;
+}
+
+.riwayat-table-responsive::-webkit-scrollbar-track {
+    background: rgba(148, 163, 184, 0.25);
+    border-radius: 999px;
+}
+
+.riwayat-table-responsive::-webkit-scrollbar-thumb {
+    background: linear-gradient(90deg, rgba(53, 121, 246, 0.95), rgba(99, 102, 241, 0.9));
+    border-radius: 999px;
+}
+
+.riwayat-table-responsive .riwayat-table {
+    min-width: 880px;
+    table-layout: auto;
+}
+
+#riwayatSection .liquidGlass-wrapper .table-responsive {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
 }
 
 .section-shell > .table-responsive > .table thead th {
@@ -778,6 +828,45 @@ body.riwayat-modal-open .modal-backdrop {
 }
 
 @media (max-width: 992px) {
+    .section-shell .liquidGlass-wrapper {
+        overflow-x: hidden !important;
+        overflow-y: hidden !important;
+    }
+
+    .riwayat-header {
+        padding: 16px;
+        gap: 12px;
+        flex-wrap: wrap;
+    }
+
+    .header-chip {
+        font-size: 0.78rem;
+        padding: 7px 10px;
+    }
+
+    .filter-card .card-body {
+        padding: 14px;
+    }
+
+    .filter-grid {
+        row-gap: 10px;
+    }
+
+    .riwayat-table-responsive .riwayat-table {
+        min-width: 760px;
+    }
+
+    .riwayat-table-responsive .riwayat-table th,
+    .riwayat-table-responsive .riwayat-table td {
+        white-space: nowrap;
+        font-size: 0.8rem;
+        padding: 0.58rem 0.55rem;
+    }
+
+    .riwayat-table .btn {
+        white-space: nowrap;
+    }
+
     .riwayat-modal .modal-content {
         max-height: 82vh;
     }
@@ -787,7 +876,60 @@ body.riwayat-modal-open .modal-backdrop {
     }
 }
 
+@media (max-width: 768px) {
+    .riwayat-header {
+        align-items: flex-start;
+    }
+
+    .header-left {
+        width: 100%;
+    }
+
+    .header-chip {
+        align-self: flex-start;
+    }
+
+    .riwayat-table-responsive .riwayat-table {
+        min-width: 700px;
+    }
+}
+
 @media (max-width: 576px) {
+    .section-shell {
+        padding: 15px;
+        border-radius: 14px;
+    }
+
+    .section-title {
+        font-size: 1rem;
+        gap: 8px;
+    }
+
+    .title-icon {
+        width: 30px;
+        height: 30px;
+        font-size: 0.82rem;
+    }
+
+    .riwayat-table-responsive {
+        border-radius: 12px;
+    }
+
+    .riwayat-table-responsive .riwayat-table {
+        min-width: 560px;
+    }
+
+    .riwayat-table-responsive .riwayat-table th,
+    .riwayat-table-responsive .riwayat-table td {
+        font-size: 0.74rem;
+        padding: 0.52rem 0.5rem;
+    }
+
+    .riwayat-table .btn {
+        font-size: 0.72rem;
+        padding: 0.3rem 0.46rem;
+    }
+
     .riwayat-modal .modal-dialog {
         width: min(96vw, 720px);
         margin: 1.5vh auto;
@@ -800,6 +942,86 @@ body.riwayat-modal-open .modal-backdrop {
     .riwayat-modal .modal-body {
         max-height: calc(88vh - 120px);
         padding: 14px;
+    }
+}
+
+@media (max-width: 420px) {
+    .riwayat-header {
+        padding: 14px;
+        gap: 10px;
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .header-icon {
+        width: 38px;
+        height: 38px;
+    }
+
+    .riwayat-table-responsive .riwayat-table {
+        min-width: 700px;
+        table-layout: auto;
+    }
+
+    .riwayat-table-responsive .riwayat-table th,
+    .riwayat-table-responsive .riwayat-table td {
+        white-space: nowrap !important;
+        vertical-align: middle;
+    }
+
+    .riwayat-table-responsive .riwayat-table .badge,
+    .riwayat-table-responsive .riwayat-table .btn {
+        white-space: nowrap !important;
+    }
+
+    .riwayat-table .btn {
+        font-size: 0.68rem;
+        padding: 0.26rem 0.4rem;
+    }
+}
+
+@media (max-width: 360px) {
+    .section-shell {
+        padding: 14px;
+        border-radius: 14px;
+    }
+
+    .riwayat-header {
+        padding: 14px;
+        gap: 10px;
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .section-title {
+        font-size: 1rem;
+        gap: 8px;
+    }
+
+    .title-icon {
+        width: 28px;
+        height: 28px;
+        font-size: 0.8rem;
+    }
+
+    .section-shell > .table-responsive {
+        border-radius: 12px;
+    }
+
+    .riwayat-table-responsive .riwayat-table {
+        min-width: 680px;
+        table-layout: auto;
+    }
+}
+
+@media (max-width: 280px) {
+    .section-shell {
+        padding: 12px;
+    }
+
+    .riwayat-table-responsive .riwayat-table {
+        min-width: 640px;
+        table-layout: auto;
     }
 }
 

@@ -471,14 +471,28 @@ try {
             (user_id, user_type, action, details, ip_address, user_agent)
             VALUES (?, 'student', 'attendance', ?, ?, ?)
         ";
-        $log_details = json_encode([
-            'schedule_id' => $schedule_id,
-            'similarity' => $matchResult['similarity'],
-            'match_details' => $matchResult['details'],
-            'status' => $statusLabel,
-            'attendance_path' => str_replace('../', '', $attendancePath),
-            'validation_path' => $validationGenerated ? str_replace('../', '', $validationPath) : null
-        ]);
+        $presentLabel = ((int) $present_id === 2)
+            ? 'Sakit'
+            : (((int) $present_id === 3) ? 'Izin' : 'Hadir');
+        $subjectName = trim((string)($schedule['subject'] ?? ''));
+        $className = trim((string)($schedule['class_name'] ?? ''));
+        $dateLabel = $schedule_date ? date('d/m/Y', strtotime($schedule_date)) : $schedule_date;
+        $timeLabel = $current_time ? date('H:i', strtotime($current_time)) : $current_time;
+
+        $detailParts = ["Absensi {$presentLabel}"];
+        if ($subjectName !== '') {
+            $detailParts[] = "Mapel: {$subjectName}";
+        }
+        if ($className !== '') {
+            $detailParts[] = "Kelas: {$className}";
+        }
+        if ($dateLabel || $timeLabel) {
+            $detailParts[] = 'Waktu: ' . trim($dateLabel . ' ' . $timeLabel);
+        }
+        if ($presentLabel === 'Hadir' && $is_late) {
+            $detailParts[] = "Terlambat: {$late_time} menit";
+        }
+        $log_details = implode(' | ', $detailParts);
         
         try {
             $logStmt = $pdo->prepare($log_sql);
@@ -509,7 +523,6 @@ try {
             'url' => $attendanceUrl
         ]);
         
-        $presentLabel = ((int) $present_id === 2) ? 'Sakit' : (((int) $present_id === 3) ? 'Izin' : 'Hadir');
         respondJson([
             'success' => true,
             'message' => 'Absensi berhasil',

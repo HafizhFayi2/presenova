@@ -157,14 +157,14 @@ foreach ($schedules as $schedule) {
 <div class="jadwal-section fade-in">
     <!-- Header -->
     <div class="section-header">
-        <div class="d-flex justify-content-between align-items-center mb-4">
+        <div class="d-flex justify-content-between align-items-center mb-4 jadwal-header-bar">
             <div>
                 <h4 class="section-title mb-1">
                     <i class="fas fa-calendar-alt text-primary me-2"></i>Jadwal Pelajaran
                 </h4>
                 <p class="text-muted mb-0">SMKN 1 Cikarang Selatan - Tahun Ajaran 2023/2024</p>
             </div>
-            <div class="d-flex gap-2">
+            <div class="d-flex gap-2 jadwal-header-actions">
                 <button type="button" class="btn btn-sm btn-outline-primary btn-print" onclick="printSchedule()">
                     <i class="fas fa-print me-1"></i> Cetak
                 </button>
@@ -178,7 +178,7 @@ foreach ($schedules as $schedule) {
     <?php if ($student_data && $student_data['class_id']): ?>
         <!-- Student Info Card -->
         <div class="student-info-card mb-4">
-            <div class="row g-3">
+            <div class="row g-3 student-info-grid">
                 <div class="col-md-3">
                     <div class="info-item">
                         <div class="info-icon bg-primary">
@@ -233,7 +233,7 @@ foreach ($schedules as $schedule) {
             <div class="liquidGlass-shine"></div>
             <div class="liquidGlass-content">
                 <div class="schedule-container">
-                    <div class="table-responsive">
+                    <div class="table-responsive jadwal-table-responsive">
                         <table class="table schedule-table table-hover">
                     <thead class="table-primary">
                         <tr>

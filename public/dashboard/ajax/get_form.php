@@ -19,6 +19,24 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     exit;
 }
 
+if (
+    !isset($_SESSION['logged_in'], $_SESSION['role'], $_SESSION['level']) ||
+    $_SESSION['logged_in'] !== true ||
+    $_SESSION['role'] !== 'admin' ||
+    !in_array((int) $_SESSION['level'], [1, 2], true)
+) {
+    echo '<div class="modal-header bg-danger text-white">
+            <h5 class="modal-title"><i class="fas fa-ban me-2"></i>Akses Ditolak</h5>
+            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+          </div>
+          <div class="modal-body">
+            <div class="alert alert-danger mb-0">
+                Anda tidak memiliki akses untuk membuka form ini.
+            </div>
+          </div>';
+    exit;
+}
+
 $table = $_POST['table'] ?? '';
 $id = $_POST['id'] ?? 0;
 
@@ -47,6 +65,8 @@ switch ($table) {
     // ... kode sebelumnya ...
 
 case 'student':
+    $isOperator = isset($_SESSION['level']) && (int) $_SESSION['level'] === 2;
+
     // Get classes and jurusan for dropdown
     $classes = $db->query("SELECT c.*, j.jurusan_id, j.name as jurusan_name, j.code as jurusan_code 
                            FROM class c 
@@ -93,16 +113,22 @@ case 'student':
         <div class="modal-body">
             <div class="row">
                 <div class="col-md-6 mb-3">
+                    <label for="studentCode" class="form-label">Kode Siswa <span class="text-danger">*</span></label>
+                    <input type="text" class="form-control" id="studentCode" readonly
+                           value="<?php echo $isEdit ? '******' : 'AUTO GENERATED'; ?>" 
+                           placeholder="Dibuat otomatis oleh sistem">
+                    <input type="hidden" name="student_code" id="studentCodeHidden" value="">
+                    <?php if ($isOperator): ?>
+                    <small class="text-muted ms-1">Operator tidak dapat melihat kode siswa.</small>
+                    <?php else: ?>
+                    <small class="text-muted ms-1">Kode siswa dibuat otomatis saat simpan (format SW + kode acak).</small>
+                    <?php endif; ?>
+                </div>
+                <div class="col-md-6 mb-3">
                     <label for="studentNisn" class="form-label">NISN <span class="text-danger">*</span></label>
                     <input type="text" class="form-control" name="student_nisn" id="studentNisn" required
                            value="<?php echo htmlspecialchars($student['student_nisn'] ?? ''); ?>" 
                            placeholder="Masukkan NISN">
-                </div>
-                <div class="col-md-6 mb-3">
-                    <label for="studentCode" class="form-label">Kode Siswa <span class="text-danger">*</span></label>
-                    <input type="text" class="form-control" name="student_code" id="studentCode" required
-                           value="<?php echo htmlspecialchars($student['student_code'] ?? ''); ?>" 
-                           placeholder="Contoh: SW0001">
                 </div>
             </div>
             
@@ -161,7 +187,7 @@ case 'student':
                         <ul class="mb-0">
                             <li>Jurusan akan otomatis terisi berdasarkan kelas yang dipilih</li>
                             <?php if (!$isEdit): ?>
-                            <li>Password default siswa adalah NISN yang dimasukkan</li>
+                            <li>Password default siswa otomatis mengikuti kode siswa</li>
                             <?php endif; ?>
                         </ul>
                     </div>
@@ -210,12 +236,11 @@ case 'student':
     // Form validation
     $('#studentForm').on('submit', function(e) {
         const nisn = $('#studentNisn').val();
-        const code = $('#studentCode').val();
         const name = $('#studentName').val();
         const classId = $('#student_class_modal').val();
         const jurusanId = $('#student_jurusan_modal').val();
         
-        if (!nisn || !code || !name || !classId || !jurusanId) {
+        if (!nisn || !name || !classId || !jurusanId) {
             e.preventDefault();
             alert('Harap lengkapi semua field yang wajib diisi!');
             return false;

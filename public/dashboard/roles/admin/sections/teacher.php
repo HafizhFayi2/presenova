@@ -65,13 +65,14 @@ $teachers = $stmt->fetchAll();
                             <button class="btn btn-outline-info" onclick="resetPassword(<?php echo $teacher['id']; ?>, 'teacher')">
                                 <i class="fas fa-key"></i>
                             </button>
-                            <?php if (isset($canDeleteMaster) && !$canDeleteMaster): ?>
-                                <button class="btn btn-outline-danger" disabled title="Operator tidak dapat menghapus data master">
+                            <?php if (isset($canDeleteTeacher) && !$canDeleteTeacher): ?>
+                                <button class="btn btn-outline-danger" disabled title="Penghapusan data guru tidak diizinkan">
                                     <i class="fas fa-trash"></i>
                                 </button>
                             <?php else: ?>
                                 <a href="?table=teacher&action=delete&id=<?php echo $teacher['id']; ?>" 
-                                   class="btn btn-outline-danger" onclick="return confirm('Hapus guru ini?')">
+                                   class="btn btn-outline-danger"
+                                   onclick="return AppDialog.inlineConfirm(this, 'Hapus guru ini?')">
                                     <i class="fas fa-trash"></i>
                                 </a>
                             <?php endif; ?>
@@ -103,7 +104,17 @@ $(document).ready(function() {
         "pageLength": 10,
         "lengthMenu": [10, 25, 50, 100],
         "order": [[3, 'asc']], // Sort by name
-        "responsive": true
+        "responsive": false,
+        "scrollX": false,
+        "scrollCollapse": false,
+        "autoWidth": true,
+        "initComplete": function() {
+            this.api().columns.adjust();
+        }
+    });
+
+    $(window).off('resize.teacherTableAdjust').on('resize.teacherTableAdjust', function() {
+        table.columns.adjust();
     });
     
     // Enhanced search for all columns
@@ -122,23 +133,27 @@ $(document).ready(function() {
     });
     
     // Reset password function
-    window.resetPassword = function(teacherId, type) {
-        if(confirm('Reset password guru ini ke "guru123"?')) {
-            $.ajax({
-                url: 'ajax/reset_password.php',
-                method: 'POST',
-                dataType: 'json',
-                data: { id: teacherId, type: type },
-                success: function(result) {
-                    if(result && result.success) {
-                        alert(result.message);
-                        location.reload();
-                    } else {
-                        alert(result && result.message ? result.message : 'Gagal mereset password');
-                    }
-                }
-            });
+    window.resetPassword = async function(teacherId, type) {
+        const confirmed = await AppDialog.confirm('Reset password guru ini ke "guru123"?', { title: 'Konfirmasi Reset Password' });
+
+        if (!confirmed) {
+            return;
         }
+
+        $.ajax({
+            url: 'ajax/reset_password.php',
+            method: 'POST',
+            dataType: 'json',
+            data: { id: teacherId, type: type },
+            success: function(result) {
+                if(result && result.success) {
+                    alert(result.message);
+                    location.reload();
+                } else {
+                    alert(result && result.message ? result.message : 'Gagal mereset password');
+                }
+            }
+        });
     };
 });
 </script>

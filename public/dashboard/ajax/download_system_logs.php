@@ -8,8 +8,12 @@ if (ob_get_length()) {
 
 $db = new Database();
 $timestamp = date('Ymd_His');
+$exportedBy = trim((string)($_SESSION['fullname'] ?? $_SESSION['username'] ?? ''));
+if ($exportedBy === '') {
+    $exportedBy = 'Administrator';
+}
 
-$sql = "SELECT l.user_type, l.action, l.details, l.ip_address, l.user_agent, l.created_at,
+$sql = "SELECT l.user_type, l.action, l.details, l.created_at,
                COALESCE(u.fullname, t.teacher_name, s.student_name, '-') AS actor_name
         FROM activity_logs l
         LEFT JOIN user u ON l.user_type = 'admin' AND l.user_id = u.user_id
@@ -19,6 +23,54 @@ $sql = "SELECT l.user_type, l.action, l.details, l.ip_address, l.user_agent, l.c
 $stmt = $db->query($sql);
 $logs = $stmt ? $stmt->fetchAll() : [];
 
+$resolveLogColor = static function ($userType, $action): string {
+    $userType = strtolower(trim((string) $userType));
+    $action = strtolower(trim((string) $action));
+
+    if ($action !== '') {
+        if (stripos($action, 'failed') !== false || stripos($action, 'blocked') !== false) {
+            return 'Merah';
+        }
+        if (stripos($action, 'login') !== false) {
+            return 'Hijau';
+        }
+        if (stripos($action, 'attendance') !== false) {
+            return 'Oranye';
+        }
+        if (stripos($action, 'logout') !== false) {
+            return 'Abu-abu';
+        }
+    }
+
+    switch ($userType) {
+        case 'admin':
+            return 'Biru';
+        case 'guru':
+            return 'Hijau';
+        case 'student':
+        case 'siswa':
+            return 'Oranye';
+        default:
+            return 'Abu-abu';
+    }
+};
+
+$colorPalette = [
+    'Merah' => ['fill' => 'FEE2E2', 'font' => '991B1B'],
+    'Hijau' => ['fill' => 'DCFCE7', 'font' => '166534'],
+    'Biru' => ['fill' => 'DBEAFE', 'font' => '1D4ED8'],
+    'Oranye' => ['fill' => 'FFEDD5', 'font' => '9A3412'],
+    'Abu-abu' => ['fill' => 'E2E8F0', 'font' => '334155'],
+];
+
+$rowPalette = [
+    'Merah' => ['fill' => 'F8D7DA', 'font' => '7A0C0C'],
+    'Hijau' => ['fill' => 'D1FAE5', 'font' => '0B5D1E'],
+    'Biru' => ['fill' => 'DBEAFE', 'font' => '1B4F8A'],
+    'Oranye' => ['fill' => 'FFE4C7', 'font' => '8A3B00'],
+    'Abu-abu' => ['fill' => 'E2E8F0', 'font' => '1F2937'],
+];
+
 $autoloadPath = dirname(__DIR__, 3) . '/vendor/autoload.php';
 if (!is_file($autoloadPath)) {
     // Fallback CSV with proper extension/mime to avoid Excel extension warning.
@@ -26,7 +78,7 @@ if (!is_file($autoloadPath)) {
     header('Content-Disposition: attachment; filename="log_system_' . $timestamp . '.csv"');
     echo "\xEF\xBB\xBF";
     $output = fopen('php://output', 'w');
-    fputcsv($output, ['No', 'Nama', 'Tipe User', 'Aktivitas', 'Detail', 'IP', 'Browser', 'Waktu']);
+    fputcsv($output, ['No', 'Nama', 'Tipe User', 'Aktivitas', 'Detail', 'Waktu']);
     $no = 1;
     foreach ($logs as $log) {
         fputcsv($output, [
@@ -35,8 +87,6 @@ if (!is_file($autoloadPath)) {
             $log['user_type'] ?? '',
             $log['action'] ?? '',
             $log['details'] ?? '',
-            $log['ip_address'] ?? '',
-            $log['user_agent'] ?? '',
             $log['created_at'] ?? '',
         ]);
     }
@@ -51,18 +101,18 @@ $sheet = $spreadsheet->getActiveSheet();
 $sheet->setTitle('Log Sistem');
 
 $spreadsheet->getDefaultStyle()->getFont()->setName('Segoe UI')->setSize(10);
-$sheet->mergeCells('A1:H1');
+$sheet->mergeCells('A1:F1');
 $sheet->setCellValue('A1', 'LOG SISTEM PRESENOVA');
-$sheet->setCellValue('A2', 'Diekspor pada: ' . date('d/m/Y H:i:s'));
-$sheet->mergeCells('A2:H2');
+$sheet->setCellValue('A2', 'Diekspor pada: ' . date('d/m/Y H:i:s') . ' oleh ' . $exportedBy);
+$sheet->mergeCells('A2:F2');
 
-$headers = ['No', 'Nama', 'Tipe User', 'Aktivitas', 'Detail', 'IP', 'Browser', 'Waktu'];
+$headers = ['No', 'Nama', 'Tipe User', 'Aktivitas', 'Detail', 'Waktu'];
 foreach ($headers as $index => $headerText) {
     $col = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($index + 1);
     $sheet->setCellValue($col . '4', $headerText);
 }
 
-$sheet->getStyle('A1:H1')->applyFromArray([
+$sheet->getStyle('A1:F1')->applyFromArray([
     'font' => ['bold' => true, 'size' => 14, 'color' => ['rgb' => 'FFFFFF']],
     'fill' => [
         'fillType' => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID,
@@ -73,14 +123,14 @@ $sheet->getStyle('A1:H1')->applyFromArray([
         'vertical' => \PhpOffice\PhpSpreadsheet\Style\Alignment::VERTICAL_CENTER,
     ],
 ]);
-$sheet->getStyle('A2:H2')->applyFromArray([
+$sheet->getStyle('A2:F2')->applyFromArray([
     'font' => ['bold' => true, 'color' => ['rgb' => '0F172A']],
     'fill' => [
         'fillType' => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID,
         'startColor' => ['rgb' => 'DBEAFE'],
     ],
 ]);
-$sheet->getStyle('A4:H4')->applyFromArray([
+$sheet->getStyle('A4:F4')->applyFromArray([
     'font' => ['bold' => true, 'color' => ['rgb' => 'FFFFFF']],
     'fill' => [
         'fillType' => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID,
@@ -92,31 +142,49 @@ $sheet->getStyle('A4:H4')->applyFromArray([
 $row = 5;
 $no = 1;
 foreach ($logs as $log) {
+    $colorName = $resolveLogColor($log['user_type'] ?? '', $log['action'] ?? '');
     $sheet->setCellValue('A' . $row, $no++);
     $sheet->setCellValue('B' . $row, (string)($log['actor_name'] ?? '-'));
     $sheet->setCellValue('C' . $row, (string)($log['user_type'] ?? '-'));
     $sheet->setCellValue('D' . $row, (string)($log['action'] ?? '-'));
     $sheet->setCellValue('E' . $row, (string)($log['details'] ?? '-'));
-    $sheet->setCellValue('F' . $row, (string)($log['ip_address'] ?? '-'));
-    $sheet->setCellValue('G' . $row, (string)($log['user_agent'] ?? '-'));
-    $sheet->setCellValue('H' . $row, (string)($log['created_at'] ?? '-'));
+    $sheet->setCellValue('F' . $row, (string)($log['created_at'] ?? '-'));
+    if (isset($rowPalette[$colorName])) {
+        $palette = $rowPalette[$colorName];
+        $sheet->getStyle('A' . $row . ':F' . $row)->applyFromArray([
+            'font' => ['color' => ['rgb' => $palette['font']]],
+            'fill' => [
+                'fillType' => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID,
+                'startColor' => ['rgb' => $palette['fill']],
+            ],
+        ]);
+        $sheet->getStyle('B' . $row)->getFont()->setBold(true);
+        $sheet->getStyle('D' . $row)->getFont()->setBold(true);
+        $sheet->getStyle('F' . $row)->getFont()->setBold(true);
+    }
     $row++;
 }
 
 $lastDataRow = max(4, $row - 1);
-$sheet->getStyle('A4:H' . $lastDataRow)->applyFromArray([
+$sheet->getStyle('A4:F' . $lastDataRow)->applyFromArray([
     'borders' => [
         'allBorders' => [
             'borderStyle' => \PhpOffice\PhpSpreadsheet\Style\Border::BORDER_THIN,
             'color' => ['rgb' => 'CBD5E1'],
         ],
     ],
-    'alignment' => ['vertical' => \PhpOffice\PhpSpreadsheet\Style\Alignment::VERTICAL_TOP],
+    'alignment' => ['vertical' => \PhpOffice\PhpSpreadsheet\Style\Alignment::VERTICAL_CENTER],
 ]);
 
 if ($lastDataRow >= 5) {
+    $sheet->getStyle('A5:F' . $lastDataRow)->getAlignment()->setVertical(\PhpOffice\PhpSpreadsheet\Style\Alignment::VERTICAL_CENTER);
+    $sheet->getStyle('A5:A' . $lastDataRow)->getAlignment()->setHorizontal(\PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER);
+    $sheet->getStyle('C5:C' . $lastDataRow)->getAlignment()->setHorizontal(\PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER);
+    $sheet->getStyle('F5:F' . $lastDataRow)->getAlignment()->setHorizontal(\PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER);
+}
+
+if ($lastDataRow >= 5) {
     $sheet->getStyle('E5:E' . $lastDataRow)->getAlignment()->setWrapText(true);
-    $sheet->getStyle('G5:G' . $lastDataRow)->getAlignment()->setWrapText(true);
 }
 
 $columnWidths = [
@@ -124,10 +192,8 @@ $columnWidths = [
     'B' => 22,
     'C' => 14,
     'D' => 20,
-    'E' => 34,
-    'F' => 16,
-    'G' => 42,
-    'H' => 22,
+    'E' => 38,
+    'F' => 22,
 ];
 foreach ($columnWidths as $col => $width) {
     $sheet->getColumnDimension($col)->setWidth($width);

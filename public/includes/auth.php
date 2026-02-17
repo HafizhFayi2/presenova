@@ -143,35 +143,48 @@ class Auth {
         return false;
     }
     
-    // Login siswa - DIPERBAIKI
-    public function loginSiswa($nisn, $password) {
-        $sql = "SELECT * FROM student WHERE student_nisn = ?";
-        $stmt = $this->db->query($sql, [$nisn]);
-        $siswa = $stmt->fetch();
-        
+    // Login siswa: prioritas kode siswa, kompatibel dengan NISN lama.
+    public function loginSiswa($identifier, $password) {
+        $identifier = trim((string) $identifier);
+        if ($identifier === '') {
+            return ['success' => false, 'message' => 'Kode siswa atau password salah'];
+        }
+
+        $identifierUpper = strtoupper($identifier);
+        $siswa = null;
+
+        $byCodeStmt = $this->db->query("SELECT * FROM student WHERE UPPER(student_code) = ? LIMIT 1", [$identifierUpper]);
+        if ($byCodeStmt) {
+            $siswa = $byCodeStmt->fetch();
+        }
+
+        if (!$siswa) {
+            $byNisnStmt = $this->db->query("SELECT * FROM student WHERE student_nisn = ? LIMIT 1", [$identifier]);
+            if ($byNisnStmt) {
+                $siswa = $byNisnStmt->fetch();
+            }
+        }
+
         if ($siswa) {
-            // Gunakan PASSWORD_SALT yang sama dengan config.php
             $hashed_password = hash('sha256', $password . PASSWORD_SALT);
-            
+
             if ($hashed_password === $siswa['student_password']) {
-                // Check if student has uploaded face photo
                 $has_face = $this->ensureStudentFaceReference($siswa);
-                
-                // Create session - DIPERBAIKI untuk konsisten
+
                 $_SESSION['student_id'] = $siswa['id'];
                 $_SESSION['student_nisn'] = $siswa['student_nisn'];
+                $_SESSION['student_code'] = $siswa['student_code'] ?? '';
                 $_SESSION['student_name'] = $siswa['student_name'];
                 $_SESSION['class_id'] = $siswa['class_id'];
-                $_SESSION['role'] = 'siswa'; // Tambahkan role
+                $_SESSION['role'] = 'siswa';
                 $_SESSION['has_face'] = $has_face;
                 $_SESSION['has_pose_capture'] = $this->hasPoseCaptureDataset($siswa['student_nisn'] ?? '');
                 $_SESSION['logged_in'] = true;
-                
-                // Update last login
+
                 $this->updateStudentLogin($siswa['id']);
-                
+
                 return [
-                    'success' => true, 
+                    'success' => true,
                     'id' => $siswa['id'],
                     'name' => $siswa['student_name'],
                     'class' => $siswa['class_id'],
@@ -180,7 +193,7 @@ class Auth {
                 ];
             }
         }
-        return ['success' => false, 'message' => 'NISN atau password salah'];
+        return ['success' => false, 'message' => 'Kode siswa atau password salah'];
     }
     
     // Login guru - TAMBAHKAN METHOD INI
@@ -300,6 +313,7 @@ class Auth {
                     if ($siswa) {
                         $_SESSION['student_id'] = $siswa['id'];
                         $_SESSION['student_nisn'] = $siswa['student_nisn'];
+                        $_SESSION['student_code'] = $siswa['student_code'] ?? '';
                         $_SESSION['student_name'] = $siswa['student_name'];
                         $_SESSION['class_id'] = $siswa['class_id'];
                         $_SESSION['has_face'] = $this->ensureStudentFaceReference($siswa);

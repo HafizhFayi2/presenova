@@ -404,7 +404,8 @@ $mapLocation = $defaultLocation ?: (!empty($locations) ? $locations[0] : null);
                         </button>
                         <?php if (empty($site['default_location_id']) || (int)$site['default_location_id'] !== (int)$location['location_id']): ?>
                             <a href="?table=location&action=set_default&id=<?php echo $location['location_id']; ?>" 
-                               class="btn btn-sm btn-outline-primary" onclick="return confirm('Jadikan lokasi ini sebagai patokan GPS?')">
+                               class="btn btn-sm btn-outline-primary"
+                               onclick="return AppDialog.inlineConfirm(this, 'Jadikan lokasi ini sebagai patokan GPS?')">
                                 <i class="fas fa-location-dot"></i> Jadikan Default
                             </a>
                             <?php if (isset($canDeleteMaster) && !$canDeleteMaster): ?>
@@ -413,7 +414,8 @@ $mapLocation = $defaultLocation ?: (!empty($locations) ? $locations[0] : null);
                                 </button>
                             <?php else: ?>
                                 <a href="?table=location&action=delete&id=<?php echo $location['location_id']; ?>" 
-                                   class="btn btn-sm btn-danger" onclick="return confirm('Hapus lokasi ini?')">
+                                   class="btn btn-sm btn-danger"
+                                   onclick="return AppDialog.inlineConfirm(this, 'Hapus lokasi ini?')">
                                     <i class="fas fa-trash"></i> Hapus
                                 </a>
                             <?php endif; ?>

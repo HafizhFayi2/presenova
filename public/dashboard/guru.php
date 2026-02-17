@@ -122,6 +122,7 @@ $active_guru_section_css = $guru_section_css[$page] ?? null;
     
     
 <link rel="stylesheet" href="../assets/css/guru.css" data-inline-style="extracted">
+    <link rel="stylesheet" href="../assets/css/app-dialog.css">
     <?php if ($active_guru_section_css !== null): ?>
     <link rel="stylesheet" href="../assets/css/sections/<?php echo $active_guru_section_css; ?>">
     <?php endif; ?>
@@ -237,6 +238,7 @@ $active_guru_section_css = $guru_section_css[$page] ?? null;
     <!-- JavaScript Libraries -->
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="../assets/js/app-dialog.js"></script>
     <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
     <script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap5.min.js"></script>
     <script src="https://cdn.datatables.net/buttons/2.4.1/js/dataTables.buttons.min.js"></script>
@@ -299,7 +301,21 @@ $active_guru_section_css = $guru_section_css[$page] ?? null;
     setInterval(updateClock, 1000);
     updateClock();
     
-    $(document).ready(function() {
+$(document).ready(function() {
+        $(document).on('init.dt', function(event, settings) {
+            const $table = $(settings.nTable);
+            const $wrapper = $table.closest('.dataTables_wrapper');
+            const $scrollBody = $wrapper.find('.dataTables_scrollBody');
+            const $scrollHead = $wrapper.find('.dataTables_scrollHead');
+            if ($scrollBody.length && $scrollHead.length) {
+                $wrapper.closest('.table-responsive').addClass('dt-scroll');
+                $scrollBody.off('scroll.dt-sync').on('scroll.dt-sync', function() {
+                    $scrollHead.scrollLeft(this.scrollLeft);
+                });
+            } else {
+                $wrapper.closest('.table-responsive').removeClass('dt-scroll');
+            }
+        });
         // Initialize DataTables with export buttons
         if ($('.data-table-export').length) {
             $('.data-table-export').DataTable({
@@ -307,7 +323,9 @@ $active_guru_section_css = $guru_section_css[$page] ?? null;
                     "url": "//cdn.datatables.net/plug-ins/1.13.6/i18n/id.json"
                 },
                 "pageLength": 10,
-                "responsive": true,
+                "responsive": false,
+                "scrollX": false,
+                "scrollCollapse": false,
                 "dom": 'Bfrtip',
                 "buttons": [
                     {
@@ -348,9 +366,17 @@ $active_guru_section_css = $guru_section_css[$page] ?? null;
                     "url": "//cdn.datatables.net/plug-ins/1.13.6/i18n/id.json"
                 },
                 "pageLength": 10,
-                "responsive": true
+                "responsive": false,
+                "scrollX": false,
+                "scrollCollapse": false
             });
         }
+
+        $(window).off('resize.guruDtAdjust').on('resize.guruDtAdjust', function() {
+            if ($.fn.dataTable && $.fn.dataTable.tables) {
+                $.fn.dataTable.tables({ visible: true, api: true }).columns.adjust();
+            }
+        });
         
         // Initialize datepickers
         if ($('.datepicker').length) {

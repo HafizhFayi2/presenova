@@ -318,7 +318,7 @@ $majors = $db->query("SELECT * FROM jurusan ORDER BY name")->fetchAll();
             </div>
             
             <div class="table-responsive">
-                <table class="table table-hover" id="classTable">
+                <table class="table table-hover no-card-table" id="classTable">
                     <thead>
                         <tr>
                             <th style="width: 60px;">#</th>
@@ -374,7 +374,7 @@ $majors = $db->query("SELECT * FROM jurusan ORDER BY name")->fetchAll();
                                         <?php elseif($student_count == 0 && $schedule_count == 0): ?>
                                             <a href="admin.php?table=class&action=delete&delete_class=<?php echo $class['class_id']; ?>" 
                                                class="btn btn-sm btn-danger" 
-                                               onclick="return confirm('Hapus kelas <?php echo addslashes($class['class_name']); ?>? Tindakan ini tidak dapat dibatalkan!')"
+                                               onclick="return AppDialog.inlineConfirm(this, 'Hapus kelas <?php echo addslashes($class['class_name']); ?>? Tindakan ini tidak dapat dibatalkan!')"
                                                title="Hapus Kelas">
                                                 <i class="fas fa-trash"></i>
                                             </a>
@@ -455,7 +455,7 @@ $majors = $db->query("SELECT * FROM jurusan ORDER BY name")->fetchAll();
                                         <?php elseif ($class_count == 0 && $student_count == 0): ?>
                                             <a href="admin.php?table=class&action=delete&delete_jurusan=<?php echo $major['jurusan_id']; ?>" 
                                                class="btn btn-sm btn-outline-danger" 
-                                               onclick="return confirm('Hapus jurusan <?php echo addslashes($major['code']); ?> - <?php echo addslashes($major['name']); ?>? Tindakan ini tidak dapat dibatalkan!')"
+                                               onclick="return AppDialog.inlineConfirm(this, 'Hapus jurusan <?php echo addslashes($major['code']); ?> - <?php echo addslashes($major['name']); ?>? Tindakan ini tidak dapat dibatalkan!')"
                                                title="Hapus Jurusan">
                                                 <i class="fas fa-trash"></i>
                                             </a>
@@ -670,12 +670,5 @@ $(document).ready(function() {
     // Auto-dismiss alerts after 5 seconds
     $('.alert').delay(5000).fadeOut('slow');
     
-    // Confirmation for delete links
-    $('a[onclick*="confirm"]').on('click', function(e) {
-        const message = $(this).attr('onclick').match(/confirm\('([^']+)'/)[1];
-        if (!confirm(message)) {
-            e.preventDefault();
-        }
-    });
 });
 </script>

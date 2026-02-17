@@ -146,6 +146,13 @@ $siswa_section_css = [
     'riwayat' => 'riwayat.css',
 ];
 $active_siswa_section_css = $siswa_section_css[$page] ?? null;
+$siswa_core_css_version = @filemtime(__DIR__ . '/../assets/css/siswa.css') ?: time();
+$siswa_dialog_css_version = @filemtime(__DIR__ . '/../assets/css/app-dialog.css') ?: time();
+$siswa_section_css_version = null;
+if ($active_siswa_section_css !== null) {
+    $sectionCssPath = __DIR__ . '/../assets/css/sections/' . $active_siswa_section_css;
+    $siswa_section_css_version = @filemtime($sectionCssPath) ?: time();
+}
 ?>
 <!DOCTYPE html>
 <html lang="id" data-theme="<?php echo $theme; ?>">
@@ -208,9 +215,10 @@ $active_siswa_section_css = $siswa_section_css[$page] ?? null;
     </script>
     
     
-<link rel="stylesheet" href="../assets/css/siswa.css" data-inline-style="extracted">
+<link rel="stylesheet" href="../assets/css/siswa.css?v=<?php echo $siswa_core_css_version; ?>" data-inline-style="extracted">
+    <link rel="stylesheet" href="../assets/css/app-dialog.css?v=<?php echo $siswa_dialog_css_version; ?>">
     <?php if ($active_siswa_section_css !== null): ?>
-    <link rel="stylesheet" href="../assets/css/sections/<?php echo $active_siswa_section_css; ?>">
+    <link rel="stylesheet" href="../assets/css/sections/<?php echo $active_siswa_section_css; ?>?v=<?php echo $siswa_section_css_version; ?>">
     <?php endif; ?>
 
 </head>
@@ -425,6 +433,7 @@ $active_siswa_section_css = $siswa_section_css[$page] ?? null;
     <!-- JavaScript -->
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="../assets/js/app-dialog.js"></script>
     <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
     <script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap5.min.js"></script>
     <script src="../assets/js/pwa.js"></script>
@@ -568,16 +577,39 @@ $active_siswa_section_css = $siswa_section_css[$page] ?? null;
             return;
         }
 
+        $(document).on('init.dt', function(event, settings) {
+            const $table = $(settings.nTable);
+            const $wrapper = $table.closest('.dataTables_wrapper');
+            const $scrollBody = $wrapper.find('.dataTables_scrollBody');
+            const $scrollHead = $wrapper.find('.dataTables_scrollHead');
+            if ($scrollBody.length && $scrollHead.length) {
+                $wrapper.closest('.table-responsive').addClass('dt-scroll');
+                $scrollBody.off('scroll.dt-sync').on('scroll.dt-sync', function() {
+                    $scrollHead.scrollLeft(this.scrollLeft);
+                });
+            } else {
+                $wrapper.closest('.table-responsive').removeClass('dt-scroll');
+            }
+        });
+
         // Initialize DataTables for history page
         if ($.fn.DataTable && $('.data-table').length) {
             $('.data-table').DataTable({
                 "language": {
-                    "url": "//cdn.datatables.net/plug-ins/1.13.6/i18n/id.json"
+                "url": "//cdn.datatables.net/plug-ins/1.13.6/i18n/id.json"
                 },
                 "pageLength": 10,
-                "responsive": true
+                "responsive": false,
+                "scrollX": false,
+                "scrollCollapse": false
             });
         }
+
+        $(window).off('resize.siswaDtAdjust').on('resize.siswaDtAdjust', function() {
+            if ($.fn.dataTable && $.fn.dataTable.tables) {
+                $.fn.dataTable.tables({ visible: true, api: true }).columns.adjust();
+            }
+        });
         
         // Mobile menu toggle
         $('#mobileMenuToggle').click(function() {

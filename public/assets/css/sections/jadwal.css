@@ -20,6 +20,21 @@
     color: white;
     font-weight: 600;
     margin-bottom: 0;
+    text-shadow: 0 1px 2px rgba(15, 23, 42, 0.3);
+}
+
+.section-header .section-title i {
+    color: #f8fafc !important;
+    text-shadow: 0 1px 2px rgba(15, 23, 42, 0.35);
+}
+
+.section-header .text-muted {
+    color: rgba(248, 250, 252, 0.92) !important;
+    text-shadow: 0 1px 1px rgba(15, 23, 42, 0.25);
+}
+
+[data-theme="dark"] .section-header .text-muted {
+    color: rgba(226, 232, 240, 0.94) !important;
 }
 
 /* Student Info Card */
@@ -92,6 +107,49 @@
     box-shadow: var(--glass-shadow);
     border: 1px solid var(--glass-border);
     backdrop-filter: blur(var(--blur)) saturate(140%);
+}
+
+.schedule-container .table-responsive {
+    overflow-x: scroll;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-x;
+    max-width: 100%;
+    padding-bottom: 6px;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(53, 121, 246, 0.95) rgba(148, 163, 184, 0.25);
+}
+
+.schedule-container .table-responsive::-webkit-scrollbar {
+    height: 8px;
+}
+
+.schedule-container .table-responsive::-webkit-scrollbar-track {
+    background: rgba(148, 163, 184, 0.25);
+    border-radius: 999px;
+}
+
+.schedule-container .table-responsive::-webkit-scrollbar-thumb {
+    background: linear-gradient(90deg, rgba(53, 121, 246, 0.95), rgba(99, 102, 241, 0.9));
+    border-radius: 999px;
+}
+
+.jadwal-header-bar {
+    gap: 14px;
+    flex-wrap: wrap;
+}
+
+.jadwal-header-actions {
+    flex-wrap: wrap;
+}
+
+.jadwal-header-actions .btn {
+    white-space: nowrap;
+}
+
+.jadwal-table-responsive .schedule-table {
+    min-width: 860px;
+    table-layout: auto;
 }
 
 .schedule-table thead th {
@@ -263,6 +321,28 @@
     backdrop-filter: blur(var(--blur)) saturate(140%);
 }
 
+.today-summary-card .card-header {
+    padding: 0.85rem 1.1rem;
+    border-top-left-radius: 18px;
+    border-top-right-radius: 18px;
+    overflow: visible;
+}
+
+.today-summary-card .card-header h5 {
+    margin: 0;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    line-height: 1.2;
+    color: #f8fafc !important;
+}
+
+.today-summary-card .card-header h5 i {
+    color: #f8fafc !important;
+    line-height: 1;
+    flex: 0 0 auto;
+}
+
 .summary-item {
     display: flex;
     align-items: center;
@@ -313,13 +393,64 @@
 }
 
 /* Responsive */
+@media (max-width: 992px) {
+    .jadwal-section .liquidGlass-wrapper {
+        overflow-x: hidden !important;
+        overflow-y: hidden !important;
+    }
+
+    .section-header {
+        padding: 1.2rem;
+    }
+
+    .jadwal-header-bar {
+        align-items: flex-start !important;
+    }
+
+    .jadwal-header-actions {
+        width: 100%;
+        justify-content: flex-start;
+        gap: 8px !important;
+    }
+
+    .jadwal-header-actions .btn {
+        font-size: 0.82rem;
+        padding: 0.42rem 0.7rem;
+    }
+
+    .jadwal-table-responsive {
+        padding-bottom: 6px;
+    }
+
+    .jadwal-table-responsive .schedule-table {
+        min-width: 760px;
+    }
+
+    .schedule-table thead th,
+    .schedule-table tbody td {
+        padding: 0.68rem 0.62rem;
+        white-space: nowrap;
+        font-size: 0.8rem;
+    }
+
+    .schedule-action .btn {
+        font-size: 0.76rem;
+        padding: 0.34rem 0.58rem;
+    }
+}
+
 @media (max-width: 768px) {
     .info-item {
         margin-bottom: 1rem;
     }
-    
-    .schedule-table {
-        font-size: 0.85rem;
+
+    .jadwal-header-actions .btn {
+        flex: 1 1 calc(50% - 8px);
+        min-width: 128px;
+    }
+
+    .jadwal-table-responsive .schedule-table {
+        min-width: 700px;
     }
     
     .stat-card {
@@ -334,6 +465,190 @@
     
     .stat-content h3 {
         font-size: 1.5rem;
+    }
+}
+
+@media (max-width: 576px) {
+    .jadwal-header-actions .btn {
+        flex: 1 1 100%;
+    }
+
+    .student-info-card .info-content strong {
+        white-space: normal;
+        overflow-wrap: anywhere;
+        word-break: break-word;
+    }
+
+    .jadwal-table-responsive .schedule-table {
+        min-width: 700px;
+    }
+}
+
+@media (max-width: 420px) {
+    .jadwal-table-responsive {
+        overflow-x: scroll;
+        overflow-y: hidden;
+        -webkit-overflow-scrolling: touch;
+        touch-action: pan-x;
+    }
+
+    .jadwal-table-responsive .schedule-table {
+        min-width: 680px;
+    }
+
+    .schedule-table thead th,
+    .schedule-table tbody td {
+        padding: 0.46rem 0.38rem;
+        font-size: 0.7rem;
+        white-space: nowrap;
+    }
+
+    .subject-cell strong {
+        white-space: nowrap;
+        line-height: 1.2;
+        display: block;
+    }
+
+    .time-cell {
+        white-space: nowrap;
+        line-height: 1.2;
+    }
+}
+
+@media (max-width: 360px) {
+    .section-header {
+        padding: 1rem;
+        border-radius: 14px;
+        margin-bottom: 1rem;
+    }
+
+    .section-title {
+        font-size: 1rem;
+    }
+
+    .student-info-card {
+        padding: 1rem;
+        border-radius: 14px;
+        margin-bottom: 1rem;
+    }
+
+    .info-item {
+        gap: 0.75rem;
+        flex-wrap: wrap;
+    }
+
+    .info-icon {
+        width: 42px;
+        height: 42px;
+        font-size: 1.05rem;
+    }
+
+    .info-content small {
+        font-size: 0.75rem;
+    }
+
+    .info-content strong {
+        font-size: 0.95rem;
+    }
+
+    .schedule-table {
+        font-size: 0.8rem;
+        border-radius: 14px;
+    }
+
+    .schedule-table thead th,
+    .schedule-table tbody td {
+        padding: 0.6rem;
+    }
+
+    .jadwal-table-responsive .schedule-table {
+        min-width: 660px;
+        table-layout: auto;
+    }
+
+    .schedule-action .btn-attend {
+        font-size: 0;
+        padding: 0.28rem 0.32rem;
+        min-width: 28px;
+        line-height: 1;
+    }
+
+    .schedule-action .btn-attend i {
+        margin: 0 !important;
+        font-size: 0.76rem;
+    }
+
+    .schedule-action .badge {
+        font-size: 0;
+        padding: 0.28rem 0.32rem;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        line-height: 1;
+    }
+
+    .schedule-action .badge i {
+        margin: 0 !important;
+        font-size: 0.72rem;
+    }
+
+    .stat-card {
+        padding: 0.9rem;
+        gap: 0.75rem;
+    }
+
+    .stat-icon {
+        width: 46px;
+        height: 46px;
+        font-size: 1.1rem;
+    }
+
+    .stat-content h3 {
+        font-size: 1.3rem;
+    }
+
+    .summary-item {
+        padding: 0.85rem;
+        gap: 0.75rem;
+    }
+
+    .summary-icon {
+        width: 42px;
+        height: 42px;
+        font-size: 1.05rem;
+    }
+
+    .summary-content h4 {
+        font-size: 1.2rem;
+    }
+}
+
+@media (max-width: 280px) {
+    .section-header {
+        padding: 0.85rem;
+    }
+
+    .student-info-card {
+        padding: 0.85rem;
+    }
+
+    .jadwal-table-responsive .schedule-table {
+        min-width: 620px;
+        table-layout: auto;
+    }
+
+    .schedule-table thead th,
+    .schedule-table tbody td {
+        padding: 0.34rem 0.28rem;
+        font-size: 0.64rem;
+    }
+
+    .stat-card {
+        padding: 0.8rem;
+    }
+
+    .summary-item {
+        padding: 0.75rem;
     }
 }
 

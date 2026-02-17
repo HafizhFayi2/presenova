@@ -1787,6 +1787,42 @@ body.attendance-modal-open .modal-backdrop {
         width: 100%;
         justify-content: flex-start;
     }
+
+    .face-side .status-card {
+        order: 1;
+    }
+
+    .face-side .reference-card {
+        order: 2;
+    }
+
+    .face-side .memory-card {
+        order: 3;
+    }
+
+    .face-side .tips-card {
+        order: 4;
+    }
+}
+
+@media (max-width: 768px) {
+    .face-card {
+        padding: 16px;
+    }
+
+    .camera-frame {
+        min-height: 240px;
+    }
+
+    .face-guide {
+        width: 170px;
+        height: 220px;
+    }
+
+    .pulse-ring {
+        width: 220px;
+        height: 280px;
+    }
 }
 
 @media (max-width: 576px) {

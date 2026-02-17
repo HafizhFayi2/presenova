@@ -1219,11 +1219,19 @@
             border-radius: 18px;
             padding: 20px;
             box-shadow: var(--card-shadow);
-            overflow: hidden;
+            overflow-x: auto;
+            overflow-y: hidden;
+            -webkit-overflow-scrolling: touch;
             border: 1px solid var(--border);
             backdrop-filter: blur(var(--blur)) saturate(140%);
             -webkit-backdrop-filter: blur(var(--blur)) saturate(140%);
             transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        .data-table-container .table-responsive {
+            overflow-x: auto;
+            overflow-y: hidden;
+            -webkit-overflow-scrolling: touch;
         }
 
         .data-table-container:hover {
@@ -1612,7 +1620,7 @@
             }
         }
 
-        @media (max-width: 576px) {
+@media (max-width: 576px) {
             :root {
                 --orbit-start-x: 18px;
                 --orbit-start-y: 12px;
@@ -1650,6 +1658,8 @@
 
             .time-orbit-wrap {
                 padding-right: 0;
+                width: 100%;
+                flex-wrap: wrap;
                 gap: 6px;
             }
 
@@ -1658,8 +1668,8 @@
                 transform: none;
                 display: flex;
                 align-items: center;
-                margin-left: -36px;
-                margin-top: -26px;
+                margin-left: 0;
+                margin-top: 0;
                 align-self: center;
             }
 
@@ -1743,3 +1753,273 @@
         ::-webkit-scrollbar-thumb:hover {
             background: linear-gradient(180deg, rgba(53, 121, 246, 1) 0%, rgba(255, 159, 107, 1) 100%);
         }
+
+        @media (max-width: 360px) {
+            :root {
+                --shell-gap: 10px;
+                --shell-radius: 20px;
+                --siswa-topbar-padding-x: 14px;
+                --siswa-topbar-padding-y: 10px;
+                --siswa-topbar-min-height: 64px;
+                --siswa-topbar-radius: 14px;
+                --orbit-start-x: 12px;
+                --orbit-start-y: 10px;
+                --orbit-control-x: 32px;
+                --orbit-control-y: 5px;
+                --orbit-end-x: 46px;
+                --orbit-end-y: 34px;
+                --orbit-offset-x: 0px;
+                --orbit-offset-y: -1px;
+                --orbit-path: path("M 12 10 Q 32 5 46 34");
+            }
+
+            .student-shell {
+                padding: var(--shell-gap);
+            }
+
+            .student-shell::before {
+                inset: var(--shell-gap);
+                border-radius: var(--shell-radius);
+            }
+
+            .nav-shell {
+                width: 95%;
+                max-width: 280px;
+            }
+
+            .main-content {
+                padding: 14px 12px 20px;
+            }
+
+            .top-bar {
+                margin: 12px 0 18px;
+            }
+
+            .top-bar .page-title h3 {
+                font-size: 1.2rem;
+            }
+
+            .top-bar .page-title p {
+                font-size: 0.8rem;
+            }
+
+            .top-bar-actions {
+                width: 100%;
+                gap: 10px;
+            }
+
+            .time-orbit-wrap {
+                padding-right: 0;
+                flex-wrap: wrap;
+                gap: 6px;
+            }
+
+            .theme-orbit {
+                position: static;
+                transform: none;
+                margin: 0;
+            }
+
+            .date-time-display {
+                padding: 6px 10px;
+                font-size: 0.75rem;
+            }
+
+            #enablePushBtn {
+                width: 100%;
+                justify-content: center;
+                padding: 7px 10px;
+            }
+
+            .theme-toggle {
+                --orbit-thumb-size: 24px;
+                width: 60px;
+                height: 40px;
+            }
+
+            .liquidGlass-wrapper .table {
+                border-spacing: 0 6px;
+                font-size: 0.78rem;
+            }
+
+            .liquidGlass-wrapper .table thead th {
+                font-size: 0.68rem;
+            }
+
+            .profile-card {
+                padding: 16px;
+                border-radius: 14px;
+            }
+
+            .profile-avatar-large {
+                width: 96px;
+                height: 96px;
+            }
+        }
+
+        @media (max-width: 280px) {
+            :root {
+                --shell-gap: 8px;
+                --shell-radius: 18px;
+                --siswa-topbar-padding-x: 12px;
+                --siswa-topbar-padding-y: 8px;
+                --siswa-topbar-min-height: 58px;
+            }
+
+            .main-content {
+                padding: 12px 10px 18px;
+            }
+
+            .top-bar {
+                margin: 10px 0 16px;
+            }
+
+            .date-time-display {
+                padding: 5px 8px;
+                font-size: 0.7rem;
+            }
+
+            .theme-toggle {
+                width: 56px;
+                height: 36px;
+            }
+
+            .profile-card {
+                padding: 14px;
+            }
+
+            .profile-avatar-large {
+                width: 88px;
+                height: 88px;
+            }
+        }
+
+@media (max-width: 992px) {
+        html,
+        body {
+                max-width: 100%;
+                overflow-x: hidden;
+        }
+
+        .student-shell,
+        .app-container,
+        .main-content,
+        #content,
+        .top-bar,
+        .card,
+        .dashboard-card,
+        .profile-card,
+        .riwayat-card,
+        .section-shell,
+        .student-info-card,
+        .filter-card,
+        .liquidGlass-wrapper,
+        .liquidGlass-content {
+                width: 100%;
+                max-width: 100%;
+                min-width: 0;
+                box-sizing: border-box;
+        }
+
+        .main-content,
+        #content {
+                overflow-x: hidden;
+        }
+
+        #content .row {
+                margin-right: 0;
+                margin-left: 0;
+        }
+
+        #content .row > * {
+                padding-right: 6px;
+                padding-left: 6px;
+        }
+
+        .top-bar {
+                width: 100%;
+                margin-right: 0;
+        }
+
+        /* Keep horizontal scroll only for actual table wrappers */
+        .data-table-container,
+        .table-responsive,
+        .dataTables_scrollBody {
+                overflow-x: auto;
+                overflow-y: hidden;
+                -webkit-overflow-scrolling: touch;
+                touch-action: pan-x;
+                max-width: 100%;
+        }
+
+        .table-responsive.dt-scroll {
+                overflow: visible !important;
+        }
+
+        .table-responsive.dt-scroll .dataTables_scrollBody {
+                overflow-x: auto !important;
+        }
+
+        /* DataTables: keep horizontal scroll only on the body */
+        .dataTables_wrapper {
+                overflow: visible;
+                max-width: 100%;
+        }
+
+        .dataTables_scroll,
+        .dataTables_scrollHead {
+                overflow: hidden;
+        }
+
+        table.dataTable {
+                min-width: 640px;
+        }
+
+        .dataTables_scrollBody {
+                overflow-x: auto !important;
+                overflow-y: hidden;
+                -webkit-overflow-scrolling: touch;
+        }
+
+        .dataTables_scrollBody table {
+                margin: 0 !important;
+        }
+
+        /* Keep cloned header inside DataTables scroll body hidden */
+        .dataTables_scrollBody table.dataTable thead,
+        .dataTables_scrollBody table.table thead {
+                visibility: collapse !important;
+        }
+
+        .dataTables_scrollBody table.dataTable thead th,
+        .dataTables_scrollBody table.dataTable thead td,
+        .dataTables_scrollBody table.table thead th,
+        .dataTables_scrollBody table.table thead td {
+                height: 0 !important;
+                padding-top: 0 !important;
+                padding-bottom: 0 !important;
+                border: 0 !important;
+                font-size: 0 !important;
+                line-height: 0 !important;
+        }
+}
+
+@media (max-width: 1200px) {
+        table.dataTable thead th,
+        table.dataTable tbody td {
+                padding: 10px 8px !important;
+                font-size: 0.82rem;
+                white-space: nowrap;
+        }
+
+        .dataTables_wrapper .dataTables_filter input,
+        .dataTables_wrapper .dataTables_length select {
+                padding: 6px 8px;
+                font-size: 0.82rem;
+                min-height: 34px;
+        }
+
+        .table.dataTable th[width] {
+                width: auto !important;
+        }
+}

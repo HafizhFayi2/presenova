@@ -97,26 +97,26 @@ body {
     border: 0;
   }
 
-  .table thead {
+  .table:not(.dataTable):not(.schedule-config-table):not(.no-card-table) thead {
     display: none;
   }
 
-  .table,
-  .table tbody,
-  .table tr,
-  .table td {
+  .table:not(.dataTable):not(.schedule-config-table):not(.no-card-table),
+  .table:not(.dataTable):not(.schedule-config-table):not(.no-card-table) tbody,
+  .table:not(.dataTable):not(.schedule-config-table):not(.no-card-table) tr,
+  .table:not(.dataTable):not(.schedule-config-table):not(.no-card-table) td {
     display: block;
     width: 100%;
   }
 
-  .table tr {
+  .table:not(.dataTable):not(.schedule-config-table):not(.no-card-table) tr {
     margin-bottom: 15px;
     border: 1px solid var(--border-color);
     border-radius: 8px;
     overflow: hidden;
   }
 
-  .table td {
+  .table:not(.dataTable):not(.schedule-config-table):not(.no-card-table) td {
     text-align: right;
     padding-left: 50%;
     position: relative;
@@ -124,11 +124,11 @@ body {
     border-bottom: 1px solid var(--border-color);
   }
 
-  .table td:last-child {
+  .table:not(.dataTable):not(.schedule-config-table):not(.no-card-table) td:last-child {
     border-bottom: 0;
   }
 
-  .table td::before {
+  .table:not(.dataTable):not(.schedule-config-table):not(.no-card-table) td::before {
     content: attr(data-label);
     position: absolute;
     left: 15px;
@@ -158,6 +158,27 @@ body {
 
   .modal-content {
     border-radius: 10px;
+  }
+
+  .schedule-config-table {
+    min-width: 860px;
+  }
+
+  .no-card-table#classTable {
+    min-width: 760px;
+    width: 100%;
+  }
+
+  .no-card-table.table-admin-users {
+    min-width: 980px;
+    width: 100%;
+  }
+
+  .no-card-table.table-admin-users th,
+  .no-card-table.table-admin-users td,
+  .no-card-table#classTable th,
+  .no-card-table#classTable td {
+    white-space: nowrap;
   }
 }
 
@@ -773,6 +794,23 @@ body {
 .main .alert {
   margin: var(--content-padding);
   margin-bottom: var(--content-padding);
+}
+
+/* Keep DataTables full-width on desktop */
+.data-table-container .dataTables_wrapper,
+.data-table-container .dataTables_wrapper .dataTables_scroll,
+.data-table-container .dataTables_wrapper .dataTables_scrollHead,
+.data-table-container .dataTables_wrapper .dataTables_scrollBody,
+.data-table-container .dataTables_wrapper table.dataTable {
+  width: 100% !important;
+  max-width: 100% !important;
+}
+
+.data-table-container .table-responsive > table,
+.table-container .table-responsive > table,
+.table-container > table.table {
+  width: 100% !important;
+  max-width: 100% !important;
 }
 
 /* ======================= Cards ====================== */
@@ -1504,6 +1542,104 @@ body {
   }
 }
 
+@media (max-width: 360px) {
+  #content {
+    --content-padding: 10px;
+  }
+
+  .topbar {
+    padding: 8px 10px;
+    gap: 8px;
+  }
+
+  .topbar-time,
+  .topbar-actions {
+    width: 100%;
+  }
+
+  .cardBox {
+    grid-template-columns: 1fr;
+    padding: 10px;
+    grid-gap: 12px;
+  }
+
+  .cardBox .card {
+    padding: 16px;
+  }
+
+  .cardBox .card .numbers {
+    font-size: 1.6rem;
+  }
+
+  .cardBox .card .iconBx {
+    font-size: 2rem;
+  }
+
+  .details {
+    padding: 0 8px 8px 8px;
+  }
+
+  .table:not(.dataTable):not(.schedule-config-table):not(.no-card-table) td {
+    padding-left: 46%;
+    font-size: 0.78rem;
+  }
+
+  .table:not(.dataTable):not(.schedule-config-table):not(.no-card-table) td::before {
+    left: 8px;
+    width: 44%;
+    font-size: 0.7rem;
+    white-space: normal;
+  }
+
+  .btn-group .btn {
+    min-width: 0;
+    padding: 6px 8px;
+    font-size: 0.75rem;
+  }
+
+  .modal-dialog {
+    margin: 8px;
+  }
+}
+
+@media (max-width: 280px) {
+  #content {
+    --content-padding: 8px;
+  }
+
+  .topbar {
+    padding: 6px 8px;
+  }
+
+  .cardBox {
+    padding: 8px;
+    grid-gap: 10px;
+  }
+
+  .cardBox .card {
+    padding: 14px;
+  }
+
+  .cardBox .card .numbers {
+    font-size: 1.4rem;
+  }
+
+  .cardBox .card .iconBx {
+    font-size: 1.8rem;
+  }
+
+  .table:not(.dataTable):not(.schedule-config-table):not(.no-card-table) td {
+    padding-left: 50%;
+    font-size: 0.74rem;
+  }
+
+  .table:not(.dataTable):not(.schedule-config-table):not(.no-card-table) td::before {
+    left: 6px;
+    width: 46%;
+    font-size: 0.68rem;
+  }
+}
+
 /* Theme Toggle Button Styling */
 #themeToggle {
   background: var(--gray);
@@ -2126,8 +2262,16 @@ body {
             border-radius: var(--radius-lg);
             padding: 28px;
             box-shadow: var(--shadow);
-            overflow: hidden;
+            overflow-x: auto;
+            overflow-y: hidden;
+            -webkit-overflow-scrolling: touch;
             border: 1px solid var(--border);
+        }
+
+        .data-table-container .table-responsive {
+            overflow-x: auto;
+            overflow-y: hidden;
+            -webkit-overflow-scrolling: touch;
         }
         
         .table-header {
@@ -2486,6 +2630,29 @@ body {
             .btn-group {
                 flex-wrap: wrap;
             }
+
+            .dataTables_wrapper .dataTables_info,
+            .dataTables_wrapper .dataTables_paginate {
+                float: none !important;
+                text-align: center !important;
+            }
+
+            .dataTables_wrapper .dataTables_paginate {
+                margin-top: 8px;
+                display: flex;
+                justify-content: center;
+                flex-wrap: wrap;
+                gap: 4px;
+            }
+
+            .dataTables_wrapper .dataTables_paginate .paginate_button {
+                margin: 0 !important;
+                padding: 5px 8px !important;
+                min-width: 32px;
+                font-size: 0.76rem;
+                line-height: 1.1;
+                border-width: 1px;
+            }
         }
         
         @media (max-width: 576px) {
@@ -2514,6 +2681,119 @@ body {
             
             .card-value {
                 font-size: 1.8rem;
+            }
+
+            .dataTables_wrapper .dataTables_paginate .paginate_button {
+                padding: 4px 7px !important;
+                min-width: 28px;
+                font-size: 0.72rem;
+            }
+
+            #studentConfirmModal .modal-dialog {
+                margin: 10px;
+            }
+
+            #studentConfirmModal .modal-content {
+                border-radius: 12px;
+            }
+
+            #studentConfirmModal .modal-footer {
+                display: grid;
+                grid-template-columns: 1fr 1fr;
+                gap: 8px;
+            }
+
+            #studentConfirmModal .modal-footer .btn {
+                width: 100%;
+                padding: 8px 10px;
+                font-size: 0.82rem;
+            }
+        }
+
+        @media (max-width: 360px) {
+            .sidebar {
+                width: 100%;
+            }
+
+            .main-content {
+                padding: 10px;
+            }
+
+            .top-bar {
+                padding: 14px;
+                border-radius: var(--radius);
+                gap: 10px;
+            }
+
+            .top-bar .page-title h3 {
+                font-size: 1.25rem;
+            }
+
+            .top-bar .page-title p {
+                font-size: 0.8rem;
+            }
+
+            .top-bar-actions {
+                flex-direction: column;
+                align-items: stretch;
+                gap: 10px;
+            }
+
+            .date-time-display {
+                padding: 8px 10px;
+                font-size: 0.78rem;
+            }
+
+            .dashboard-card,
+            .data-table-container,
+            .form-container,
+            .activity-table,
+            .quick-actions {
+                padding: 14px;
+                border-radius: var(--radius);
+            }
+
+            .card-icon {
+                width: 48px;
+                height: 48px;
+                font-size: 20px;
+            }
+
+            .card-value {
+                font-size: 1.5rem;
+            }
+        }
+
+        @media (max-width: 280px) {
+            .main-content {
+                padding: 8px;
+            }
+
+            .top-bar {
+                padding: 12px;
+            }
+
+            .date-time-display {
+                padding: 6px 8px;
+                font-size: 0.72rem;
+            }
+
+            .dashboard-card,
+            .data-table-container,
+            .form-container,
+            .activity-table,
+            .quick-actions {
+                padding: 12px;
+            }
+
+            .card-icon {
+                width: 44px;
+                height: 44px;
+                font-size: 18px;
+            }
+
+            .card-value {
+                font-size: 1.35rem;
             }
         }
         
@@ -3183,5 +3463,150 @@ body {
             color: var(--dark-text) !important;
             border-bottom: 1px solid var(--dark-border) !important;
         }
+
+@media (max-width: 992px) {
+  /* Force standard table layout on mobile + horizontal scroll */
+  .data-table-container,
+  .table-container,
+  .activity-table {
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-x;
+  }
+
+  .table-responsive {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-x;
+  }
+
+  /* DataTables: keep horizontal scroll only on the body */
+  .dataTables_wrapper {
+    overflow: visible;
+  }
+
+  .dataTables_scroll,
+  .dataTables_scrollHead {
+    overflow: hidden;
+  }
+
+  .dataTables_scrollBody {
+    overflow-x: auto !important;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .table-responsive.dt-scroll {
+    overflow: visible !important;
+  }
+
+  .table-responsive.dt-scroll .dataTables_scrollBody {
+    overflow-x: auto !important;
+  }
+
+  table.dataTable {
+    min-width: 900px;
+  }
+
+  table:not(.dataTable),
+  .table:not(.dataTable) {
+    min-width: 520px;
+  }
+
+  .table thead,
+  table.dataTable thead {
+    display: table-header-group;
+  }
+
+  .table,
+  table.dataTable {
+    display: table;
+    width: 100%;
+  }
+
+  .table tbody,
+  table.dataTable tbody {
+    display: table-row-group !important;
+  }
+
+  .table tr,
+  table.dataTable tr {
+    display: table-row;
+  }
+
+  .table td,
+  .table th,
+  table.dataTable td,
+  table.dataTable th {
+    display: table-cell !important;
+    width: auto !important;
+    padding-left: 12px;
+    text-align: left;
+  }
+
+  .table td::before,
+  table.dataTable td::before {
+    display: none !important;
+    content: none !important;
+  }
+
+  .dataTables_scrollBody table {
+    margin: 0 !important;
+  }
+
+  /* Keep cloned header inside DataTables scroll body hidden */
+  .dataTables_scrollBody table.dataTable thead,
+  .dataTables_scrollBody table.table thead {
+    visibility: collapse !important;
+  }
+
+  .dataTables_scrollBody table.dataTable thead th,
+  .dataTables_scrollBody table.dataTable thead td,
+  .dataTables_scrollBody table.table thead th,
+  .dataTables_scrollBody table.table thead td {
+    height: 0 !important;
+    padding-top: 0 !important;
+    padding-bottom: 0 !important;
+    border: 0 !important;
+    font-size: 0 !important;
+    line-height: 0 !important;
+  }
+}
+
+@media (max-width: 1200px) {
+  table.dataTable thead th,
+  table.dataTable tbody td {
+    padding: 7px 6px !important;
+    font-size: 0.78rem;
+    line-height: 1.15;
+    white-space: nowrap;
+  }
+
+  .dataTables_wrapper .dataTables_filter input,
+  .dataTables_wrapper .dataTables_length select {
+    padding: 5px 7px;
+    font-size: 0.78rem;
+    min-height: 30px;
+  }
+
+  .table.dataTable th[width] {
+    width: auto !important;
+  }
+
+  table.dataTable tbody td small {
+    font-size: 0.72rem;
+    line-height: 1.05;
+  }
+
+  #scheduleTable td:nth-child(2) br {
+    display: none;
+  }
+
+  #scheduleTable td:nth-child(2) small.text-muted {
+    display: inline;
+    margin-left: 4px;
+  }
+}
 
 

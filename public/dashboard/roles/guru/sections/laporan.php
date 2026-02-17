@@ -255,7 +255,9 @@ $(document).ready(function() {
             "url": "//cdn.datatables.net/plug-ins/1.13.6/i18n/id.json"
         },
         "pageLength": 10,
-        "responsive": true,
+        "responsive": false,
+        "scrollX": true,
+        "scrollCollapse": true,
         "dom": 'Bfrtip',
         "buttons": [
             {
@@ -315,7 +317,9 @@ $(document).ready(function() {
             }]
         },
         options: {
-            responsive: true,
+            responsive: false,
+            scrollX: true,
+            scrollCollapse: true,
             scales: {
                 y: {
                     beginAtZero: true,
@@ -382,7 +386,9 @@ $(document).ready(function() {
             }]
         },
         options: {
-            responsive: true,
+            responsive: false,
+            scrollX: true,
+            scrollCollapse: true,
             scales: {
                 y: {
                     beginAtZero: true,

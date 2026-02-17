@@ -46,6 +46,10 @@ if (!isset($_SESSION['level']) || !in_array((int) $_SESSION['level'], [1, 2], tr
 
 $isOperator = isset($_SESSION['level']) && (int) $_SESSION['level'] === 2;
 $canDeleteMaster = !$isOperator;
+$canManageSystemUsers = !$isOperator;
+$canDeleteSchedule = true;
+$canDeleteStudent = true;
+$canDeleteTeacher = !$isOperator;
 
 require_once '../includes/database.php';
 $db = new Database();
@@ -166,6 +170,32 @@ if (!function_exists('syncAllJpShiftTimes')) {
     }
 }
 
+if (!function_exists('generateStudentCodeCandidate')) {
+    function generateStudentCodeCandidate() {
+        $letter = chr(random_int(65, 90));
+        $digits = str_split(str_pad((string) random_int(0, 999), 3, '0', STR_PAD_LEFT));
+        $insertPosition = random_int(0, 3);
+        array_splice($digits, $insertPosition, 0, [$letter]);
+        return 'SW' . implode('', $digits);
+    }
+}
+
+if (!function_exists('generateUniqueStudentCode')) {
+    function generateUniqueStudentCode($db, $maxAttempts = 200) {
+        $attempts = max(10, (int) $maxAttempts);
+        for ($i = 0; $i < $attempts; $i++) {
+            $candidate = generateStudentCodeCandidate();
+            $existsStmt = $db->query("SELECT id FROM student WHERE UPPER(student_code) = ? LIMIT 1", [strtoupper($candidate)]);
+            $exists = $existsStmt ? $existsStmt->fetch() : null;
+            if (!$exists) {
+                return $candidate;
+            }
+        }
+
+        throw new RuntimeException('Tidak dapat membuat kode siswa unik. Coba lagi.');
+    }
+}
+
 if (!function_exists('hasTeacherScheduleTriggers')) {
     function hasTeacherScheduleTriggers($db) {
         try {
@@ -191,8 +221,8 @@ if (!function_exists('hasTeacherScheduleTriggers')) {
 // Handle form submissions
 if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     if ($table === 'student' && $action === 'delete') {
-        if (!empty($isOperator)) {
-            $error = "Operator tidak memiliki izin menghapus data master.";
+        if (isset($canDeleteStudent) && !$canDeleteStudent) {
+            $error = "Tidak memiliki izin menghapus data siswa.";
             header("Location: admin.php?table=student&error=" . urlencode($error));
             exit();
         }
@@ -376,35 +406,101 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 
     switch ($table) {
         case 'student':
-            $student_id = $_POST['student_id'] ?? 0;
-            $student_code = $_POST['student_code'];
-            $student_nisn = $_POST['student_nisn'];
-            $student_name = $_POST['student_name'];
-            $class_id = $_POST['class_id'];
-            $jurusan_id = $_POST['jurusan_id'];
-            $password_input = $_POST['password'] ?? '';
-            
-            // Gunakan password input jika ada, jika tidak gunakan NISN
-            $password_to_use = !empty($password_input) ? $password_input : $student_nisn;
-            $password = hash('sha256', $password_to_use . PASSWORD_SALT);
-            
-            if ($student_id == 0) {
+            $student_id = isset($_POST['student_id']) ? (int) $_POST['student_id'] : 0;
+            $student_nisn = trim((string) ($_POST['student_nisn'] ?? ''));
+            $student_name = trim((string) ($_POST['student_name'] ?? ''));
+            $class_id = isset($_POST['class_id']) ? (int) $_POST['class_id'] : 0;
+            $jurusan_id = isset($_POST['jurusan_id']) ? (int) $_POST['jurusan_id'] : 0;
+            $password_input = trim((string) ($_POST['password'] ?? ''));
+            $submitted_student_code = strtoupper(preg_replace('/\s+/', '', trim((string) ($_POST['student_code'] ?? ''))));
+            if ($submitted_student_code !== '' && strpos($submitted_student_code, 'SW') !== 0) {
+                $submitted_student_code = 'SW' . $submitted_student_code;
+            }
+
+            if ($student_nisn === '' || $student_name === '' || $class_id <= 0 || $jurusan_id <= 0) {
+                $error = "Data siswa wajib diisi lengkap.";
+                header("Location: admin.php?table=student&error=" . urlencode($error));
+                exit();
+            }
+
+            $duplicateNisnStmt = $db->query(
+                "SELECT id FROM student WHERE student_nisn = ? AND id != ? LIMIT 1",
+                [$student_nisn, $student_id]
+            );
+            if ($duplicateNisnStmt && $duplicateNisnStmt->fetch()) {
+                $error = "NISN sudah digunakan oleh siswa lain.";
+                header("Location: admin.php?table=student&error=" . urlencode($error));
+                exit();
+            }
+
+            if ($student_id === 0) {
+                try {
+                    $student_code = generateUniqueStudentCode($db);
+                } catch (RuntimeException $e) {
+                    $error = $e->getMessage();
+                    header("Location: admin.php?table=student&error=" . urlencode($error));
+                    exit();
+                }
+
+                $password_to_use = $student_code;
+                $password = hash('sha256', $password_to_use . PASSWORD_SALT);
+
                 $sql = "INSERT INTO student (student_code, student_nisn, student_password, student_name, class_id, jurusan_id, location_id) 
                         VALUES (?, ?, ?, ?, ?, ?, 1)";
                 $stmt = $db->query($sql, [$student_code, $student_nisn, $password, $student_name, $class_id, $jurusan_id]);
-                $success = "Siswa berhasil ditambahkan! Password: " . $password_to_use;
+
+                if (!$stmt) {
+                    $error = "Gagal menambahkan siswa.";
+                    header("Location: admin.php?table=student&error=" . urlencode($error));
+                    exit();
+                }
+
+                $success = "Siswa berhasil ditambahkan. Password default mengikuti kode siswa.";
             } else {
-                // Untuk edit, periksa apakah password diisi
-                if (!empty($password_input)) {
+                $existingStudentStmt = $db->query(
+                    "SELECT student_code FROM student WHERE id = ? LIMIT 1",
+                    [$student_id]
+                );
+                $existingStudent = $existingStudentStmt ? $existingStudentStmt->fetch() : null;
+                if (!$existingStudent) {
+                    $error = "Data siswa tidak ditemukan.";
+                    header("Location: admin.php?table=student&error=" . urlencode($error));
+                    exit();
+                }
+
+                // Kode siswa dipertahankan dan tidak ditampilkan untuk operator.
+                $student_code = strtoupper(trim((string) ($existingStudent['student_code'] ?? '')));
+                if ($student_code === '' && $submitted_student_code !== '') {
+                    $student_code = $submitted_student_code;
+                }
+                if ($student_code === '') {
+                    try {
+                        $student_code = generateUniqueStudentCode($db);
+                    } catch (RuntimeException $e) {
+                        $error = $e->getMessage();
+                        header("Location: admin.php?table=student&error=" . urlencode($error));
+                        exit();
+                    }
+                }
+
+                if ($password_input !== '') {
+                    $password = hash('sha256', $password_input . PASSWORD_SALT);
                     $sql = "UPDATE student SET student_code = ?, student_nisn = ?, student_password = ?, student_name = ?, class_id = ?, jurusan_id = ? WHERE id = ?";
                     $stmt = $db->query($sql, [$student_code, $student_nisn, $password, $student_name, $class_id, $jurusan_id, $student_id]);
-                    $success = "Siswa berhasil diperbarui! Password diubah";
+                    $success = "Siswa berhasil diperbarui. Password diubah.";
                 } else {
                     $sql = "UPDATE student SET student_code = ?, student_nisn = ?, student_name = ?, class_id = ?, jurusan_id = ? WHERE id = ?";
                     $stmt = $db->query($sql, [$student_code, $student_nisn, $student_name, $class_id, $jurusan_id, $student_id]);
-                    $success = "Siswa berhasil diperbarui!";
+                    $success = "Siswa berhasil diperbarui.";
+                }
+
+                if (!$stmt) {
+                    $error = "Gagal memperbarui data siswa.";
+                    header("Location: admin.php?table=student&error=" . urlencode($error));
+                    exit();
                 }
             }
+
             header("Location: admin.php?table=student&success=" . urlencode($success));
             exit();
             break;
@@ -1138,8 +1234,8 @@ if ($action == 'delete') {
             break;
             
         case 'teacher':
-            if (!empty($isOperator)) {
-                $error = "Operator tidak memiliki izin menghapus data master.";
+            if (isset($canDeleteTeacher) && !$canDeleteTeacher) {
+                $error = "Penghapusan data guru tidak diizinkan.";
                 header("Location: admin.php?table=teacher&error=" . urlencode($error));
                 exit();
             }
@@ -1153,8 +1249,8 @@ if ($action == 'delete') {
             break;
             
         case 'schedule':
-            if (!empty($isOperator)) {
-                $error = "Operator tidak memiliki izin menghapus data master.";
+            if (isset($canDeleteSchedule) && !$canDeleteSchedule) {
+                $error = "Tidak memiliki izin menghapus jadwal.";
                 header("Location: admin.php?table=schedule&error=" . urlencode($error));
                 exit();
             }
@@ -1302,6 +1398,7 @@ if ($active_admin_section_css !== null) {
 
     <!-- Import style.css -->
     <link rel="stylesheet" href="../assets/css/admin.css">
+    <link rel="stylesheet" href="../assets/css/app-dialog.css">
 
     <!-- Ion Icons -->
     <script type="module" src="https://unpkg.com/ionicons@5.5.2/dist/ionicons/ionicons.esm.js"></script>
@@ -1708,6 +1805,7 @@ if ($active_admin_section_css !== null) {
     
     <!-- JavaScript -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="../assets/js/app-dialog.js"></script>
     <script src="../assets/js/main.js"></script>
     
     <script>
@@ -1794,10 +1892,25 @@ if ($active_admin_section_css !== null) {
             backdrop.remove();
         });
 
-        // Initialize DataTables with consistent styling
-        $('.data-table').each(function() {
-            if (!$.fn.DataTable.isDataTable(this)) {
-                $(this).DataTable({
+    // Initialize DataTables with consistent styling
+    $(document).on('init.dt', function(event, settings) {
+        const $table = $(settings.nTable);
+        const $wrapper = $table.closest('.dataTables_wrapper');
+        const $scrollBody = $wrapper.find('.dataTables_scrollBody');
+        const $scrollHead = $wrapper.find('.dataTables_scrollHead');
+        if ($scrollBody.length && $scrollHead.length) {
+            $wrapper.closest('.table-responsive').addClass('dt-scroll');
+            $scrollBody.off('scroll.dt-sync').on('scroll.dt-sync', function() {
+                $scrollHead.scrollLeft(this.scrollLeft);
+            });
+        } else {
+            $wrapper.closest('.table-responsive').removeClass('dt-scroll');
+        }
+    });
+
+    $('.data-table').each(function() {
+        if (!$.fn.DataTable.isDataTable(this)) {
+            $(this).DataTable({
                     "language": {
                         "url": "//cdn.datatables.net/plug-ins/1.13.6/i18n/id.json"
                     },
@@ -1805,16 +1918,37 @@ if ($active_admin_section_css !== null) {
                     "lengthMenu": [10, 25, 50, 100],
                     "ordering": true,
                     "searching": true,
-                    "responsive": true,
+                    "responsive": false,
+                    "scrollX": false,
+                    "scrollCollapse": false,
                     "dom": "<'row'<'col-sm-12 col-md-6'l><'col-sm-12 col-md-6'f>>" +
                            "<'row'<'col-sm-12'tr>>" +
                            "<'row'<'col-sm-12 col-md-5'i><'col-sm-12 col-md-7'p>>",
                     "initComplete": function() {
+                        const api = this.api();
+                        const $wrapper = $(api.table().container());
+                        const $scrollBody = $wrapper.find('.dataTables_scrollBody');
+                        const $scrollHead = $wrapper.find('.dataTables_scrollHead');
+                        if ($scrollBody.length && $scrollHead.length) {
+                            $wrapper.closest('.table-responsive').addClass('dt-scroll');
+                            $scrollBody.off('scroll.dt-sync').on('scroll.dt-sync', function() {
+                                $scrollHead.scrollLeft(this.scrollLeft);
+                            });
+                        } else {
+                            $wrapper.closest('.table-responsive').removeClass('dt-scroll');
+                        }
+                        api.columns.adjust();
                         // Apply custom styling to DataTables elements
                         $('.dataTables_filter input').addClass('form-control');
                         $('.dataTables_length select').addClass('form-select');
                     }
                 });
+            }
+        });
+
+        $(window).off('resize.adminDtAdjust').on('resize.adminDtAdjust', function() {
+            if ($.fn.dataTable && $.fn.dataTable.tables) {
+                $.fn.dataTable.tables({ visible: true, api: true }).columns.adjust();
             }
         });
         
@@ -1993,8 +2127,19 @@ if ($active_admin_section_css !== null) {
         // Loading overlay for page transitions
         $(document).on('click', 'a:not([href^="#"]):not([href*="javascript"]):not([target="_blank"])', function(e) {
             const href = $(this).attr('href');
-            const hasInlineConfirm = ($(this).attr('onclick') || '').includes('confirm');
+            const onclickAttr = String($(this).attr('onclick') || '');
+            const hasInlineConfirm =
+                onclickAttr.includes('confirm') ||
+                onclickAttr.includes('AppDialog.inlineConfirm') ||
+                onclickAttr.includes('inlineConfirm(');
+
+            if (e.isDefaultPrevented()) {
+                $('#loadingOverlay').hide();
+                return;
+            }
+
             if ($(this).data('no-loading') || hasInlineConfirm) {
+                $('#loadingOverlay').hide();
                 return;
             }
             if (href && !href.startsWith('javascript:') && !href.startsWith('#')) {

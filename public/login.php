@@ -497,9 +497,59 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         }
 
         /* Responsive */
+        @media (max-width: 576px) {
+            body {
+                align-items: flex-start;
+                padding: 16px;
+            }
+
+            .login-container {
+                max-width: 100%;
+            }
+
+            .login-header {
+                margin-bottom: 1.5rem;
+            }
+
+            .logo-container {
+                gap: 10px;
+                margin-bottom: 1rem;
+            }
+
+            .logo-container img {
+                height: 40px;
+            }
+
+            .brand-text {
+                font-size: 1.5rem;
+            }
+
+            .login-card {
+                padding: 1.5rem;
+                border-radius: 14px;
+            }
+
+            .role-selection {
+                padding: 0.4rem;
+            }
+
+            .role-btn {
+                font-size: 0.85rem;
+            }
+
+            .home-link {
+                position: relative;
+                top: 0;
+                left: 0;
+                margin-bottom: 0.75rem;
+                width: 100%;
+                justify-content: center;
+            }
+        }
+
         @media (max-width: 480px) {
             .login-card {
-                padding: 2rem;
+                padding: 1.25rem;
             }
             
             .login-title {
@@ -576,14 +626,15 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 <!-- Username -->
                 <div class="form-group">
                     <label class="form-label" for="username">
-                        <span id="usernameLabel">NISN</span>
+                        <span id="usernameLabel">Kode Siswa</span>
                     </label>
                     <input type="text" 
                            class="form-control" 
                            id="username" 
                            name="username" 
                            required 
-                           placeholder="Masukkan NISN Anda"
+                           placeholder="Masukkan Kode Siswa Anda"
+                           autocapitalize="characters"
                            autocomplete="username">
                 </div>
 
@@ -669,16 +720,25 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                             placeholder = 'Masukkan kode guru';
                             break;
                         default:
-                            label = 'NISN';
-                            placeholder = 'Masukkan NISN Anda';
+                            label = 'Kode Siswa';
+                            placeholder = 'Masukkan Kode Siswa Anda';
                     }
                     
                     usernameLabel.textContent = label;
                     usernameInput.placeholder = placeholder;
+                    if (role === 'siswa') {
+                        usernameInput.value = usernameInput.value.toUpperCase().replace(/\s+/g, '');
+                    }
                     
                     // Auto-focus on username field
                     usernameInput.focus();
                 });
+            });
+
+            usernameInput.addEventListener('input', function() {
+                if (roleInput.value === 'siswa') {
+                    this.value = this.value.toUpperCase().replace(/\s+/g, '');
+                }
             });
 
             // Toggle Password Visibility
@@ -697,6 +757,10 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                     e.preventDefault();
                     showError('Username dan password harus diisi!');
                     return false;
+                }
+
+                if (roleInput.value === 'siswa') {
+                    usernameInput.value = username.toUpperCase().replace(/\s+/g, '');
                 }
                 
                 // Show loading state

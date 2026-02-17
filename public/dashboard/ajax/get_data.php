@@ -7,9 +7,20 @@ require_once $base_dir . '/includes/database.php';
 $db = new Database();
 $table = $_POST['table'] ?? '';
 $id = $_POST['id'] ?? 0;
+$isOperator = isset($_SESSION['level']) && (int) $_SESSION['level'] === 2;
 
 if(empty($table)) {
     echo '<div class="alert alert-danger">Parameter table tidak ditemukan</div>';
+    exit;
+}
+
+if (
+    !isset($_SESSION['logged_in'], $_SESSION['role'], $_SESSION['level']) ||
+    $_SESSION['logged_in'] !== true ||
+    $_SESSION['role'] !== 'admin' ||
+    !in_array((int) $_SESSION['level'], [1, 2], true)
+) {
+    echo '<div class="alert alert-danger">Akses ditolak</div>';
     exit;
 }
 
@@ -43,9 +54,13 @@ switch($table) {
                 <div class="row">
                     <div class="col-md-6 mb-3">
                         <label class="form-label">Kode Siswa *</label>
-                        <input type="text" class="form-control" name="student_code" required
-                               value="<?php echo htmlspecialchars($student['student_code'] ?? ''); ?>"
-                               placeholder="SW001">
+                        <input type="text" class="form-control" value="<?php echo $id > 0 ? '******' : 'AUTO GENERATED'; ?>" readonly>
+                        <input type="hidden" name="student_code" value="">
+                        <?php if ($isOperator): ?>
+                        <small class="text-muted">Operator tidak dapat melihat kode siswa.</small>
+                        <?php else: ?>
+                        <small class="text-muted">Kode siswa dibuat otomatis saat simpan (format SW + kode acak).</small>
+                        <?php endif; ?>
                     </div>
                     <div class="col-md-6 mb-3">
                         <label class="form-label">NISN *</label>
@@ -93,19 +108,19 @@ switch($table) {
                     <label class="form-label">Password</label>
                     <div class="input-group">
                         <input type="password" class="form-control" name="password" 
-                               placeholder="Kosongkan untuk menggunakan NISN">
+                               placeholder="Kosongkan untuk menggunakan kode siswa">
                         <button class="btn btn-outline-secondary" type="button" onclick="togglePassword(this)">
                             <i class="fas fa-eye"></i>
                         </button>
                     </div>
                     <small class="text-muted">
-                        <?php echo $id > 0 ? 'Kosongkan jika tidak ingin mengubah password' : 'Password default adalah NISN'; ?>
+                        <?php echo $id > 0 ? 'Kosongkan jika tidak ingin mengubah password' : 'Password default mengikuti kode siswa'; ?>
                     </small>
                 </div>
                 
                 <?php if($id == 0): ?>
                 <div class="alert alert-info">
-                    <i class="fas fa-info-circle"></i> Password default akan menggunakan NISN yang dimasukkan
+                    <i class="fas fa-info-circle"></i> Password default akan menggunakan kode siswa otomatis.
                 </div>
                 <?php endif; ?>
             </div>

@@ -215,6 +215,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['face_data'])) {
     <link rel="icon" type="image/png" sizes="32x32" href="assets/images/favicon-16x16-black background.png" media="(prefers-color-scheme: dark)">
     <link rel="shortcut icon" type="image/png" href="assets/images/favicon-32x32.png">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="assets/css/app-dialog.css">
     <link rel="stylesheet" href="assets/css/style.css">
     <style>
         .register-container {
@@ -650,7 +651,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['face_data'])) {
 <body>
     <!-- Logout Button -->
     <div class="logout-btn-container">
-        <a href="register.php?logout" class="logout-btn" onclick="return confirm('Anda yakin ingin logout? Proses registrasi wajah akan dibatalkan.')">
+        <a href="register.php?logout" class="logout-btn">
             <i class="fas fa-sign-out-alt"></i> Logout
         </a>
     </div>
@@ -813,7 +814,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['face_data'])) {
                 
                 <!-- Additional Logout Button at Bottom -->
                 <div class="text-center mt-4">
-                    <a href="register.php?logout" class="btn btn-outline-danger btn-sm" onclick="return confirm('Anda yakin ingin logout?')">
+                    <a href="register.php?logout" class="btn btn-outline-danger btn-sm">
                         <i class="fas fa-sign-out-alt"></i> Keluar dan Kembali ke Login
                     </a>
                 </div>
@@ -821,6 +822,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['face_data'])) {
         </div>
     </div>
     
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="assets/js/app-dialog.js"></script>
     <script src="face/faces_logics/face-api.min.js"></script>
     <script>
         document.addEventListener('DOMContentLoaded', function() {
@@ -1364,8 +1367,10 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['face_data'])) {
             }
 
             if (poseStartBtn) {
-                poseStartBtn.addEventListener('click', function() {
-                    const ready = confirm('Pastikan Anda siap. Setelah ini sistem auto-capture pose kanan, kiri, lalu depan.');
+                poseStartBtn.addEventListener('click', async function() {
+                    const ready = await AppDialog.confirm('Pastikan Anda siap. Setelah ini sistem auto-capture pose kanan, kiri, lalu depan.', {
+                        title: 'Konfirmasi Mulai Pose'
+                    });
                     if (!ready) return;
                     startPoseValidationFlow();
                 });
@@ -1380,8 +1385,11 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['face_data'])) {
             
             // Confirm before logout
             document.querySelectorAll('a[href*="logout"]').forEach(link => {
-                link.addEventListener('click', function(e) {
-                    if (!confirm('Anda yakin ingin logout? Proses registrasi wajah akan dibatalkan.')) {
+                link.addEventListener('click', async function(e) {
+                    const confirmed = await AppDialog.confirm('Anda yakin ingin logout? Proses registrasi wajah akan dibatalkan.', {
+                        title: 'Konfirmasi Logout'
+                    });
+                    if (!confirmed) {
                         e.preventDefault();
                         return false;
                     }

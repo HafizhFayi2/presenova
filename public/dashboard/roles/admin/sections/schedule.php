@@ -411,14 +411,14 @@ foreach ($teachers as $teacher) {
                             data-table="schedule">
                         <i class="fas fa-edit"></i>
                     </button>
-                    <?php if (isset($canDeleteMaster) && !$canDeleteMaster): ?>
-                        <button class="btn btn-outline-danger" disabled title="Operator tidak dapat menghapus data master">
+                    <?php if (isset($canDeleteSchedule) && !$canDeleteSchedule): ?>
+                        <button class="btn btn-outline-danger" disabled title="Tidak memiliki izin menghapus jadwal">
                             <i class="fas fa-trash"></i>
                         </button>
                     <?php else: ?>
                         <a href="admin.php?table=schedule&action=delete&id=<?php echo $schedule['schedule_id'] ?? ''; ?>" 
                            class="btn btn-outline-danger" 
-                           onclick="return confirm('Hapus jadwal ini?')">
+                           onclick="return AppDialog.inlineConfirm(this, 'Hapus jadwal ini?')">
                             <i class="fas fa-trash"></i>
                         </a>
                     <?php endif; ?>
@@ -613,8 +613,13 @@ $(document).ready(function() {
         "pageLength": 10,
         "lengthMenu": [10, 25, 50, 100],
         "order": [[0, 'asc']],
-        "responsive": true,
-        "autoWidth": false,
+        "responsive": false,
+        "scrollX": false,
+        "scrollCollapse": false,
+        "autoWidth": true,
+        "initComplete": function() {
+            this.api().columns.adjust();
+        },
         "drawCallback": function(settings) {
             // Update nomor urut setelah filter/paging
             const api = this.api();
@@ -630,6 +635,10 @@ $(document).ready(function() {
                 loadScheduleForm(scheduleId);
             });
         }
+    });
+
+    $(window).off('resize.scheduleTableAdjust').on('resize.scheduleTableAdjust', function() {
+        table.columns.adjust();
     });
     
     // Filter functionality

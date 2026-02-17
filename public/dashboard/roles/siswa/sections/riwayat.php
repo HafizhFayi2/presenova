@@ -286,7 +286,7 @@ $riwayat_izin = array_values(array_filter($riwayat, fn($i) => (int)($i['present_
     </div>
     <div class="card-body">
         <!-- Filter dan Pencarian -->
-        <div class="row mb-4">
+        <div class="row mb-4 riwayat-filter-wrap">
             <div class="col-md-12">
                 <div class="card filter-card">
                     <div class="card-body">
@@ -356,8 +356,8 @@ $riwayat_izin = array_values(array_filter($riwayat, fn($i) => (int)($i['present_
                                         <div class="liquidGlass-tint"></div>
                                         <div class="liquidGlass-shine"></div>
                                         <div class="liquidGlass-content">
-                                            <div class="table-responsive">
-                                                <table class="table table-hover mb-0">
+                                            <div class="table-responsive riwayat-table-responsive">
+                                                <table class="table table-hover mb-0 riwayat-table pending-table">
                                             <thead class="table-warning">
                                                 <tr>
                                                     <th width="80">Shift</th>
@@ -466,8 +466,8 @@ $riwayat_izin = array_values(array_filter($riwayat, fn($i) => (int)($i['present_
                 Jadwal Tidak Terabsensi (Alpa)
             </h5>
             <?php if (count($missed_schedules) > 0): ?>
-                <div class="table-responsive">
-                    <table class="table table-hover mb-0 missed-table">
+                <div class="table-responsive riwayat-table-responsive">
+                    <table class="table table-hover mb-0 missed-table riwayat-table">
                         <thead class="table-danger">
                             <tr>
                                 <th width="120">Tanggal</th>
@@ -572,8 +572,8 @@ $riwayat_izin = array_values(array_filter($riwayat, fn($i) => (int)($i['present_
                                         <div class="liquidGlass-tint"></div>
                                         <div class="liquidGlass-shine"></div>
                                         <div class="liquidGlass-content">
-                                            <div class="table-responsive">
-                                                <table class="table table-hover mb-0">
+                                            <div class="table-responsive riwayat-table-responsive">
+                                                <table class="table table-hover mb-0 riwayat-table completed-table">
                                             <thead class="table-success">
                                                 <tr>
                                                     <th width="80">Shift</th>
@@ -666,8 +666,8 @@ $riwayat_izin = array_values(array_filter($riwayat, fn($i) => (int)($i['present_
                 Rekap Jadwal Sakit
             </h5>
             <?php if (count($riwayat_sakit) > 0): ?>
-                <div class="table-responsive">
-                    <table class="table table-hover mb-0">
+                <div class="table-responsive riwayat-table-responsive">
+                    <table class="table table-hover mb-0 riwayat-table sakit-table">
                         <thead class="table-warning">
                             <tr>
                                 <th width="120">Tanggal</th>
@@ -733,8 +733,8 @@ $riwayat_izin = array_values(array_filter($riwayat, fn($i) => (int)($i['present_
                 Rekap Jadwal Izin
             </h5>
             <?php if (count($riwayat_izin) > 0): ?>
-                <div class="table-responsive">
-                    <table class="table table-hover mb-0">
+                <div class="table-responsive riwayat-table-responsive">
+                    <table class="table table-hover mb-0 riwayat-table izin-table">
                         <thead class="table-info">
                             <tr>
                                 <th width="120">Tanggal</th>

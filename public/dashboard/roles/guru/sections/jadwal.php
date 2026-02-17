@@ -176,8 +176,17 @@ $(document).ready(function() {
         pageLength: 10,
         lengthMenu: [10, 25, 50, 100],
         order: [[1, 'asc'], [5, 'asc']],
-        responsive: true,
-        autoWidth: false
+        responsive: false,
+        scrollX: false,
+        scrollCollapse: false,
+        autoWidth: true,
+        initComplete: function() {
+            this.api().columns.adjust();
+        }
+    });
+
+    $(window).off('resize.guruScheduleAdjust').on('resize.guruScheduleAdjust', function() {
+        $('#guruScheduleTable').DataTable().columns.adjust();
     });
 });
 </script>

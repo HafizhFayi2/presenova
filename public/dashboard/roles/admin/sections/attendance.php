@@ -521,7 +521,7 @@ if (isset($_GET['export'])) {
 
     $dataTopStyle = [
         'alignment' => [
-            'vertical' => \PhpOffice\PhpSpreadsheet\Style\Alignment::VERTICAL_TOP,
+            'vertical' => \PhpOffice\PhpSpreadsheet\Style\Alignment::VERTICAL_CENTER,
             'horizontal' => \PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_LEFT,
             'wrapText' => true,
         ],
@@ -663,6 +663,7 @@ if (isset($_GET['export'])) {
     $sheet->getStyle('A1:J' . $lastDataRow)->applyFromArray($borderStyle);
     if ($lastDataRow >= 5) {
         $sheet->getStyle('A5:J' . $lastDataRow)->getAlignment()->setWrapText(true);
+        $sheet->getStyle('A5:J' . $lastDataRow)->getAlignment()->setVertical(\PhpOffice\PhpSpreadsheet\Style\Alignment::VERTICAL_CENTER);
     }
     foreach ($columnOrder as $col) {
         $targetWidth = $columnMaxTextLength[$col] + 2;
@@ -1334,7 +1335,8 @@ if (isset($_GET['print'])) {
                             </button>
                             <?php if ($canDelete): ?>
                                 <a href="?table=attendance&action=delete&id=<?php echo $attendance['presence_id']; ?>" 
-                                   class="btn btn-sm btn-danger" onclick="return confirm('Hapus data absensi ini?')">
+                                   class="btn btn-sm btn-danger"
+                                   onclick="return AppDialog.inlineConfirm(this, 'Hapus data absensi ini?')">
                                     <i class="bi bi-trash"></i>
                                 </a>
                             <?php else: ?>
@@ -1568,7 +1570,9 @@ $(document).ready(function() {
             }]
         },
         options: {
-            responsive: true,
+            responsive: false,
+            scrollX: true,
+            scrollCollapse: true,
             scales: {
                 y: {
                     beginAtZero: true,
