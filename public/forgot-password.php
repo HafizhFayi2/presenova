@@ -80,7 +80,7 @@ try {
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $submittedToken = $_POST['csrf_token'] ?? '';
     $role = trim($_POST['role'] ?? 'siswa');
-    $identifier = trim($_POST['identifier'] ?? '');
+    $identifier = strtoupper(trim($_POST['identifier'] ?? ''));
     $name = trim($_POST['name'] ?? '');
     $clientIp = getClientIP();
     $identifierHash = $identifier !== '' ? substr(hash('sha256', $identifier), 0, 16) : '-';
@@ -103,16 +103,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         logForgotEvent('forgot_password_blocked', "non_student_role|ip={$clientIp}|role={$role}");
     } elseif ($identifier === '' || $name === '') {
         $error = "Semua field wajib diisi.";
-    } elseif (!preg_match('/^[0-9]{6,20}$/', $identifier)) {
-        $error = "Format NISN tidak valid.";
-        logForgotEvent('forgot_password_failed', "invalid_nisn|ip={$clientIp}|id_hash={$identifierHash}");
+    } elseif (!preg_match('/^[A-Z0-9]{4,20}$/', $identifier)) {
+        $error = "Format kode siswa tidak valid.";
+        logForgotEvent('forgot_password_failed', "invalid_code|ip={$clientIp}|id_hash={$identifierHash}");
     } elseif (safeStrLen($name) < 3 || safeStrLen($name) > 120) {
         $error = "Nama tidak valid.";
     } else {
         $_SESSION['forgot_password_last_attempt'] = time();
 
         $stmt = $db->query(
-            "SELECT id, student_nisn, student_name FROM student WHERE student_nisn = ? LIMIT 1",
+            "SELECT id, student_code, student_name FROM student WHERE student_code = ? LIMIT 1",
             [$identifier]
         );
 
@@ -123,7 +123,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $student = $stmt->fetch();
 
             if (!$student) {
-                $error = "NISN tidak ditemukan di database.";
+                $error = "Kode siswa tidak ditemukan di database.";
                 logForgotEvent('forgot_password_failed', "student_not_found|ip={$clientIp}|id_hash={$identifierHash}");
             } else {
                 // Strict validation: must match exactly (character by character).
@@ -131,10 +131,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $inputName = trim($name);
 
                 if (!hash_equals($dbName, $inputName)) {
-                    $error = "Nama/username tidak cocok dengan NISN tersebut.";
+                    $error = "Nama/username tidak cocok dengan kode siswa tersebut.";
                     logForgotEvent('forgot_password_failed', "name_mismatch|ip={$clientIp}|id_hash={$identifierHash}");
                 } else {
-                    $newPassword = $student['student_nisn'];
+                    $newPassword = $student['student_code'];
                     $hashedPassword = hash('sha256', $newPassword . PASSWORD_SALT);
                     $updated = $db->query(
                         "UPDATE student SET student_password = ? WHERE id = ?",
@@ -142,7 +142,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     );
 
                     if ($updated) {
-                        $success = "Password berhasil direset. Silakan login dengan password NISN.";
+                        $success = "Password berhasil direset. Silakan login dengan password kode siswa.";
                         logForgotEvent('forgot_password_success', "student_reset|ip={$clientIp}|id_hash={$identifierHash}");
                     } else {
                         $error = "Terjadi kendala saat reset password. Coba lagi.";
@@ -436,16 +436,17 @@ if (!empty($siteInfo['site_email'])) {
                 </div>
 
                 <div class="form-group">
-                    <label class="form-label" for="identifier">NISN</label>
+                    <label class="form-label" for="identifier">Kode Siswa</label>
                     <input type="text"
                            class="form-control"
                            id="identifier"
                            name="identifier"
-                           inputmode="numeric"
-                           pattern="[0-9]{6,20}"
-                           minlength="6"
+                           inputmode="text"
+                           pattern="[A-Za-z0-9]{4,20}"
+                           minlength="4"
                            maxlength="20"
-                           placeholder="Masukkan NISN Anda"
+                           autocapitalize="characters"
+                           placeholder="Masukkan kode siswa"
                            required>
                 </div>
 
@@ -459,7 +460,7 @@ if (!empty($siteInfo['site_email'])) {
                            maxlength="120"
                            placeholder="Masukkan nama persis seperti di database"
                            required>
-                    <p class="role-help">Wajib sama persis dengan data NISN anda (beda 1 huruf akan ditolak).</p>
+                    <p class="role-help">Wajib sama persis dengan data kode siswa anda (beda 1 huruf akan ditolak).</p>
                 </div>
 
                 <button type="submit" class="btn-submit">
@@ -472,5 +473,16 @@ if (!empty($siteInfo['site_email'])) {
             </div>
         </div>
     </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const identifierInput = document.getElementById('identifier');
+            if (identifierInput) {
+                identifierInput.addEventListener('input', function() {
+                    this.value = this.value.toUpperCase().replace(/\s+/g, '');
+                });
+            }
+        });
+    </script>
 </body>
 </html>

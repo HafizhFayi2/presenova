@@ -79,6 +79,7 @@ $isLoggedIn = isset($_SESSION['user_id']) && !empty($_SESSION['user_id']);
     
     <!-- CSS -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="assets/css/app-dialog.css">
     
     <style>
         :root {
@@ -1170,6 +1171,7 @@ $isLoggedIn = isset($_SESSION['user_id']) && !empty($_SESSION['user_id']);
     <!-- JavaScript -->
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="assets/js/app-dialog.js"></script>
     
     <script>
         // Navbar scroll effect
@@ -1252,8 +1254,11 @@ $isLoggedIn = isset($_SESSION['user_id']) && !empty($_SESSION['user_id']);
         // Logout confirmation
         const logoutButton = document.querySelector('.btn-logout');
         if (logoutButton) {
-            logoutButton.addEventListener('click', function(e) {
-                if (!confirm('Apakah Anda yakin ingin logout?')) {
+            logoutButton.addEventListener('click', async function(e) {
+                const confirmed = await AppDialog.confirm('Apakah Anda yakin ingin logout?', {
+                    title: 'Konfirmasi Logout'
+                });
+                if (!confirmed) {
                     e.preventDefault();
                 }
             });

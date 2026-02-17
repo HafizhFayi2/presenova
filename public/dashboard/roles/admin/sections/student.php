@@ -33,6 +33,8 @@ if($majorsResult === false) {
     die("Error in query: " . print_r($db->errorInfo(), true));
 }
 $majors = $majorsResult->fetchAll();
+$isOperatorView = isset($isOperator) ? (bool) $isOperator : ((int) ($_SESSION['level'] ?? 0) === 2);
+$canRevealStudentCode = !$isOperatorView && ((int) ($_SESSION['level'] ?? 0) === 1);
 ?>
 
 <div class="data-table-container">
@@ -94,7 +96,23 @@ $majors = $majorsResult->fetchAll();
                     <?php foreach($students as $index => $student): ?>
                     <tr>
                         <td><?php echo $index + 1; ?></td>
-                        <td><span class="badge badge-primary"><?php echo htmlspecialchars($student['student_code']); ?></span></td>
+                        <td>
+                            <?php if ($canRevealStudentCode): ?>
+                                <div class="d-flex align-items-center gap-2">
+                                    <span class="badge badge-primary student-code-mask" data-student-id="<?php echo (int) $student['id']; ?>">****</span>
+                                    <button class="btn btn-outline-secondary btn-sm reveal-student-code-btn"
+                                            type="button"
+                                            data-student-id="<?php echo (int) $student['id']; ?>"
+                                            data-visible="0"
+                                            data-student-code=""
+                                            title="Lihat kode siswa (butuh password admin)">
+                                        <i class="fas fa-eye"></i>
+                                    </button>
+                                </div>
+                            <?php else: ?>
+                                <span class="badge bg-secondary">****</span>
+                            <?php endif; ?>
+                        </td>
                         <td><?php echo htmlspecialchars($student['student_nisn']); ?></td>
                         <td><?php echo htmlspecialchars($student['student_name']); ?></td>
                         <td><?php echo htmlspecialchars($student['class_name']); ?></td>
@@ -120,8 +138,8 @@ $majors = $majorsResult->fetchAll();
                                         title="Reset Password">
                                     <i class="fas fa-key"></i>
                                 </button>
-                                <?php if (isset($canDeleteMaster) && !$canDeleteMaster): ?>
-                                    <button class="btn btn-outline-danger" disabled title="Operator tidak dapat menghapus data master">
+                                <?php if (isset($canDeleteStudent) && !$canDeleteStudent): ?>
+                                    <button class="btn btn-outline-danger" disabled title="Tidak memiliki izin menghapus data siswa">
                                         <i class="fas fa-trash"></i>
                                     </button>
                                 <?php else: ?>
@@ -167,6 +185,24 @@ $majors = $majorsResult->fetchAll();
     </div>
 </div>
 
+<div class="modal fade" id="studentConfirmModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-sm">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title student-confirm-title">Konfirmasi</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p class="mb-0 student-confirm-message">Apakah Anda yakin?</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Batal</button>
+                <button type="button" class="btn btn-primary" id="studentConfirmOkBtn">Lanjutkan</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- JavaScript -->
 <!-- Tambahkan script CRUD yang lebih baik -->
 <script>
@@ -191,12 +227,62 @@ $(document).ready(function() {
         "pageLength": 10,
         "lengthMenu": [10, 25, 50, 100],
         "order": [[0, 'asc']],
-        "responsive": true,
+        "responsive": false,
+        "scrollX": false,
+        "scrollCollapse": false,
+        "autoWidth": true,
+        "initComplete": function() {
+            this.api().columns.adjust();
+        },
         "columnDefs": [
             { "orderable": false, "targets": [7] }, // Kolom aksi tidak bisa diurutkan
             { "searchable": false, "targets": [0, 7] } // Kolom nomor dan aksi tidak bisa dicari
         ]
     });
+
+    $(window).off('resize.studentTableAdjust').on('resize.studentTableAdjust', function() {
+        table.columns.adjust();
+    });
+
+    const studentConfirmEl = document.getElementById('studentConfirmModal');
+    const studentConfirmInstance = studentConfirmEl ? new bootstrap.Modal(studentConfirmEl) : null;
+
+    function showStudentConfirm(message, title = 'Konfirmasi') {
+        return new Promise((resolve) => {
+            if (!studentConfirmEl || !studentConfirmInstance) {
+                AppDialog.confirm(message, { title: title }).then(resolve);
+                return;
+            }
+
+            const $modal = $(studentConfirmEl);
+            const $okBtn = $('#studentConfirmOkBtn');
+            let confirmed = false;
+
+            $modal.find('.student-confirm-title').text(title);
+            $modal.find('.student-confirm-message').text(message);
+
+            function cleanup() {
+                $okBtn.off('click.studentConfirm');
+                $modal.off('hidden.bs.modal.studentConfirm');
+            }
+
+            $okBtn.off('click.studentConfirm').on('click.studentConfirm', function() {
+                confirmed = true;
+                cleanup();
+                studentConfirmInstance.hide();
+                resolve(true);
+            });
+
+            $modal.off('hidden.bs.modal.studentConfirm').on('hidden.bs.modal.studentConfirm', function() {
+                cleanup();
+                if (!confirmed) {
+                    resolve(false);
+                }
+            });
+
+            studentConfirmInstance.show();
+        });
+    }
     
     // Filter by class
     $('#filterClass').on('change', function() {
@@ -219,8 +305,15 @@ $(document).ready(function() {
     $(document).on('click', '.reset-password-btn', function() {
         const id = $(this).data('id');
         const name = $(this).data('name');
-        
-        if(confirm(`Apakah Anda yakin ingin mereset password siswa "${name}" ke NISN?`)) {
+
+        showStudentConfirm(
+            `Apakah Anda yakin ingin mereset password siswa "${name}" ke kode siswa?`,
+            'Konfirmasi Reset Password'
+        ).then(function(confirmed) {
+            if (!confirmed) {
+                return;
+            }
+
             $.ajax({
                 url: 'ajax/reset_password.php',
                 method: 'POST',
@@ -241,7 +334,85 @@ $(document).ready(function() {
                     alert('Terjadi kesalahan saat mereset password');
                 }
             });
+        });
+    });
+
+    // Reveal student code (admin only)
+    function setStudentCodeVisibility($button, studentId, revealed, code) {
+        const $mask = $(`.student-code-mask[data-student-id="${studentId}"]`);
+        if (revealed) {
+            const normalizedCode = String(code || '').toUpperCase().trim();
+            if (!normalizedCode) {
+                return;
+            }
+            $mask.text(normalizedCode);
+            $button.attr('data-visible', '1');
+            $button.attr('data-student-code', normalizedCode);
+            $button.attr('title', 'Sembunyikan kode siswa');
+            $button.find('i').removeClass('fa-eye').addClass('fa-eye-slash');
+            return;
         }
+
+        $mask.text('****');
+        $button.attr('data-visible', '0');
+        $button.attr('title', 'Lihat kode siswa (butuh password admin)');
+        $button.find('i').removeClass('fa-eye-slash').addClass('fa-eye');
+    }
+
+    $(document).on('click', '.reveal-student-code-btn', async function() {
+        const $button = $(this);
+        const studentId = Number($button.data('student-id'));
+        if (!studentId) {
+            alert('ID siswa tidak valid');
+            return;
+        }
+
+        const isVisible = String($button.attr('data-visible') || '0') === '1';
+        if (isVisible) {
+            setStudentCodeVisibility($button, studentId, false, '');
+            return;
+        }
+
+        const cachedCode = String($button.attr('data-student-code') || '').toUpperCase().trim();
+        if (cachedCode) {
+            setStudentCodeVisibility($button, studentId, true, cachedCode);
+            return;
+        }
+
+        const password = await AppDialog.prompt('Masukkan password admin untuk melihat kode siswa:', {
+            title: 'Verifikasi Admin',
+            inputType: 'password',
+            placeholder: 'Masukkan password admin',
+            okText: 'Verifikasi'
+        });
+        if (!password) {
+            return;
+        }
+
+        $.ajax({
+            url: 'ajax/reveal_student_code.php',
+            method: 'POST',
+            dataType: 'json',
+            data: {
+                student_id: studentId,
+                password: password
+            },
+            success: function(result) {
+                if (result && result.success) {
+                    const code = String(result.student_code || '').toUpperCase().trim();
+                    if (!code) {
+                        alert('Kode siswa kosong');
+                        return;
+                    }
+                    setStudentCodeVisibility($button, studentId, true, code);
+                } else {
+                    alert(result && result.message ? result.message : 'Gagal menampilkan kode siswa');
+                }
+            },
+            error: function() {
+                alert('Terjadi kesalahan saat memeriksa password admin');
+            }
+        });
     });
     
     // Delete Button Click

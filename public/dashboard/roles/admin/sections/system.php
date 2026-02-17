@@ -1,5 +1,7 @@
 <?php
 $forceLogout = false;
+$canManageSystemUsers = isset($canManageSystemUsers) ? (bool) $canManageSystemUsers : true;
+$systemReadOnly = !$canManageSystemUsers;
 
 // Ensure user active column exists
 $hasUserActiveColumn = false;
@@ -15,6 +17,11 @@ try {
 }
 
 // Handle user actions
+if ($_SERVER['REQUEST_METHOD'] == 'POST' && !$canManageSystemUsers) {
+    $error = "Operator tidak memiliki izin mengelola user sistem.";
+    header("Location: admin.php?table=system&error=" . urlencode($error));
+    exit();
+}
 if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     if (isset($_POST['user_id'])) {
         $user_id = $_POST['user_id'];
@@ -48,12 +55,6 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 
 // Handle password reset (custom)
 if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['reset_user_id'])) {
-    if (isset($canDeleteMaster) && !$canDeleteMaster) {
-        $error = "Operator tidak memiliki izin mereset password user.";
-        header("Location: admin.php?table=system&error=" . urlencode($error));
-        exit();
-    }
-
     $user_id = (int) ($_POST['reset_user_id'] ?? 0);
     $new_plain = trim((string) ($_POST['new_password'] ?? ''));
 
@@ -85,8 +86,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['reset_user_id'])) {
 if (isset($_GET['delete_user'])) {
     $user_id = $_GET['delete_user'];
     
-    if (isset($canDeleteMaster) && !$canDeleteMaster) {
-        $error = "Operator tidak memiliki izin menghapus data master.";
+    if (!$canManageSystemUsers) {
+        $error = "Operator tidak memiliki izin menghapus user.";
         header("Location: admin.php?table=system&error=" . urlencode($error));
         exit();
     }
@@ -109,8 +110,8 @@ if (isset($_GET['toggle_user'])) {
     $currentStatus = ($_GET['status'] ?? 'Y') === 'Y' ? 'Y' : 'N';
     $newStatus = $currentStatus === 'Y' ? 'N' : 'Y';
 
-    if (isset($canDeleteMaster) && !$canDeleteMaster) {
-        $error = "Operator tidak memiliki izin menonaktifkan user.";
+    if (!$canManageSystemUsers) {
+        $error = "Operator tidak memiliki izin mengubah status user.";
         header("Location: admin.php?table=system&error=" . urlencode($error));
         exit();
     }
@@ -145,43 +146,49 @@ $users = $stmt->fetchAll();
     <div class="col-md-4">
         <div class="table-container">
             <h5><i class="bi bi-person-plus"></i> Tambah User Baru</h5>
-            <form method="POST" action="?table=system">
-                <input type="hidden" name="user_id" value="0">
-                
-                <div class="mb-3">
-                    <label class="form-label">Username</label>
-                    <input type="text" class="form-control" name="username" required 
-                           pattern="[a-zA-Z0-9_]+" minlength="3" maxlength="30">
-                    <small class="text-muted">Huruf, angka, dan underscore saja</small>
+            <?php if ($systemReadOnly): ?>
+                <div class="alert alert-warning mb-0">
+                    Operator tidak memiliki izin menambah atau mengubah user sistem.
                 </div>
-                
-                <div class="mb-3">
-                    <label class="form-label">Email</label>
-                    <input type="email" class="form-control" name="email">
-                </div>
-                
-                <div class="mb-3">
-                    <label class="form-label">Nama Lengkap</label>
-                    <input type="text" class="form-control" name="fullname" required>
-                </div>
-                
-                <div class="mb-3">
-                    <label class="form-label">Level User</label>
-                    <select class="form-select" name="level" required>
-                        <?php foreach($levels as $level): ?>
-                        <option value="<?php echo $level['level_id']; ?>"><?php echo $level['level_name']; ?></option>
-                        <?php endforeach; ?>
-                    </select>
-                </div>
-                
-                <button type="submit" class="btn btn-primary w-100">
-                    <i class="bi bi-save"></i> Tambah User
-                </button>
-                
-                <div class="mt-3 alert alert-info">
-                    <small><i class="bi bi-info-circle"></i> Password default: <strong>admin123</strong></small>
-                </div>
-            </form>
+            <?php else: ?>
+                <form method="POST" action="?table=system">
+                    <input type="hidden" name="user_id" value="0">
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Username</label>
+                        <input type="text" class="form-control" name="username" required 
+                               pattern="[a-zA-Z0-9_]+" minlength="3" maxlength="30">
+                        <small class="text-muted">Huruf, angka, dan underscore saja</small>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Email</label>
+                        <input type="email" class="form-control" name="email">
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Nama Lengkap</label>
+                        <input type="text" class="form-control" name="fullname" required>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Level User</label>
+                        <select class="form-select" name="level" required>
+                            <?php foreach($levels as $level): ?>
+                            <option value="<?php echo $level['level_id']; ?>"><?php echo $level['level_name']; ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                    
+                    <button type="submit" class="btn btn-primary w-100">
+                        <i class="bi bi-save"></i> Tambah User
+                    </button>
+                    
+                    <div class="mt-3 alert alert-info">
+                        <small><i class="bi bi-info-circle"></i> Password default: <strong>admin123</strong></small>
+                    </div>
+                </form>
+            <?php endif; ?>
         </div>
         
         <div class="table-container mt-4">
@@ -234,95 +241,95 @@ $users = $stmt->fetchAll();
                 </div>
             </div>
             
-            <table class="table table-hover table-admin-users">
-                <thead>
-                    <tr>
-                        <th>Username</th>
-                        <th>Nama</th>
-                        <th>Email</th>
-                        <th>Level</th>
-                        <th>Status</th>
-                        <th>Login Terakhir</th>
-                        <th>Aksi</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <?php foreach($users as $user): ?>
-                    <?php $isActive = ($user['is_active'] ?? 'Y') === 'Y'; ?>
-                    <tr>
-                        <td><?php echo $user['username']; ?></td>
-                        <td><?php echo $user['fullname']; ?></td>
-                        <td><?php echo $user['email']; ?></td>
-                        <td>
-                            <span class="badge <?php echo $user['level'] == 1 ? 'bg-danger' : 'bg-primary'; ?>">
-                                <?php echo $user['level_name']; ?>
-                            </span>
-                        </td>
-                        <td>
-                            <span class="badge <?php echo $isActive ? 'bg-success' : 'bg-secondary'; ?>">
-                                <?php echo $isActive ? 'Aktif' : 'Nonaktif'; ?>
-                            </span>
-                        </td>
-                        <td>
-                            <?php if($user['last_login']): ?>
-                            <small><?php echo date('d/m/Y H:i', strtotime($user['last_login'])); ?></small>
-                            <?php else: ?>
-                            <small class="text-muted">Belum pernah</small>
-                            <?php endif; ?>
-                        </td>
-                        <td>
-                            <button class="btn btn-sm btn-warning edit-user-btn"
-                                    data-id="<?php echo $user['user_id']; ?>"
-                                    data-username="<?php echo $user['username']; ?>"
-                                    data-email="<?php echo $user['email']; ?>"
-                                    data-fullname="<?php echo $user['fullname']; ?>"
-                                    data-level="<?php echo $user['level']; ?>">
-                                <i class="bi bi-pencil"></i>
-                            </button>
-                            <?php if (isset($canDeleteMaster) && !$canDeleteMaster): ?>
-                                <button class="btn btn-sm btn-info" disabled title="Operator tidak dapat mereset password user">
-                                    <i class="bi bi-key"></i>
-                                </button>
-                            <?php else: ?>
-                                <button type="button" class="btn btn-sm btn-info reset-user-btn"
-                                        data-id="<?php echo $user['user_id']; ?>"
-                                        data-name="<?php echo htmlspecialchars($user['fullname']); ?>">
-                                    <i class="bi bi-key"></i>
-                                </button>
-                            <?php endif; ?>
-                            <?php if (isset($canDeleteMaster) && !$canDeleteMaster): ?>
-                                <button class="btn btn-sm <?php echo $isActive ? 'btn-success' : 'btn-secondary'; ?>" disabled title="Operator tidak memiliki izin menonaktifkan user">
-                                    <i class="bi bi-power"></i>
-                                </button>
-                            <?php else: ?>
-                                <a href="?table=system&toggle_user=<?php echo $user['user_id']; ?>&status=<?php echo $isActive ? 'Y' : 'N'; ?>" 
-                                   class="btn btn-sm <?php echo $isActive ? 'btn-success' : 'btn-secondary'; ?>" 
-                                   onclick="return confirm('<?php echo $isActive ? 'Nonaktifkan' : 'Aktifkan'; ?> user ini?')"
-                                   title="<?php echo $isActive ? 'Nonaktifkan' : 'Aktifkan'; ?>">
-                                    <i class="bi bi-power"></i>
-                                </a>
-                            <?php endif; ?>
-                            <?php if($user['user_id'] != 1): ?>
-                                <?php if (isset($canDeleteMaster) && !$canDeleteMaster): ?>
-                                    <button class="btn btn-sm btn-danger" disabled title="Operator tidak dapat menghapus data master">
+            <div class="table-responsive">
+                <table class="table table-hover table-admin-users no-card-table">
+                    <thead>
+                        <tr>
+                            <th>Username</th>
+                            <th>Nama</th>
+                            <th>Email</th>
+                            <th>Level</th>
+                            <th>Status</th>
+                            <th>Login Terakhir</th>
+                            <th>Aksi</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php foreach($users as $user): ?>
+                        <?php $isActive = ($user['is_active'] ?? 'Y') === 'Y'; ?>
+                        <tr>
+                            <td><?php echo $user['username']; ?></td>
+                            <td><?php echo $user['fullname']; ?></td>
+                            <td><?php echo $user['email']; ?></td>
+                            <td>
+                                <span class="badge <?php echo $user['level'] == 1 ? 'bg-danger' : 'bg-primary'; ?>">
+                                    <?php echo $user['level_name']; ?>
+                                </span>
+                            </td>
+                            <td>
+                                <span class="badge <?php echo $isActive ? 'bg-success' : 'bg-secondary'; ?>">
+                                    <?php echo $isActive ? 'Aktif' : 'Nonaktif'; ?>
+                                </span>
+                            </td>
+                            <td>
+                                <?php if($user['last_login']): ?>
+                                <small><?php echo date('d/m/Y H:i', strtotime($user['last_login'])); ?></small>
+                                <?php else: ?>
+                                <small class="text-muted">Belum pernah</small>
+                                <?php endif; ?>
+                            </td>
+                            <td>
+                                <?php if ($systemReadOnly): ?>
+                                    <button class="btn btn-sm btn-warning" disabled title="Operator tidak memiliki izin mengubah user sistem">
+                                        <i class="bi bi-pencil"></i>
+                                    </button>
+                                    <button class="btn btn-sm btn-info" disabled title="Operator tidak memiliki izin mereset password user">
+                                        <i class="bi bi-key"></i>
+                                    </button>
+                                    <button class="btn btn-sm <?php echo $isActive ? 'btn-success' : 'btn-secondary'; ?>" disabled title="Operator tidak memiliki izin mengubah status user">
+                                        <i class="bi bi-power"></i>
+                                    </button>
+                                    <button class="btn btn-sm btn-danger" disabled title="Operator tidak memiliki izin menghapus user">
                                         <i class="bi bi-trash"></i>
                                     </button>
                                 <?php else: ?>
-                                    <a href="?table=system&delete_user=<?php echo $user['user_id']; ?>" 
-                                       class="btn btn-sm btn-danger" onclick="return confirm('Hapus user ini?')">
-                                        <i class="bi bi-trash"></i>
+                                    <button class="btn btn-sm btn-warning edit-user-btn"
+                                            data-id="<?php echo $user['user_id']; ?>"
+                                            data-username="<?php echo $user['username']; ?>"
+                                            data-email="<?php echo $user['email']; ?>"
+                                            data-fullname="<?php echo $user['fullname']; ?>"
+                                            data-level="<?php echo $user['level']; ?>">
+                                        <i class="bi bi-pencil"></i>
+                                    </button>
+                                    <button type="button" class="btn btn-sm btn-info reset-user-btn"
+                                            data-id="<?php echo $user['user_id']; ?>"
+                                            data-name="<?php echo htmlspecialchars($user['fullname']); ?>">
+                                        <i class="bi bi-key"></i>
+                                    </button>
+                                    <a href="?table=system&toggle_user=<?php echo $user['user_id']; ?>&status=<?php echo $isActive ? 'Y' : 'N'; ?>" 
+                                       class="btn btn-sm <?php echo $isActive ? 'btn-success' : 'btn-secondary'; ?>" 
+                                       onclick="return AppDialog.inlineConfirm(this, '<?php echo $isActive ? 'Nonaktifkan' : 'Aktifkan'; ?> user ini?')"
+                                       title="<?php echo $isActive ? 'Nonaktifkan' : 'Aktifkan'; ?>">
+                                        <i class="bi bi-power"></i>
                                     </a>
+                                    <?php if($user['user_id'] != 1): ?>
+                                        <a href="?table=system&delete_user=<?php echo $user['user_id']; ?>" 
+                                           class="btn btn-sm btn-danger"
+                                           onclick="return AppDialog.inlineConfirm(this, 'Hapus user ini?')">
+                                            <i class="bi bi-trash"></i>
+                                        </a>
+                                    <?php else: ?>
+                                    <button class="btn btn-sm btn-danger" disabled title="Tidak dapat dihapus">
+                                        <i class="bi bi-trash"></i>
+                                    </button>
+                                    <?php endif; ?>
                                 <?php endif; ?>
-                            <?php else: ?>
-                            <button class="btn btn-sm btn-danger" disabled title="Tidak dapat dihapus">
-                                <i class="bi bi-trash"></i>
-                            </button>
-                            <?php endif; ?>
-                        </td>
-                    </tr>
-                    <?php endforeach; ?>
-                </tbody>
-            </table>
+                            </td>
+                        </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
         </div>
         
         <div class="table-container mt-4">
@@ -451,7 +458,7 @@ $(document).ready(function() {
     // Search functionality
     $('#searchUser').on('keyup', function() {
         const search = $(this).val().toLowerCase();
-        $('.table tbody tr').filter(function() {
+        $('.table-admin-users tbody tr').filter(function() {
             $(this).toggle($(this).text().toLowerCase().indexOf(search) > -1);
         });
     });
@@ -535,16 +542,20 @@ $(document).ready(function() {
     setInterval(refreshSystemStats, 10000);
 });
 
-function optimizeDatabase() {
-    if (confirm('Optimasi database untuk performa lebih baik?')) {
-        $.ajax({
-            url: 'ajax/optimize_database.php',
-            method: 'POST',
-            success: function(response) {
-                alert('Database berhasil dioptimasi!');
-            }
-        });
+async function optimizeDatabase() {
+    const confirmed = await AppDialog.confirm('Optimasi database untuk performa lebih baik?');
+
+    if (!confirmed) {
+        return;
     }
+
+    $.ajax({
+        url: 'ajax/optimize_database.php',
+        method: 'POST',
+        success: function(response) {
+            alert('Database berhasil dioptimasi!');
+        }
+    });
 }
 
 function saveSecuritySettings() {

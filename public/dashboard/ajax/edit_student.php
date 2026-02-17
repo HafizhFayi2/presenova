@@ -7,7 +7,10 @@ if($_SERVER['REQUEST_METHOD'] == 'POST') {
     try {
         $id = $_POST['id'];
         $student_nisn = trim($_POST['student_nisn']);
-        $student_code = strtoupper(trim($_POST['student_code']));
+        $student_code = strtoupper(preg_replace('/\s+/', '', trim((string) ($_POST['student_code'] ?? ''))));
+        if ($student_code !== '' && strpos($student_code, 'SW') !== 0) {
+            $student_code = 'SW' . $student_code;
+        }
         $student_name = trim($_POST['student_name']);
         $class_id = $_POST['class_id'];
         $jurusan_id = $_POST['jurusan_id'];
