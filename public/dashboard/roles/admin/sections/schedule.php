@@ -251,51 +251,17 @@ foreach ($teachers as $teacher) {
     </form>
 </div>
 
-<div class="data-table-container mb-4">
-    <div class="table-header">
-        <h5 class="table-title"><i class="fas fa-list text-primary me-2"></i>Detail JP (Guru & Kelas)</h5>
-    </div>
-    <div class="table-responsive">
-        <table class="table table-hover">
-            <thead>
-                <tr>
-                    <th>JP</th>
-                    <th>Hari</th>
-                    <th>Guru</th>
-                    <th>Kelas</th>
-                    <th>Mata Pelajaran</th>
-                    <th>Jam Mulai</th>
-                    <th>Jam Selesai</th>
-                </tr>
-            </thead>
-            <tbody>
-                <?php if (!empty($schedules)): ?>
-                    <?php foreach ($schedules as $schedule): ?>
-                    <tr>
-                        <td><?php echo htmlspecialchars($schedule['shift_name'] ?? '-'); ?></td>
-                        <td><?php echo htmlspecialchars($schedule['day_name'] ?? '-'); ?></td>
-                        <td><?php echo htmlspecialchars($schedule['teacher_name'] ?? '-'); ?></td>
-                        <td><?php echo htmlspecialchars($schedule['class_name'] ?? '-'); ?></td>
-                        <td><?php echo htmlspecialchars($schedule['subject'] ?? '-'); ?></td>
-                        <td><?php echo !empty($schedule['time_in']) ? date('H:i', strtotime($schedule['time_in'])) : '-'; ?></td>
-                        <td><?php echo !empty($schedule['time_out']) ? date('H:i', strtotime($schedule['time_out'])) : '-'; ?></td>
-                    </tr>
-                    <?php endforeach; ?>
-                <?php else: ?>
-                    <tr>
-                        <td colspan="7" class="text-center text-muted">Belum ada detail JP</td>
-                    </tr>
-                <?php endif; ?>
-            </tbody>
-        </table>
-    </div>
-</div>
 <div class="data-table-container">
     <div class="table-header">
         <h5 class="table-title"><i class="fas fa-calendar-alt text-primary me-2"></i>Jadwal Mengajar</h5>
-        <button class="btn btn-primary add-btn" data-table="schedule">
-            <i class="fas fa-plus-circle me-2"></i>Tambah Jadwal
-        </button>
+        <div class="d-flex gap-2">
+            <button type="button" class="btn btn-outline-primary" onclick="return openAdminSchedulePrintDialog();">
+                <i class="fas fa-print me-2"></i>Cetak
+            </button>
+            <button class="btn btn-primary add-btn" data-table="schedule">
+                <i class="fas fa-plus-circle me-2"></i>Tambah Jadwal
+            </button>
+        </div>
     </div>
     
     <!-- Filters -->
@@ -549,6 +515,59 @@ foreach ($teachers as $teacher) {
 <script>
 // Teacher data from PHP
 const teacherData = <?php echo json_encode($teacher_data); ?>;
+
+function openAdminSchedulePrintDialog() {
+    const dayId = String(document.getElementById('filterDay')?.value || '').trim();
+    const shiftId = String(document.getElementById('filterShift')?.value || '').trim();
+    const teacherId = String(document.getElementById('filterTeacher')?.value || '').trim();
+    const classId = String(document.getElementById('filterClass')?.value || '').trim();
+
+    const baseUrl = new URL('roles/admin/print/jadwal_print.php', window.location.href);
+    baseUrl.searchParams.set('t', String(Date.now()));
+    if (dayId !== '') {
+        baseUrl.searchParams.set('filter_day', dayId);
+    }
+    if (shiftId !== '') {
+        baseUrl.searchParams.set('filter_shift', shiftId);
+    }
+    if (teacherId !== '') {
+        baseUrl.searchParams.set('filter_teacher', teacherId);
+    }
+    if (classId !== '') {
+        baseUrl.searchParams.set('filter_class', classId);
+    }
+
+    const printUrl = new URL(baseUrl.toString());
+    printUrl.searchParams.set('autoprint', '1');
+
+    const pdfUrl = new URL(baseUrl.toString());
+    pdfUrl.searchParams.set('download', 'pdf');
+
+    if (window.SchedulePrintDialog && typeof window.SchedulePrintDialog.open === 'function') {
+        window.SchedulePrintDialog.open({
+            title: 'Output Jadwal Admin',
+            message: 'Pilih Print untuk cetak langsung, atau Download PDF untuk menyimpan file jadwal.',
+            printUrl: printUrl.toString(),
+            pdfUrl: pdfUrl.toString()
+        });
+    } else {
+        const popup = window.open('', '_blank');
+        if (popup) {
+            try {
+                popup.opener = null;
+            } catch (e) {}
+            try {
+                popup.location.replace(printUrl.toString());
+            } catch (e) {
+                popup.location.href = printUrl.toString();
+            }
+        } else {
+            window.location.assign(printUrl.toString());
+        }
+    }
+
+    return false;
+}
 
 // Filter functions
 function applyFilters() {

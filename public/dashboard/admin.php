@@ -1764,23 +1764,23 @@ if ($active_admin_section_css !== null) {
                         <div class="col-lg-4 mb-4">
                             <div class="quick-actions">
                                 <h5 class="mb-4"><i class="fas fa-bolt text-success me-2"></i>Quick Actions</h5>
-                                <a href="?table=student" class="quick-action-item">
+                                <a href="?table=student" class="quick-action-item" data-no-loading="1">
                                     <i class="fas fa-plus-circle"></i>
                                     <span>Tambah Siswa Baru</span>
                                 </a>
-                                <a href="?table=teacher" class="quick-action-item">
+                                <a href="?table=teacher" class="quick-action-item" data-no-loading="1">
                                     <i class="fas fa-user-plus"></i>
                                     <span>Tambah Guru Baru</span>
                                 </a>
-                                <a href="?table=schedule" class="quick-action-item">
+                                <a href="?table=schedule" class="quick-action-item" data-no-loading="1">
                                     <i class="fas fa-calendar-plus"></i>
                                     <span>Buat Jadwal Baru</span>
                                 </a>
-                                <a href="?table=attendance&export=today" class="quick-action-item">
+                                <a href="?table=attendance&export=today" class="quick-action-item" data-no-loading="1">
                                     <i class="fas fa-download"></i>
                                     <span>Export Absensi Minggu Ini</span>
                                 </a>
-                                <a href="?table=system" class="quick-action-item">
+                                <a href="?table=system" class="quick-action-item" data-no-loading="1">
                                     <i class="fas fa-cog"></i>
                                     <span>Pengaturan Sistem</span>
                                 </a>
@@ -1806,6 +1806,7 @@ if ($active_admin_section_css !== null) {
     <!-- JavaScript -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="../assets/js/app-dialog.js"></script>
+    <script src="../assets/js/schedule-print-dialog.js"></script>
     <script src="../assets/js/main.js"></script>
     
     <script>
@@ -2125,20 +2126,24 @@ if ($active_admin_section_css !== null) {
         });
         
         // Loading overlay for page transitions
+        const downloadLikeHrefPattern = /([?&](export|download)=)|download_|download\//i;
         $(document).on('click', 'a:not([href^="#"]):not([href*="javascript"]):not([target="_blank"])', function(e) {
-            const href = $(this).attr('href');
-            const onclickAttr = String($(this).attr('onclick') || '');
+            const $link = $(this);
+            const href = String($link.attr('href') || '');
+            const onclickAttr = String($link.attr('onclick') || '');
             const hasInlineConfirm =
                 onclickAttr.includes('confirm') ||
                 onclickAttr.includes('AppDialog.inlineConfirm') ||
                 onclickAttr.includes('inlineConfirm(');
+            const isQuickAction = $link.hasClass('quick-action-item');
+            const hasDownloadIntent = $link.is('[download]') || downloadLikeHrefPattern.test(href);
 
             if (e.isDefaultPrevented()) {
                 $('#loadingOverlay').hide();
                 return;
             }
 
-            if ($(this).data('no-loading') || hasInlineConfirm) {
+            if ($link.data('no-loading') || hasInlineConfirm || isQuickAction || hasDownloadIntent) {
                 $('#loadingOverlay').hide();
                 return;
             }
@@ -2147,8 +2152,8 @@ if ($active_admin_section_css !== null) {
             }
         });
 
-        // Ensure no-loading links do not leave overlay visible
-        $(document).on('click', 'a[data-no-loading="1"]', function() {
+        // Ensure links that skip loading do not leave overlay visible
+        $(document).on('click', 'a[data-no-loading="1"], a.quick-action-item', function() {
             $('#loadingOverlay').hide();
         });
         

@@ -16,6 +16,17 @@ try {
     $hasUserActiveColumn = false;
 }
 
+$getActiveAdminCount = static function () use ($db, $hasUserActiveColumn): int {
+    if ($hasUserActiveColumn) {
+        $stmt = $db->query("SELECT COUNT(*) AS total FROM user WHERE level = 1 AND is_active = 'Y'");
+    } else {
+        // Fallback legacy: assume users without is_active column are active
+        $stmt = $db->query("SELECT COUNT(*) AS total FROM user WHERE level = 1");
+    }
+    $row = $stmt ? $stmt->fetch(PDO::FETCH_ASSOC) : null;
+    return (int) ($row['total'] ?? 0);
+};
+
 // Handle user actions
 if ($_SERVER['REQUEST_METHOD'] == 'POST' && !$canManageSystemUsers) {
     $error = "Operator tidak memiliki izin mengelola user sistem.";
@@ -45,6 +56,32 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             $success = "User berhasil ditambahkan! Password default: admin123";
         } else {
             // Update user
+            $user_id = (int) $user_id;
+            $level = (int) $level;
+
+            // Safeguard: jangan sampai admin aktif terakhir berubah level dan membuat admin aktif = 0
+            $currentUserStmt = $db->query(
+                "SELECT user_id, level, " . ($hasUserActiveColumn ? "is_active" : "'Y' AS is_active") . " FROM user WHERE user_id = ? LIMIT 1",
+                [$user_id]
+            );
+            $currentUser = $currentUserStmt ? $currentUserStmt->fetch(PDO::FETCH_ASSOC) : null;
+            if (!$currentUser) {
+                $error = "User tidak ditemukan.";
+                header("Location: admin.php?table=system&error=" . urlencode($error));
+                exit();
+            }
+
+            $currentLevel = (int) ($currentUser['level'] ?? 0);
+            $currentIsActive = (($currentUser['is_active'] ?? 'Y') === 'Y');
+            if ($currentLevel === 1 && $currentIsActive && $level !== 1) {
+                $activeAdminCount = $getActiveAdminCount();
+                if ($activeAdminCount <= 1) {
+                    $error = "Tidak dapat mengubah level administrator aktif terakhir. Minimal 1 administrator harus tetap aktif.";
+                    header("Location: admin.php?table=system&error=" . urlencode($error));
+                    exit();
+                }
+            }
+
             $sql = "UPDATE user SET username = ?, email = ?, fullname = ?, level = ? 
                     WHERE user_id = ?";
             $stmt = $db->query($sql, [$username, $email, $fullname, $level, $user_id]);
@@ -84,7 +121,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['reset_user_id'])) {
 
 // Handle delete
 if (isset($_GET['delete_user'])) {
-    $user_id = $_GET['delete_user'];
+    $user_id = (int) $_GET['delete_user'];
     
     if (!$canManageSystemUsers) {
         $error = "Operator tidak memiliki izin menghapus user.";
@@ -93,6 +130,29 @@ if (isset($_GET['delete_user'])) {
     }
 
     if ($user_id != 1) { // Prevent deleting main admin
+        // Safeguard: jangan hapus administrator aktif terakhir
+        $targetStmt = $db->query(
+            "SELECT user_id, level, " . ($hasUserActiveColumn ? "is_active" : "'Y' AS is_active") . " FROM user WHERE user_id = ? LIMIT 1",
+            [$user_id]
+        );
+        $targetUser = $targetStmt ? $targetStmt->fetch(PDO::FETCH_ASSOC) : null;
+        if (!$targetUser) {
+            $error = "User tidak ditemukan.";
+            header("Location: admin.php?table=system&error=" . urlencode($error));
+            exit();
+        }
+
+        $isAdminTarget = (int) ($targetUser['level'] ?? 0) === 1;
+        $isActiveTarget = (($targetUser['is_active'] ?? 'Y') === 'Y');
+        if ($isAdminTarget && $isActiveTarget) {
+            $activeAdminCount = $getActiveAdminCount();
+            if ($activeAdminCount <= 1) {
+                $error = "Tidak dapat menghapus administrator aktif terakhir. Minimal 1 administrator harus tetap aktif.";
+                header("Location: admin.php?table=system&error=" . urlencode($error));
+                exit();
+            }
+        }
+
         $sql = "DELETE FROM user WHERE user_id = ?";
         $db->query($sql, [$user_id]);
         if (function_exists('resetAutoIncrementIfEmpty')) {
@@ -107,8 +167,6 @@ if (isset($_GET['delete_user'])) {
 // Toggle active status
 if (isset($_GET['toggle_user'])) {
     $user_id = (int) $_GET['toggle_user'];
-    $currentStatus = ($_GET['status'] ?? 'Y') === 'Y' ? 'Y' : 'N';
-    $newStatus = $currentStatus === 'Y' ? 'N' : 'Y';
 
     if (!$canManageSystemUsers) {
         $error = "Operator tidak memiliki izin mengubah status user.";
@@ -117,6 +175,31 @@ if (isset($_GET['toggle_user'])) {
     }
 
     if ($hasUserActiveColumn) {
+        $targetStmt = $db->query(
+            "SELECT user_id, level, is_active FROM user WHERE user_id = ? LIMIT 1",
+            [$user_id]
+        );
+        $targetUser = $targetStmt ? $targetStmt->fetch(PDO::FETCH_ASSOC) : null;
+        if (!$targetUser) {
+            $error = "User tidak ditemukan.";
+            header("Location: admin.php?table=system&error=" . urlencode($error));
+            exit();
+        }
+
+        $currentStatus = (($targetUser['is_active'] ?? 'Y') === 'Y') ? 'Y' : 'N';
+        $newStatus = $currentStatus === 'Y' ? 'N' : 'Y';
+        $isAdminUser = (int) ($targetUser['level'] ?? 0) === 1;
+
+        // Safeguard utama: admin aktif terakhir tidak boleh dinonaktifkan
+        if ($isAdminUser && $currentStatus === 'Y' && $newStatus === 'N') {
+            $activeAdminCount = $getActiveAdminCount();
+            if ($activeAdminCount <= 1) {
+                $error = "Tidak dapat menonaktifkan administrator aktif terakhir. Minimal 1 administrator harus tetap aktif.";
+                header("Location: admin.php?table=system&error=" . urlencode($error));
+                exit();
+            }
+        }
+
         $db->query("UPDATE user SET is_active = ? WHERE user_id = ?", [$newStatus, $user_id]);
         $success = $newStatus === 'Y' ? 'User diaktifkan.' : 'User dinonaktifkan.';
 
@@ -140,6 +223,7 @@ $sql = "SELECT u.*, ul.level_name FROM user u
         ORDER BY u.level, u.username";
 $stmt = $db->query($sql);
 $users = $stmt->fetchAll();
+$activeAdminCount = $getActiveAdminCount();
 ?>
 
 <div class="row">
@@ -257,6 +341,7 @@ $users = $stmt->fetchAll();
                     <tbody>
                         <?php foreach($users as $user): ?>
                         <?php $isActive = ($user['is_active'] ?? 'Y') === 'Y'; ?>
+                        <?php $isLastActiveAdmin = ((int)($user['level'] ?? 0) === 1) && $isActive && ($activeAdminCount <= 1); ?>
                         <tr>
                             <td><?php echo $user['username']; ?></td>
                             <td><?php echo $user['fullname']; ?></td>
@@ -306,12 +391,18 @@ $users = $stmt->fetchAll();
                                             data-name="<?php echo htmlspecialchars($user['fullname']); ?>">
                                         <i class="bi bi-key"></i>
                                     </button>
-                                    <a href="?table=system&toggle_user=<?php echo $user['user_id']; ?>&status=<?php echo $isActive ? 'Y' : 'N'; ?>" 
-                                       class="btn btn-sm <?php echo $isActive ? 'btn-success' : 'btn-secondary'; ?>" 
-                                       onclick="return AppDialog.inlineConfirm(this, '<?php echo $isActive ? 'Nonaktifkan' : 'Aktifkan'; ?> user ini?')"
-                                       title="<?php echo $isActive ? 'Nonaktifkan' : 'Aktifkan'; ?>">
-                                        <i class="bi bi-power"></i>
-                                    </a>
+                                    <?php if ($isLastActiveAdmin): ?>
+                                        <button class="btn btn-sm btn-secondary" disabled title="Administrator aktif terakhir tidak dapat dinonaktifkan">
+                                            <i class="bi bi-power"></i>
+                                        </button>
+                                    <?php else: ?>
+                                        <a href="?table=system&toggle_user=<?php echo $user['user_id']; ?>&status=<?php echo $isActive ? 'Y' : 'N'; ?>" 
+                                           class="btn btn-sm <?php echo $isActive ? 'btn-success' : 'btn-secondary'; ?>" 
+                                           onclick="return AppDialog.inlineConfirm(this, '<?php echo $isActive ? 'Nonaktifkan' : 'Aktifkan'; ?> user ini?')"
+                                           title="<?php echo $isActive ? 'Nonaktifkan' : 'Aktifkan'; ?>">
+                                            <i class="bi bi-power"></i>
+                                        </a>
+                                    <?php endif; ?>
                                     <?php if($user['user_id'] != 1): ?>
                                         <a href="?table=system&delete_user=<?php echo $user['user_id']; ?>" 
                                            class="btn btn-sm btn-danger"

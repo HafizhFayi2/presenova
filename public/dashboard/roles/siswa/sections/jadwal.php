@@ -585,11 +585,36 @@ foreach ($schedules as $schedule) {
 <script>
 // Print schedule (global)
 window.printSchedule = function() {
-    const printUrl = `roles/siswa/print/jadwal_print.php?autoprint=1&t=${Date.now()}`;
-    const printWindow = window.open(printUrl, '_blank', 'noopener');
-    if (!printWindow) {
-        alert('Popup diblokir. Izinkan popup untuk mencetak.');
-        return false;
+    const baseUrl = new URL('roles/siswa/print/jadwal_print.php', window.location.href);
+    baseUrl.searchParams.set('t', String(Date.now()));
+
+    const printUrl = new URL(baseUrl.toString());
+    printUrl.searchParams.set('autoprint', '1');
+
+    const pdfUrl = new URL(baseUrl.toString());
+    pdfUrl.searchParams.set('download', 'pdf');
+
+    if (window.SchedulePrintDialog && typeof window.SchedulePrintDialog.open === 'function') {
+        window.SchedulePrintDialog.open({
+            title: 'Output Jadwal Siswa',
+            message: 'Pilih Print untuk langsung cetak, atau Download PDF untuk menyimpan file.',
+            printUrl: printUrl.toString(),
+            pdfUrl: pdfUrl.toString()
+        });
+    } else {
+        const printWindow = window.open('', '_blank');
+        if (printWindow) {
+            try {
+                printWindow.opener = null;
+            } catch (e) {}
+            try {
+                printWindow.location.replace(printUrl.toString());
+            } catch (e) {
+                printWindow.location.href = printUrl.toString();
+            }
+        } else {
+            window.location.assign(printUrl.toString());
+        }
     }
     return false;
 };

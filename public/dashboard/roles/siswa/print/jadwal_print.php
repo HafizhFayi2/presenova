@@ -216,6 +216,7 @@ if (!empty($student_data['student_nisn'])) {
 }
 
 $autoprint = isset($_GET['autoprint']) && $_GET['autoprint'] === '1';
+$download_pdf = isset($_GET['download']) && $_GET['download'] === 'pdf';
 $orientation = strtolower((string) ($_GET['orientation'] ?? 'auto'));
 if (!in_array($orientation, ['auto', 'portrait', 'landscape'], true)) {
     $orientation = 'auto';
@@ -227,6 +228,9 @@ if ($orientation === 'portrait') {
 } elseif ($orientation === 'landscape') {
     $page_size_css = '@media print { @page { size: A4 landscape; } }';
 }
+
+$pdf_orientation = $orientation === 'portrait' ? 'portrait' : 'landscape';
+$pdf_filename = 'jadwal_siswa_' . $now_wib->format('Ymd_His') . '.pdf';
 ?>
 <!DOCTYPE html>
 <html lang="id">
@@ -389,7 +393,35 @@ if ($orientation === 'portrait') {
         </footer>
     </main>
 
-    <?php if ($autoprint): ?>
+    <?php if ($download_pdf): ?>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <script>
+    window.addEventListener('load', function () {
+        const target = document.querySelector('.print-sheet');
+        if (!target || typeof window.html2pdf === 'undefined') {
+            window.print();
+            return;
+        }
+
+        const opts = {
+            margin: [8, 6, 8, 6],
+            filename: <?php echo json_encode($pdf_filename); ?>,
+            image: { type: 'jpeg', quality: 0.98 },
+            html2canvas: { scale: 2, useCORS: true, scrollY: 0 },
+            jsPDF: { unit: 'mm', format: 'a4', orientation: <?php echo json_encode($pdf_orientation); ?> },
+            pagebreak: { mode: ['css', 'legacy'] }
+        };
+
+        setTimeout(function () {
+            window.html2pdf().set(opts).from(target).save().then(function () {
+                setTimeout(function () {
+                    window.close();
+                }, 250);
+            });
+        }, 220);
+    });
+    </script>
+    <?php elseif ($autoprint): ?>
     <script>
     window.addEventListener('load', function () {
         setTimeout(function () {

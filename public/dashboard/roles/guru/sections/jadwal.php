@@ -73,8 +73,8 @@ unset($schedule);
             <a href="?page=jadwal" class="btn btn-outline-secondary">
                 <i class="fas fa-rotate me-2"></i>Reset
             </a>
-            <button type="button" class="btn btn-primary-custom" onclick="window.print()">
-                <i class="fas fa-print me-2"></i>Print
+            <button type="button" class="btn btn-primary-custom" onclick="return openGuruSchedulePrintDialog();">
+                <i class="fas fa-print me-2"></i>Cetak
             </button>
         </div>
     </div>
@@ -153,6 +153,51 @@ unset($schedule);
 </div>
 
 <script>
+function openGuruSchedulePrintDialog() {
+    const dayId = String(document.querySelector('select[name="day_id"]')?.value || '').trim();
+    const classId = String(document.querySelector('select[name="class_id"]')?.value || '').trim();
+
+    const baseUrl = new URL('roles/guru/print/jadwal_print.php', window.location.href);
+    baseUrl.searchParams.set('t', String(Date.now()));
+    if (dayId !== '') {
+        baseUrl.searchParams.set('day_id', dayId);
+    }
+    if (classId !== '') {
+        baseUrl.searchParams.set('class_id', classId);
+    }
+
+    const printUrl = new URL(baseUrl.toString());
+    printUrl.searchParams.set('autoprint', '1');
+
+    const pdfUrl = new URL(baseUrl.toString());
+    pdfUrl.searchParams.set('download', 'pdf');
+
+    if (window.SchedulePrintDialog && typeof window.SchedulePrintDialog.open === 'function') {
+        window.SchedulePrintDialog.open({
+            title: 'Output Jadwal Guru',
+            message: 'Pilih Print untuk cetak langsung, atau Download PDF untuk menyimpan laporan jadwal.',
+            printUrl: printUrl.toString(),
+            pdfUrl: pdfUrl.toString()
+        });
+    } else {
+        const popup = window.open('', '_blank');
+        if (popup) {
+            try {
+                popup.opener = null;
+            } catch (e) {}
+            try {
+                popup.location.replace(printUrl.toString());
+            } catch (e) {
+                popup.location.href = printUrl.toString();
+            }
+        } else {
+            window.location.assign(printUrl.toString());
+        }
+    }
+
+    return false;
+}
+
 $(document).ready(function() {
     if (!$.fn.DataTable) {
         return;

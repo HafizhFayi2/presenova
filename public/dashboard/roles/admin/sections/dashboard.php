@@ -90,7 +90,7 @@ $recent_activities = $stmt->fetchAll();
         <div class="activity-table">
             <h5 class="mb-4"><i class="fas fa-history text-primary me-2"></i>Aktivitas Terbaru</h5>
             <div class="table-responsive">
-                <table class="table table-hover">
+                <table class="table table-hover no-card-table">
                     <thead>
                         <tr>
                             <th>Siswa</th>
@@ -100,16 +100,22 @@ $recent_activities = $stmt->fetchAll();
                         </tr>
                     </thead>
                     <tbody>
-                        <?php foreach($recent_activities as $activity): ?>
-                        <tr>
-                            <td><?php echo $activity['student_name']; ?></td>
-                            <td><?php echo $activity['class_name']; ?></td>
-                            <td><?php echo date('H:i', strtotime($activity['time_in'])); ?></td>
-                            <td>
-                                <span class="badge badge-success">Hadir</span>
-                            </td>
-                        </tr>
-                        <?php endforeach; ?>
+                        <?php if (!empty($recent_activities)): ?>
+                            <?php foreach($recent_activities as $activity): ?>
+                            <tr>
+                                <td><?php echo $activity['student_name']; ?></td>
+                                <td><?php echo $activity['class_name']; ?></td>
+                                <td><?php echo date('H:i', strtotime($activity['time_in'])); ?></td>
+                                <td>
+                                    <span class="badge badge-success">Hadir</span>
+                                </td>
+                            </tr>
+                            <?php endforeach; ?>
+                        <?php else: ?>
+                            <tr>
+                                <td colspan="4" class="text-center text-muted">Belum ada aktivitas terbaru</td>
+                            </tr>
+                        <?php endif; ?>
                     </tbody>
                 </table>
             </div>
@@ -119,23 +125,23 @@ $recent_activities = $stmt->fetchAll();
     <div class="col-md-4">
         <div class="quick-actions">
             <h5 class="mb-4"><i class="fas fa-bolt text-success me-2"></i>Quick Actions</h5>
-            <a href="?table=student" class="quick-action-item">
+            <a href="?table=student" class="quick-action-item" data-no-loading="1">
                 <i class="fas fa-plus-circle"></i>
                 <span>Tambah Siswa Baru</span>
             </a>
-            <a href="?table=teacher" class="quick-action-item">
+            <a href="?table=teacher" class="quick-action-item" data-no-loading="1">
                 <i class="fas fa-user-plus"></i>
                 <span>Tambah Guru Baru</span>
             </a>
-            <a href="?table=schedule" class="quick-action-item">
+            <a href="?table=schedule" class="quick-action-item" data-no-loading="1">
                 <i class="fas fa-calendar-plus"></i>
                 <span>Buat Jadwal Baru</span>
             </a>
-            <a href="?table=attendance&export=today" class="quick-action-item">
+            <a href="?table=attendance&export=today" class="quick-action-item" data-no-loading="1">
                 <i class="fas fa-download"></i>
                 <span>Export Absensi Hari Ini</span>
             </a>
-            <a href="?table=system" class="quick-action-item">
+            <a href="?table=system" class="quick-action-item" data-no-loading="1">
                 <i class="fas fa-cog"></i>
                 <span>Pengaturan Sistem</span>
             </a>

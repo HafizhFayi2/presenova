@@ -1357,7 +1357,9 @@ if (isset($_GET['print'])) {
         <div class="col-md-6">
             <div class="table-container">
                 <h5><i class="bi bi-bar-chart"></i> <?php echo htmlspecialchars($statistik_title); ?></h5>
-                <canvas id="attendanceChart" height="200"></canvas>
+                <div class="attendance-chart-wrap">
+                    <canvas id="attendanceChart"></canvas>
+                </div>
             </div>
         </div>
         <div class="col-md-6">
@@ -1386,32 +1388,34 @@ if (isset($_GET['print'])) {
                     $summary = $summary_stmt->fetchAll();
                     ?>
                     
-                    <table class="table table-sm">
-                        <thead>
-                            <tr>
-                                <th>Tanggal</th>
-                                <th>Total</th>
-                                <th>Hadir</th>
-                                <th>%</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <?php foreach($summary as $day): ?>
-                            <tr>
-                                <td><?php echo date('d/m', strtotime($day['date'])); ?></td>
-                                <td><?php echo $day['total']; ?></td>
-                                <td><?php echo $day['present']; ?></td>
-                                <td>
-                                    <?php 
-                                    $percentage = $day['total'] > 0 ? round(($day['present'] / $day['total']) * 100) : 0;
-                                    $color = $percentage >= 80 ? 'success' : ($percentage >= 60 ? 'warning' : 'danger');
-                                    ?>
-                                    <span class="badge bg-<?php echo $color; ?>"><?php echo $percentage; ?>%</span>
-                                </td>
-                            </tr>
-                            <?php endforeach; ?>
-                        </tbody>
-                    </table>
+                    <div class="table-responsive">
+                        <table class="table table-sm no-card-table attendance-daily-summary-table">
+                            <thead>
+                                <tr>
+                                    <th>Tanggal</th>
+                                    <th>Total</th>
+                                    <th>Hadir</th>
+                                    <th>%</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <?php foreach($summary as $day): ?>
+                                <tr>
+                                    <td><?php echo date('d/m', strtotime($day['date'])); ?></td>
+                                    <td><?php echo $day['total']; ?></td>
+                                    <td><?php echo $day['present']; ?></td>
+                                    <td>
+                                        <?php 
+                                        $percentage = $day['total'] > 0 ? round(($day['present'] / $day['total']) * 100) : 0;
+                                        $color = $percentage >= 80 ? 'success' : ($percentage >= 60 ? 'warning' : 'danger');
+                                        ?>
+                                        <span class="badge bg-<?php echo $color; ?>"><?php echo $percentage; ?>%</span>
+                                    </td>
+                                </tr>
+                                <?php endforeach; ?>
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
         </div>
@@ -1570,13 +1574,34 @@ $(document).ready(function() {
             }]
         },
         options: {
-            responsive: false,
-            scrollX: true,
-            scrollCollapse: true,
+            responsive: true,
+            maintainAspectRatio: false,
+            layout: {
+                padding: {
+                    top: 4,
+                    right: 8,
+                    bottom: 0,
+                    left: 0
+                }
+            },
+            plugins: {
+                legend: {
+                    position: 'top',
+                    align: 'start',
+                    labels: {
+                        boxWidth: 28,
+                        boxHeight: 10,
+                        usePointStyle: false
+                    }
+                }
+            },
             scales: {
                 y: {
                     beginAtZero: true,
-                    suggestedMax: <?php echo (int)$chart_suggested_max; ?>
+                    suggestedMax: <?php echo (int)$chart_suggested_max; ?>,
+                    ticks: {
+                        precision: 0
+                    }
                 }
             }
         }
