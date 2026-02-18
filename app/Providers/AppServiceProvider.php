@@ -19,6 +19,9 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        //
+        $runtimeHelpers = base_path('app/Support/runtime_helpers.php');
+        if (is_file($runtimeHelpers)) {
+            require_once $runtimeHelpers;
+        }
     }
 }

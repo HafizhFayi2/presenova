@@ -1,5 +1,59 @@
 // pwa.js - PWA-specific functionality
 
+function detectAppBasePath() {
+  if (
+    typeof window.__PRESENOVA_APP_BASE_PATH__ === "string" &&
+    window.__PRESENOVA_APP_BASE_PATH__.trim() !== ""
+  ) {
+    return (
+      "/" +
+      window.__PRESENOVA_APP_BASE_PATH__
+        .trim()
+        .replace(/^\/+/, "")
+        .replace(/\/+$/, "")
+    );
+  }
+
+  const script = Array.from(document.scripts).find((item) =>
+    /assets\/js\/(?:pwa|app)\.js(?:\?.*)?$/i.test(item.src || ""),
+  );
+  if (!script || !script.src) {
+    return "";
+  }
+
+  try {
+    const path = new URL(script.src, window.location.origin).pathname;
+    const marker = "/assets/js/";
+    const markerIndex = path.indexOf(marker);
+    if (markerIndex === -1) {
+      return "";
+    }
+    const basePath = path.slice(0, markerIndex).replace(/\/+$/, "");
+    return basePath === "/" ? "" : basePath;
+  } catch (error) {
+    console.error("Unable to resolve app base path:", error);
+    return "";
+  }
+}
+
+const APP_BASE_PATH = detectAppBasePath();
+
+function resolvePresenovaUrl(path) {
+  const rawPath = typeof path === "string" ? path.trim() : "";
+  if (/^https?:\/\//i.test(rawPath)) {
+    return rawPath;
+  }
+
+  const normalizedPath = rawPath.replace(/^\/+/, "");
+  if (normalizedPath === "") {
+    return APP_BASE_PATH === "" ? "/" : `${APP_BASE_PATH}/`;
+  }
+
+  return APP_BASE_PATH === ""
+    ? `/${normalizedPath}`
+    : `${APP_BASE_PATH}/${normalizedPath}`;
+}
+
 class PWAInstaller {
   constructor() {
     this.deferredPrompt = null;
@@ -179,6 +233,7 @@ class ServiceWorkerManager {
   constructor() {
     this.registration = null;
     this.updateAvailable = false;
+    this.isRefreshing = false;
   }
 
   async register() {
@@ -188,8 +243,9 @@ class ServiceWorkerManager {
     }
 
     try {
-      this.registration =
-        await navigator.serviceWorker.register("/service-worker.js");
+      this.registration = await navigator.serviceWorker.register(
+        resolvePresenovaUrl("service-worker.js"),
+      );
       console.log("Service Worker registered:", this.registration);
 
       this.setupUpdateListener();
@@ -211,6 +267,7 @@ class ServiceWorkerManager {
           navigator.serviceWorker.controller
         ) {
           this.updateAvailable = true;
+          newWorker.postMessage({ type: "SKIP_WAITING" });
           this.showUpdateNotification();
         }
       });
@@ -218,6 +275,10 @@ class ServiceWorkerManager {
 
     // Listen for controller change
     navigator.serviceWorker.addEventListener("controllerchange", () => {
+      if (this.isRefreshing) {
+        return;
+      }
+      this.isRefreshing = true;
       window.location.reload();
     });
   }
@@ -298,7 +359,7 @@ class PushNotificationManager {
 
   async getPublicKey() {
     try {
-      const response = await fetch("/api/get-public-key.php");
+      const response = await fetch(resolvePresenovaUrl("api/get-public-key.php"));
       const data = await response.json();
       this.publicKey = data.publicKey;
     } catch (error) {
@@ -350,7 +411,7 @@ class PushNotificationManager {
 
   async sendSubscriptionToServer(subscription) {
     try {
-      await fetch("/api/save-subscription.php", {
+      await fetch(resolvePresenovaUrl("api/save-subscription.php"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(subscription),
@@ -362,7 +423,7 @@ class PushNotificationManager {
 
   async removeSubscriptionFromServer() {
     try {
-      await fetch("/api/remove-subscription.php", {
+      await fetch(resolvePresenovaUrl("api/remove-subscription.php"), {
         method: "POST",
       });
     } catch (error) {

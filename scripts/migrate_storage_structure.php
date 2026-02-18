@@ -1,7 +1,18 @@
 <?php
-require_once __DIR__ . '/../public/includes/config.php';
-require_once __DIR__ . '/../public/includes/database.php';
-require_once __DIR__ . '/../public/helpers/storage_path_helper.php';
+declare(strict_types=1);
+
+use Illuminate\Contracts\Console\Kernel;
+
+$basePath = realpath(__DIR__ . '/..');
+if ($basePath === false) {
+    fwrite(STDERR, "Gagal menemukan root project.\n");
+    exit(1);
+}
+
+require $basePath . '/vendor/autoload.php';
+$app = require $basePath . '/bootstrap/app.php';
+$app->make(Kernel::class)->bootstrap();
+require_once $basePath . '/app/Support/runtime_helpers.php';
 
 $db = new Database();
 $pdo = $db->getConnection();

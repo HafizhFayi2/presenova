@@ -274,6 +274,59 @@ body {
     font-weight: 600;
 }
 
+.schedule-table-grouped .cell-day {
+    width: 88px;
+    text-transform: capitalize;
+}
+
+.cell-schedule {
+    white-space: normal;
+    line-height: 1.35;
+}
+
+.schedule-line {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 3px;
+}
+
+.line-pill {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: #dbeafe;
+    color: #1e3a8a;
+    font-size: 9.5px;
+    font-weight: 700;
+    letter-spacing: 0.3px;
+    text-transform: uppercase;
+}
+
+.line-time {
+    font-weight: 700;
+    color: #0f172a;
+    font-variant-numeric: tabular-nums;
+}
+
+.schedule-main {
+    font-size: 12px;
+    font-weight: 700;
+    color: #0f172a;
+}
+
+.schedule-sub {
+    margin-top: 3px;
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    color: var(--text-muted);
+    font-size: 10px;
+}
+
 .status-chip {
     display: inline-flex;
     align-items: center;

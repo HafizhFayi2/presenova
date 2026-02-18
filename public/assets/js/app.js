@@ -3,6 +3,45 @@
 // Global Variables
 let deferredPrompt = null;
 
+function resolvePresenovaUrl(path) {
+  if (typeof window.resolvePresenovaUrl === "function") {
+    return window.resolvePresenovaUrl(path);
+  }
+
+  const script = Array.from(document.scripts).find((item) =>
+    /assets\/js\/app\.js(?:\?.*)?$/i.test(item.src || ""),
+  );
+
+  let basePath = "";
+  if (script && script.src) {
+    try {
+      const fullPath = new URL(script.src, window.location.origin).pathname;
+      const marker = "/assets/js/";
+      const markerIndex = fullPath.indexOf(marker);
+      if (markerIndex !== -1) {
+        basePath = fullPath.slice(0, markerIndex).replace(/\/+$/, "");
+        if (basePath === "/") {
+          basePath = "";
+        }
+      }
+    } catch (error) {
+      console.error("Unable to resolve app base path:", error);
+    }
+  }
+
+  const rawPath = typeof path === "string" ? path.trim() : "";
+  if (/^https?:\/\//i.test(rawPath)) {
+    return rawPath;
+  }
+
+  const normalizedPath = rawPath.replace(/^\/+/, "");
+  if (normalizedPath === "") {
+    return basePath === "" ? "/" : `${basePath}/`;
+  }
+
+  return basePath === "" ? `/${normalizedPath}` : `${basePath}/${normalizedPath}`;
+}
+
 // DOM Ready
 document.addEventListener("DOMContentLoaded", function () {
   // Initialize components
@@ -86,10 +125,13 @@ function dismissInstallPrompt() {
 
 // Service Worker Registration
 function registerServiceWorker() {
+  let isRefreshing = false;
+
   navigator.serviceWorker
-    .register("/service-worker.js")
+    .register(resolvePresenovaUrl("service-worker.js"))
     .then((registration) => {
       console.log("Service Worker registered with scope:", registration.scope);
+      registration.update().catch(() => {});
 
       // Check for updates
       registration.addEventListener("updatefound", () => {
@@ -99,9 +141,19 @@ function registerServiceWorker() {
             newWorker.state === "installed" &&
             navigator.serviceWorker.controller
           ) {
+            newWorker.postMessage({ type: "SKIP_WAITING" });
             showToast("Update tersedia! Silakan refresh halaman.", "info");
           }
         });
+      });
+
+      navigator.serviceWorker.addEventListener("controllerchange", () => {
+        if (isRefreshing) {
+          return;
+        }
+
+        isRefreshing = true;
+        window.location.reload();
       });
     })
     .catch((error) => {

@@ -13,7 +13,7 @@ Options:
   --python <binary>          Python binary to create venv (default: python3)
   --venv <relative-path>     Venv path relative to project root (default: public/face/.venv)
   --requirements <path>      Requirements path relative to project root (default: public/face/faces_conf/requirements.txt)
-  --write-env                Update .env LEGACY_PYTHON_BIN to the venv python path
+  --write-env                Update .env PYTHON_BIN to the venv python path
   --install-system-deps      Install Debian/Ubuntu system deps for DeepFace/OpenCV
   -h, --help                 Show help
 
@@ -143,12 +143,12 @@ if [[ "${WRITE_ENV}" -eq 1 ]]; then
     log "Membuat .env dari .env.example"
   fi
 
-  if grep -q '^LEGACY_PYTHON_BIN=' "${ENV_FILE}"; then
-    sed -i "s#^LEGACY_PYTHON_BIN=.*#LEGACY_PYTHON_BIN=${VENV_PYTHON}#g" "${ENV_FILE}"
+  if grep -q '^PYTHON_BIN=' "${ENV_FILE}"; then
+    sed -i "s#^PYTHON_BIN=.*#PYTHON_BIN=${VENV_PYTHON}#g" "${ENV_FILE}"
   else
-    printf '\nLEGACY_PYTHON_BIN=%s\n' "${VENV_PYTHON}" >> "${ENV_FILE}"
+    printf '\nPYTHON_BIN=%s\n' "${VENV_PYTHON}" >> "${ENV_FILE}"
   fi
-  log "Update .env: LEGACY_PYTHON_BIN=${VENV_PYTHON}"
+  log "Update .env: PYTHON_BIN=${VENV_PYTHON}"
 fi
 
 log "Verifikasi import DeepFace..."
@@ -165,7 +165,7 @@ Python venv:
   ${VENV_PYTHON}
 
 Jalankan app dengan env ini:
-  LEGACY_PYTHON_BIN=${VENV_PYTHON}
+  PYTHON_BIN=${VENV_PYTHON}
 
 Contoh run dari project root:
   bash scripts/setup_deepface.sh --write-env

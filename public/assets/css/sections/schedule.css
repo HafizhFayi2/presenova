@@ -72,6 +72,65 @@
     color: #d1d1d1;
 }
 
+.table-header .btn-schedule-print {
+    background: #f8fafc !important;
+    color: #0f172a !important;
+    border: 2px solid #dbe3ef !important;
+    font-weight: 700;
+    text-shadow: none;
+    box-shadow: 0 6px 16px rgba(15, 23, 42, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.65);
+}
+
+.table-header .btn-schedule-print i {
+    color: currentColor !important;
+}
+
+.table-header .btn-schedule-print:hover,
+.table-header .btn-schedule-print:focus {
+    background: #ffffff !important;
+    color: #0b1328 !important;
+    border-color: #b9c8de !important;
+    transform: translateY(-1px);
+}
+
+.table-header .add-btn {
+    background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%) !important;
+    color: #ffffff !important;
+    border: 2px solid rgba(255, 255, 255, 0.45) !important;
+    font-weight: 700;
+    text-shadow: none;
+    box-shadow: 0 8px 18px rgba(29, 78, 216, 0.35);
+}
+
+.table-header .add-btn i {
+    color: currentColor !important;
+}
+
+.table-header .add-btn:hover,
+.table-header .add-btn:focus {
+    background: linear-gradient(135deg, #1d4ed8 0%, #1e40af 100%) !important;
+    color: #ffffff !important;
+    border-color: rgba(255, 255, 255, 0.7) !important;
+    transform: translateY(-1px);
+}
+
+[data-theme="dark"] .table-header .btn-schedule-print {
+    background: #e2e8f0 !important;
+    color: #0f172a !important;
+    border-color: #cbd5e1 !important;
+}
+
+[data-theme="dark"] .table-header .btn-schedule-print:hover,
+[data-theme="dark"] .table-header .btn-schedule-print:focus {
+    background: #f8fafc !important;
+    color: #020617 !important;
+    border-color: #94a3b8 !important;
+}
+
+[data-theme="dark"] .table-header .add-btn {
+    border-color: rgba(147, 197, 253, 0.75) !important;
+}
+
 /* DataTable custom styles */
 #scheduleTable_wrapper .dataTables_length,
 #scheduleTable_wrapper .dataTables_filter {
