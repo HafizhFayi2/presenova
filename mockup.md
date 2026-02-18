@@ -1,6 +1,8 @@
-﻿# Mockup Konsep dan Alur Kerja Presenova
+# Mockup Konsep dan Alur Kerja Presenova
 
 Dokumen ini menjelaskan konsep website Presenova berdasarkan implementasi kode saat ini di repository (`public/`, `routes/`, `app/`, dan dashboard role-based). Tujuannya agar komunitas mudah memahami sistem dari sisi produk, operasional, dan teknis.
+
+Status dokumen ini diperbarui mengikuti progres cutover sampai fase 10 (18 Februari 2026).
 
 ## 1. Ringkasan Konsep
 
@@ -18,27 +20,98 @@ Fokus produk:
 
 ## 2. Arsitektur Sistem
 
-### 2.1 Hybrid Laravel + Legacy PHP
+### 2.1 Laravel-First (Cutover Bertahap)
 
-Aplikasi menggunakan pola hybrid:
+Arsitektur saat ini sudah **Laravel-only runtime**:
 
-- Laravel dipakai sebagai kernel aplikasi dan routing modern
-- Modul legacy PHP tetap aktif di `public/`
-- Request file fisik (misalnya `login.php`, `dashboard/siswa.php`) dieksekusi langsung
-- Request non-file diarahkan ke front controller Laravel (`public/laravel.php`)
+- Semua request dinamis masuk ke front controller Laravel (`public/index.php`)
+- URL `.php` lama dipertahankan lewat route Laravel
+- Runtime halaman dijalankan dari controller Laravel + view di `resources/views`
+- Semua URL lama dipetakan eksplisit via route/controller Laravel (tanpa catch-all script map)
 
 Dampak:
 
-- Migrasi bertahap jadi mungkin tanpa memutus sistem lama
-- Struktur masih campuran, sehingga maintainability butuh disiplin tinggi
+- Stabilitas routing meningkat tanpa memutus URL lama
+- Risiko endpoint liar menurun karena allowlist
+- Refactor kode procedural ke service/controller masih berlangsung, namun jalur runtime aktif sudah sepenuhnya lewat Laravel
+
+Definisi status framework saat ini:
+
+- Full Laravel untuk **runtime request handling**: Ya.
+- Full Laravel untuk **native refactor seluruh kode dashboard**: Ya (runtime aktif).
+- UI/flow lama tetap dijaga lewat view PHP/Blade di Laravel agar tidak terjadi regresi operasional.
 
 ### 2.2 Komponen Inti
 
 - Frontend: PHP template, Bootstrap, jQuery, DataTables, Chart.js, Leaflet
-- Backend: PHP (legacy + Laravel bridge)
-- Face matching: Python (DeepFace) via `face_match.py` + fallback legacy matcher
+- Backend: Laravel controller/service terpusat
+- Face matching: Python (DeepFace) via `face_match.py` + fallback matcher berbasis PHP
 - Database: MySQL
 - PWA + Push: Service Worker + Web Push (VAPID)
+
+### 2.3 Status Cutover Teknis (Fase 10)
+
+Sudah native Laravel:
+
+- Home, login, logout
+- JWT/session remember bridge
+- CRUD admin utama (`add/edit student`, `add class/jurusan`, `reset/reveal`, statistik)
+- Endpoint AJAX form dashboard:
+- `dashboard/ajax/config.php`
+- `dashboard/ajax/get_data.php`
+- `dashboard/ajax/get_form.php`
+- `dashboard/ajax/get_schedule_form.php`
+- `dashboard/ajax/load_attendance_form.php`
+- API umum (`check_location`, `get-public-key`, `get_schedule`, `get_attendance_details`, `sync_schedule`)
+- API face yang sudah dipindah: `face_matching`, `register_face`, `save_pose_frames`
+- API absensi terstandar: `save_attendance.php` sebagai endpoint utama Laravel
+- Wrapper lama juga sudah diarahkan ke service yang sama:
+- `api/submit_attendance.php`
+- `dashboard/ajax/save_attendance.php`
+- Endpoint print jadwal sudah native Laravel controller:
+- `dashboard/roles/admin/print/jadwal_print.php`
+- `dashboard/roles/guru/print/jadwal_print.php`
+- `dashboard/roles/siswa/print/jadwal_print.php`
+- `404.php` sudah native Laravel view
+- Route utilitas lama sudah masuk controller Laravel:
+- `call.php`
+- `register.php`
+- `forgot-password.php`
+- `reset_password.php`
+- Header verifikasi stack `X-Presenova-Stack: laravel-only`
+
+Catatan:
+- Dashboard role (`admin/guru/siswa`) tetap mempertahankan UI/flow lama, tetapi sekarang dieksekusi melalui controller Laravel + `resources/views`.
+- Tidak ada lagi class/route runtime aktif yang mengeksekusi file procedural lama.
+
+### 2.4 Verifikasi Komunikasi Database dan Sinkronisasi (18 Februari 2026)
+
+Hasil health check relasi data inti:
+
+- `student_count=3`
+- `teacher_count=3`
+- `class_count=3`
+- `teacher_schedule_count=7`
+- `student_schedule_count=566`
+- `presence_count=3`
+- `site_rows=1`
+- `default_location_exists=1`
+
+Hasil cek orphan/ketidaksinkronan:
+
+- `orphan_student_class=0`
+- `orphan_student_jurusan=0`
+- `orphan_ts_teacher=0`
+- `orphan_ts_class=0`
+- `orphan_ss_student=0`
+- `orphan_ss_ts=0`
+- `orphan_presence_ss=0`
+- `orphan_presence_student=0`
+
+Kesimpulan operasional:
+
+- Komunikasi database antar modul inti (master, jadwal, absensi, lokasi) sinkron.
+- Tidak ditemukan putus relasi data pada tabel inti saat pemeriksaan.
 
 ## 3. Aktor dan Hak Akses
 
@@ -69,6 +142,13 @@ Operator masih bisa:
 - Monitoring absensi
 - Ubah sebagian pengaturan lokasi dan validasi
 
+Detail fungsi operator dalam operasi harian:
+
+- Menjalankan CRUD siswa harian (input siswa baru, edit data, reset kredensial siswa ke default kebijakan).
+- Menangani validasi jadwal (cek konflik guru-jam, koreksi kelas/hari, pemeliharaan kalender mengajar).
+- Menjadi first-line support untuk kendala absensi siswa (lokasi, status jadwal, keterlambatan, status sakit/izin).
+- Memantau dashboard attendance tanpa akses ke pengaturan user sistem inti.
+
 ## 4. Alur Pengguna End-to-End
 
 ## 4.1 Masuk dari Halaman Publik
@@ -95,6 +175,18 @@ Sistem login memiliki:
 - Remember token berbasis JWT cookie
 - Redirect dashboard sesuai role
 - Untuk siswa: cek apakah referensi wajah valid
+
+Mekanisme session/JWT remember:
+
+- Cookie remember lama tetap kompatibel (`attendance_token`, `remember_token`).
+- Claim token kompatibel (`user_id`, `role`, `exp`) agar auto-login siswa tetap berjalan saat session habis.
+- Jika JWT valid dan session kosong, middleware membangun ulang session role user otomatis.
+- Jika JWT invalid/expired, sistem fallback ke login biasa.
+
+Kontrol password default:
+
+- Siswa: bila terdeteksi password default (kode siswa/NISN/pola lama), dipaksa ganti password sebelum akses penuh dashboard.
+- Guru: bila masih `guru123`, sistem auto-rotate ke format acak `P@ssw0rdTC###` dan tampilkan notifikasi perubahan.
 
 Jika siswa belum punya referensi wajah/pose capture, diarahkan ke `register.php`.
 
@@ -139,7 +231,7 @@ Urutan absensi siswa (mode utama hadir):
 3. Kamera aktif, selfie diambil
 4. API `face_matching.php` memverifikasi wajah dan mengeluarkan `match_token` (berlaku terbatas)
 5. Siswa konfirmasi di modal absensi
-6. API `save_attendance.php` memvalidasi ulang jadwal + GPS + token wajah
+6. API `save_attendance.php` (native Laravel) memvalidasi ulang jadwal + GPS + token wajah
 7. Data `presence` disimpan, status jadwal diubah `COMPLETED`
 8. Bukti foto absensi disimpan ke folder attendance (dengan kartu validasi berisi metadata)
 9. Push hasil absensi dikirim ke siswa
@@ -171,6 +263,11 @@ Catatan penting operasional:
 - Hapus data sensitif beberapa tabel menggunakan validasi dan transaksi
 - Ada backup data siswa saat delete siswa (termasuk jejak file)
 
+Kontrol akses admin vs operator:
+
+- Aksi sensitif tingkat tinggi (manajemen user sistem, delete master tertentu, reveal kode siswa) dibatasi ke admin level 1.
+- Operator level 2 tetap produktif untuk operasi sekolah harian tanpa membuka akses ke area risiko tertinggi.
+
 ## 5.2 Section Guru
 
 Menu guru:
@@ -193,6 +290,14 @@ Menu siswa:
 - `riwayat`: riwayat absensi, pending hari ini, daftar alpa, filter status/tanggal/pencarian
 - `profil`: info identitas, statistik, edit kontak dasar (email/telepon), keamanan akun
 
+Security siswa yang aktif:
+
+- Face verification dua lapis: validasi client + validasi server (`face_matching` + token verifikasi).
+- Validasi GPS radius untuk mode hadir, dengan kebijakan berbeda untuk mode sakit/izin.
+- Validasi jadwal/waktu dan toleransi keterlambatan berbasis konfigurasi site.
+- Paksaan update password default untuk menutup risiko kredensial standar.
+- Sinkronisasi session/JWT agar pengalaman login tetap mulus tanpa menurunkan kontrol akses.
+
 ## 6. Model Data Inti
 
 Tabel utama yang membentuk alur bisnis:
@@ -205,7 +310,14 @@ Tabel utama yang membentuk alur bisnis:
 - `push_tokens`, `push_notification_logs`: notifikasi PWA
 - `activity_logs`: audit aktivitas sistem
 
-## 7. Pro dan Kontra Sistem
+Aturan sinkronisasi data:
+
+- `teacher_schedule` menjadi sumber jadwal mengajar per guru/kelas/hari.
+- `student_schedule` disintesis dari `teacher_schedule` untuk setiap siswa agar absensi berjalan per-instance tanggal.
+- `presence` wajib terikat ke `student_schedule` agar status hadir/sakit/izin/alpa dapat dihitung konsisten lintas role.
+- `site` dan `school_location` menjadi sumber tunggal validasi radius GPS.
+
+## 7. Pro dan Kontra Sistem (Setelah Fase 10)
 
 ## 7.1 Kelebihan (Pro)
 
@@ -215,17 +327,27 @@ Tabel utama yang membentuk alur bisnis:
 - Ada PWA, push notification, dan monitoring realtime
 - Riwayat dan laporan cukup lengkap untuk kebutuhan sekolah
 - Mekanisme alpa tidak hanya bergantung input manual
+- Cutover Laravel sudah berjalan nyata tanpa memutus URL lama
+- Catch-all lama sudah dihapus, diganti allowlist route
+- Secret push/JWT sudah dipusatkan ke environment (`.env`)
+- Endpoint absensi sudah distandarkan ke satu service/controller Laravel
 
 ## 7.2 Kekurangan/Risiko (Con)
 
-- Arsitektur hybrid (Laravel + legacy) masih menyebar logika bisnis di banyak file, maintenance lebih sulit
-- Banyak file dashboard sangat besar (mix PHP/HTML/JS), sulit diuji unit dan sulit direview cepat
+- Runtime tetap mempertahankan sebagian kode procedural kompatibilitas demi parity UI/flow
+- Banyak file dashboard besar (mix PHP/HTML/JS), sulit diuji unit dan sulit direview cepat
 - Password default (`admin123`, `guru123`) dan pola reset default berisiko jika tidak dipaksa ganti
-- Konfigurasi sensitif push (VAPID key) tersimpan di file konfigurasi repo, perlu hardening environment
-- Ada endpoint legacy lama berdampingan dengan endpoint baru (potensi inkonsistensi)
-- Beberapa referensi UI terlihat tidak sinkron dengan file aktual (indikasi technical debt)
-- Belum terlihat guard modern seperti CSRF dan rate limit ketat di semua endpoint legacy
+- Sebagian runtime internal masih mempertahankan format procedural lama
+- Guard modern (policy/rate-limit/test coverage) belum merata untuk semua alur
 - Data biometrik dan geolokasi butuh kebijakan privasi/retensi yang sangat jelas
+
+Status final saat ini:
+
+- Runtime aktif sudah Laravel-only (`public/index.php` -> Laravel front controller).
+- Route `.php` lama tetap tersedia, tetapi diproses oleh controller Laravel.
+- Folder view/helper runtime lama sudah dihapus dari runtime aktif.
+- Endpoint AJAX yang sebelumnya kosong (`change_password`, `optimize_database`, `save_security`) sudah dipetakan ke controller Laravel.
+- Cron push notification sudah bootstrap Laravel langsung.
 
 ## 8. Dampak untuk Komunitas (Bahasa Non-Teknis)
 
@@ -246,12 +368,13 @@ Titik kritis adopsi komunitas:
 
 ## 9. Rekomendasi Penguatan Bertahap
 
-1. Wajibkan ganti password default saat login pertama (admin/guru/siswa).
-2. Pindahkan seluruh secret (VAPID key, dsb.) ke environment, bukan file statis.
-3. Pecah file dashboard besar menjadi service/controller modular agar mudah dites.
-4. Standarkan endpoint absensi ke satu jalur utama dan deprecate endpoint lama.
-5. Tambahkan audit trail lebih eksplisit untuk perubahan master data penting.
-6. Susun dokumen kebijakan retensi data biometrik dan lokasi untuk transparansi komunitas.
+1. Lanjutkan refactor bertahap file dashboard besar ke service/controller murni agar testability meningkat.
+2. Pertahankan parity UI/flow sambil menurunkan kode procedural di runtime internal.
+3. Pecah dashboard besar menjadi service/controller modular agar mudah dites.
+4. Standarkan endpoint absensi ke satu jalur utama dan nonaktifkan wrapper lama sementara.
+5. Perluas audit trail terstruktur untuk seluruh perubahan master data penting.
+6. Tegakkan forced change password default secara konsisten untuk semua role.
+7. Susun dan publikasikan kebijakan retensi data biometrik/lokasi untuk transparansi komunitas.
 
 ---
 
