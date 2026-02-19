@@ -395,15 +395,81 @@ class SchedulePrintController extends Controller
 
     private function appPath(string $path): string
     {
-        $path = ltrim($path, '/');
-        $requestPrefix = trim((string) request()->getBasePath(), '/');
-        $configPrefix = trim((string) parse_url((string) config('app.url'), PHP_URL_PATH), '/');
-        $prefix = $requestPrefix !== '' ? $requestPrefix : $configPrefix;
-        if ($prefix === '') {
-            return '/' . $path;
+        if (preg_match('~^https?://~i', $path) === 1) {
+            return $path;
         }
 
-        return '/' . $prefix . '/' . $path;
+        $path = ltrim($path, '/');
+        $root = $this->resolveAppRootUrl();
+        if ($path === '') {
+            return $root . '/';
+        }
+
+        return $root . '/' . $path;
+    }
+
+    private function resolveAppPrefix(): string
+    {
+        $configPrefix = $this->normalizePathPrefix((string) parse_url((string) config('app.url'), PHP_URL_PATH));
+        if ($configPrefix !== '') {
+            return $configPrefix;
+        }
+
+        return $this->normalizePathPrefix((string) request()->getBasePath());
+    }
+
+    private function normalizePathPrefix(string $prefix): string
+    {
+        $prefix = trim($prefix, '/');
+        if ($prefix === '') {
+            return '';
+        }
+
+        $segments = array_values(array_filter(explode('/', $prefix), static fn (string $segment): bool => $segment !== ''));
+        $segmentCount = count($segments);
+        if ($segmentCount < 2) {
+            return implode('/', $segments);
+        }
+
+        for ($size = intdiv($segmentCount, 2); $size >= 1; $size--) {
+            if (($segmentCount % $size) !== 0 || $segmentCount < ($size * 2)) {
+                continue;
+            }
+
+            $pattern = array_slice($segments, 0, $size);
+            $allSame = true;
+            for ($index = $size; $index < $segmentCount; $index += $size) {
+                if (array_slice($segments, $index, $size) !== $pattern) {
+                    $allSame = false;
+                    break;
+                }
+            }
+
+            if ($allSame) {
+                return implode('/', $pattern);
+            }
+        }
+
+        return implode('/', $segments);
+    }
+
+    private function resolveAppRootUrl(): string
+    {
+        $configuredUrl = trim((string) config('app.url'));
+        if ($configuredUrl !== '') {
+            $parsed = parse_url($configuredUrl);
+            if (is_array($parsed) && isset($parsed['scheme'], $parsed['host'])) {
+                $port = isset($parsed['port']) ? ':' . (string) $parsed['port'] : '';
+                $prefix = $this->normalizePathPrefix((string) ($parsed['path'] ?? ''));
+
+                return $parsed['scheme'] . '://' . $parsed['host'] . $port . ($prefix !== '' ? '/' . $prefix : '');
+            }
+        }
+
+        $hostUrl = rtrim((string) request()->getSchemeAndHttpHost(), '/');
+        $prefix = $this->resolveAppPrefix();
+
+        return $hostUrl . ($prefix !== '' ? '/' . $prefix : '');
     }
 
     private function inputInt(Request $request, string $key): int

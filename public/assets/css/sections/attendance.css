@@ -6,6 +6,30 @@
     gap: 16px;
 }
 
+.attendance-chart-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.attendance-chart-header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+}
+
+.attendance-chart-header h5 {
+    margin: 0;
+}
+
+.attendance-chart-type-toggle .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
 .attendance-chart-wrap {
     position: relative;
     width: 100%;
@@ -13,10 +37,63 @@
     height: clamp(260px, 38vh, 420px);
 }
 
+.attendance-chart-scroll {
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: thin;
+    padding-bottom: 2px;
+}
+
+.attendance-chart-inner {
+    min-width: 100%;
+    height: 100%;
+}
+
 #attendanceChart {
     display: block;
     width: 100% !important;
     height: 100% !important;
+}
+
+.attendance-chart-slider-wrap {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: -2px;
+}
+
+.attendance-chart-slider-wrap label {
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--text-color);
+    margin-bottom: 0;
+    white-space: nowrap;
+}
+
+#attendanceChartXSlider {
+    width: 100%;
+}
+
+#attendanceChartXSlider:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+}
+
+.attendance-chart-note {
+    font-size: 0.82rem;
+    color: var(--text-secondary-color);
+    line-height: 1.45;
+    margin-top: -2px;
+}
+
+.attendance-chart-table-switch {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.attendance-graph-data-table {
+    margin-top: 2px;
 }
 
 .attendance-daily-summary-table {
@@ -26,6 +103,10 @@
 .attendance-daily-summary-table th,
 .attendance-daily-summary-table td {
     white-space: nowrap;
+}
+
+.attendance-summary-waiting-row td {
+    background: rgba(59, 130, 246, 0.08);
 }
 
 .attendance-stat-card {
@@ -208,6 +289,10 @@ html[data-theme="dark"] #filterStatus,
     color: #0f172a;
 }
 
+[data-theme="dark"] .attendance-summary-waiting-row td {
+    background: rgba(56, 189, 248, 0.1);
+}
+
 .attendance-details-modal {
     border-radius: 16px;
     overflow: hidden;
@@ -359,6 +444,21 @@ html[data-theme="dark"] #filterStatus,
 
     .attendance-daily-summary-table {
         min-width: 360px;
+    }
+
+    .attendance-chart-header {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .attendance-chart-slider-wrap {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 6px;
+    }
+
+    #attendanceChartXSlider {
+        width: 100%;
     }
 }
 

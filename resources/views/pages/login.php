@@ -7,10 +7,10 @@
     <meta name="color-scheme" content="light dark">
     <meta name="theme-color" content="#f8fafc" media="(prefers-color-scheme: light)">
     <meta name="theme-color" content="#0f172a" media="(prefers-color-scheme: dark)">
-    <link rel="apple-touch-icon" href="assets/images/apple-touch-icon_login.png?v=20260212c">
-    <link rel="icon" type="image/png" sizes="16x16" href="assets/images/favicon-16x16_login.png?v=20260212c">
-    <link rel="icon" type="image/png" sizes="32x32" href="assets/images/favicon-32x32_login.png?v=20260212c">
-    <link rel="shortcut icon" type="image/x-icon" href="assets/images/favicon_login.ico?v=20260212c">
+    <link rel="apple-touch-icon" href="<?php echo htmlspecialchars($assetBaseUrl, ENT_QUOTES, 'UTF-8'); ?>assets/images/apple-touch-icon_login.png?v=20260212c">
+    <link rel="icon" type="image/png" sizes="16x16" href="<?php echo htmlspecialchars($assetBaseUrl, ENT_QUOTES, 'UTF-8'); ?>assets/images/favicon-16x16_login.png?v=20260212c">
+    <link rel="icon" type="image/png" sizes="32x32" href="<?php echo htmlspecialchars($assetBaseUrl, ENT_QUOTES, 'UTF-8'); ?>assets/images/favicon-32x32_login.png?v=20260212c">
+    <link rel="shortcut icon" type="image/x-icon" href="<?php echo htmlspecialchars($assetBaseUrl, ENT_QUOTES, 'UTF-8'); ?>assets/images/favicon_login.ico?v=20260212c">
     
     <!-- Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -271,26 +271,59 @@
         /* Submit Button */
         .btn-submit {
             width: 100%;
-            padding: 0.875rem;
-            background: var(--gradient-green);
+            height: 52px;
+            padding: 0 1rem;
+            background: linear-gradient(135deg, #0f172a 0%, #111827 100%);
             border: none;
-            border-radius: 10px;
+            border-radius: 999px;
             color: white;
             font-size: 0.95rem;
-            font-weight: 600;
+            font-weight: 700;
             cursor: pointer;
-            transition: all 0.2s ease;
+            transition: color 0.28s ease, transform 0.22s ease, box-shadow 0.22s ease;
             display: flex;
             align-items: center;
             justify-content: center;
-            gap: 0.5rem;
+            gap: 0.55rem;
             margin-bottom: 1.5rem;
             font-family: 'Inter', sans-serif;
+            position: relative;
+            z-index: 1;
+            overflow: hidden;
+        }
+
+        .btn-submit::after {
+            content: '';
+            background: #ffffff;
+            position: absolute;
+            z-index: -1;
+            left: -20%;
+            right: -20%;
+            top: 0;
+            bottom: 0;
+            transform: skewX(-45deg) scale(0, 1);
+            transition: transform 0.5s ease;
         }
 
         .btn-submit:hover {
+            color: #0b1220;
             transform: translateY(-2px);
-            box-shadow: 0 10px 25px rgba(16, 185, 129, 0.3);
+            box-shadow: 0 10px 25px rgba(16, 185, 129, 0.28);
+        }
+
+        .btn-submit:hover::after {
+            transform: skewX(-45deg) scale(1, 1);
+        }
+
+        .btn-submit:disabled {
+            opacity: 0.86;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+
+        .btn-submit:disabled::after {
+            transform: skewX(-45deg) scale(0, 1);
         }
 
         /* Footer */
@@ -432,7 +465,7 @@
 </head>
 <body>
     <!-- Home Link -->
-    <a href="./" class="home-link">
+    <a href="<?php echo htmlspecialchars($getStartedUrl, ENT_QUOTES, 'UTF-8'); ?>" class="home-link">
         <i class="fas fa-arrow-left"></i>
         <span>Kembali ke Home</span>
     </a>
@@ -444,7 +477,7 @@
             <div class="logo-container">
                 <!-- Pastikan logo ada di assets/images/presenova.png -->
                 <!-- <img src="assets/images/presenova.png" alt="Presenova Logo"> -->
-                 <img src="assets/images/presenova.png" alt="Presenova Logo">
+                 <img src="<?php echo htmlspecialchars($assetBaseUrl, ENT_QUOTES, 'UTF-8'); ?>assets/images/presenova.png" alt="Presenova Logo">
         <span class="brand-text">PRESENOVA</span>
     </div>
     <h1 class="login-title">Masuk ke Sistem</h1>
@@ -524,21 +557,22 @@
                         <input type="checkbox" id="remember" name="remember">
                         <span class="checkbox-label">Ingat saya</span>
                     </label>
-                    <a href="forgot-password.php" class="forgot-link">
+                    <a href="<?php echo htmlspecialchars($forgotPasswordUrl, ENT_QUOTES, 'UTF-8'); ?>" class="forgot-link">
                         Lupa password?
                     </a>
                 </div>
 
                 <!-- Submit Button -->
                 <button type="submit" class="btn-submit">
-                    <i class="fas fa-sign-in-alt"></i> Login
+                    <i class="fas fa-sign-in-alt"></i>
+                    <span>Login</span>
                 </button>
             </form>
 
             <!-- Footer -->
             <div class="login-footer">
                 <p>Belum punya akun? 
-                    <a href="call.php">Registrasi sebagai Siswa Baru</a>
+                    <a href="<?php echo htmlspecialchars($registerCallUrl, ENT_QUOTES, 'UTF-8'); ?>">Registrasi sebagai Siswa Baru</a>
                 </p>
                 <p>Presenova &copy; <?php echo date('Y'); ?> Bringing Back, Learning Time</p>
             </div>

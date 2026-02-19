@@ -21,7 +21,7 @@
     <meta property="og:description" content="Sistem absensi digital dengan AI Face Recognition & GPS Tracking untuk sekolah modern"/>
     <meta property="og:url" content="<?php echo $siteUrl . $fullurl; ?>"/>
     <meta property="og:site_name" content="Presenova"/>
-    <meta property="og:image" content="<?php echo $siteUrl; ?>../assets/images/presenova.png"/>
+    <meta property="og:image" content="<?php echo htmlspecialchars($assetBaseUrl, ENT_QUOTES, 'UTF-8'); ?>assets/images/presenova.png"/>
     <meta property="og:image:width" content="1200"/>
     <meta property="og:image:height" content="630"/>
     
@@ -29,20 +29,20 @@
     <meta name="twitter:card" content="summary_large_image"/>
     <meta name="twitter:title" content="Presenova - Smart Attendance System"/>
     <meta name="twitter:description" content="Sistem absensi digital dengan AI Face Recognition & GPS Tracking"/>
-    <meta name="twitter:image" content="<?php echo $siteUrl; ?>../assets/images/presenova.png"/>
+    <meta name="twitter:image" content="<?php echo htmlspecialchars($assetBaseUrl, ENT_QUOTES, 'UTF-8'); ?>assets/images/presenova.png"/>
     
     <!-- PWA -->
-    <link rel="manifest" href="manifest.json">
+    <link rel="manifest" href="<?php echo htmlspecialchars($assetBaseUrl, ENT_QUOTES, 'UTF-8'); ?>manifest.json">
     <meta name="color-scheme" content="light dark">
     <meta name="theme-color" content="#f8fafc" media="(prefers-color-scheme: light)">
     <meta name="theme-color" content="#0a0f1e" media="(prefers-color-scheme: dark)">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="Presenova">
-    <link rel="apple-touch-icon" href="assets/images/apple-touch-icon-white background.png">
-    <link rel="icon" type="image/png" sizes="32x32" href="assets/images/favicon-16x16-white background.png" media="(prefers-color-scheme: light)">
-    <link rel="icon" type="image/png" sizes="32x32" href="assets/images/favicon-16x16-black background.png" media="(prefers-color-scheme: dark)">
-    <link rel="shortcut icon" type="image/png" href="assets/images/favicon-32x32.png">
+    <link rel="apple-touch-icon" href="<?php echo htmlspecialchars($assetBaseUrl, ENT_QUOTES, 'UTF-8'); ?>assets/images/apple-touch-icon-white background.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="<?php echo htmlspecialchars($assetBaseUrl, ENT_QUOTES, 'UTF-8'); ?>assets/images/favicon-16x16-white background.png" media="(prefers-color-scheme: light)">
+    <link rel="icon" type="image/png" sizes="32x32" href="<?php echo htmlspecialchars($assetBaseUrl, ENT_QUOTES, 'UTF-8'); ?>assets/images/favicon-16x16-black background.png" media="(prefers-color-scheme: dark)">
+    <link rel="shortcut icon" type="image/png" href="<?php echo htmlspecialchars($assetBaseUrl, ENT_QUOTES, 'UTF-8'); ?>assets/images/favicon-32x32_admin.png">
     
     <!-- Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -1221,8 +1221,8 @@
         <div class="container">
             <div class="row align-items-center">
                 <div class="col-6 col-lg-3">
-                    <a href="./" class="logo-container">
-                        <img src="assets/images/presenova.png" alt="Presenova Logo" class="logo-img">
+                    <a href="<?php echo htmlspecialchars($getStartedUrl, ENT_QUOTES, 'UTF-8'); ?>" class="logo-container">
+                        <img src="<?php echo htmlspecialchars($assetBaseUrl, ENT_QUOTES, 'UTF-8'); ?>assets/images/presenova.png" alt="Presenova Logo" class="logo-img">
                         <span class="logo-text">PRESENOVA</span>
                     </a>
                 </div>
@@ -1536,7 +1536,7 @@
                 <div class="col-lg-4">
                     <div class="footer-widget">
                         <div class="footer-logo">
-                            <img src="assets/images/presenova.png" alt="Presenova">
+                            <img src="<?php echo htmlspecialchars($assetBaseUrl, ENT_QUOTES, 'UTF-8'); ?>assets/images/presenova.png" alt="Presenova">
                             <span>PRESENOVA</span>
                         </div>
                         <p class="footer-description">
@@ -1559,7 +1559,7 @@
                             <li><a href="<?php echo htmlspecialchars($loginUrl, ENT_QUOTES, 'UTF-8'); ?>"><i class="fas fa-chevron-right"></i> Login Siswa</a></li>
                             <li><a href="<?php echo htmlspecialchars($loginAdminUrl, ENT_QUOTES, 'UTF-8'); ?>"><i class="fas fa-chevron-right"></i> Login Admin</a></li>
                             <li><a href="<?php echo htmlspecialchars($loginGuruUrl, ENT_QUOTES, 'UTF-8'); ?>"><i class="fas fa-chevron-right"></i> Login Guru</a></li>
-                            <li><a href="register.php"><i class="fas fa-chevron-right"></i> Registrasi Wajah</a></li>
+                            <li><a href="<?php echo htmlspecialchars($registerUrl, ENT_QUOTES, 'UTF-8'); ?>"><i class="fas fa-chevron-right"></i> Registrasi Wajah</a></li>
                         </ul>
                     </div>
                 </div>
@@ -1698,7 +1698,7 @@
         // PWA Service Worker Registration
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', function() {
-                navigator.serviceWorker.register('service-worker.js')
+                navigator.serviceWorker.register('<?php echo htmlspecialchars($assetBaseUrl, ENT_QUOTES, 'UTF-8'); ?>service-worker.js')
                     .then(registration => {
                         console.log('ServiceWorker registered:', registration.scope);
                     })

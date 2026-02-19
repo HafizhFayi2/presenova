@@ -34,6 +34,10 @@ $filter_date_from = $_GET['date_from'] ?? ($filter_date_single !== '' ? $filter_
 $filter_date_to = $_GET['date_to'] ?? ($filter_date_single !== '' ? $filter_date_single : $filter_date_from);
 $filter_class = trim((string)($_GET['class'] ?? ''));
 $filter_status = trim((string)($_GET['status'] ?? ''));
+$chart_mode = strtolower(trim((string)($_GET['chart_mode'] ?? 'line')));
+if (!in_array($chart_mode, ['line', 'bar'], true)) {
+    $chart_mode = 'line';
+}
 
 $fallbackDate = new DateTime($today_date, $tz);
 $fromObj = $parse_filter_date($filter_date_from, $tz, $fallbackDate);
@@ -249,53 +253,133 @@ $alpa_total = count(array_filter($attendances, static function ($row) use ($reso
     return $resolve_status_category((array)$row) === 'alpa';
 }));
 
-// Chart data: monthly attendance (Mon-Sat) based on real records
-$chart_labels = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
-$chart_present = array_fill(0, 6, 0);
-$chart_absent = array_fill(0, 6, 0);
-
-$chart_start = $cycle_start_date;
-$chart_end = $cycle_end_date;
-$present_status_ids_sql = implode(',', array_map('intval', $present_status_ids));
-
-$chart_sql = "SELECT 
-                DAYOFWEEK(ss.schedule_date) as day_idx,
-                COUNT(ss.student_schedule_id) as total_sched,
-                SUM(CASE WHEN p.present_id IN ($present_status_ids_sql) THEN 1 ELSE 0 END) as present
-              FROM student_schedule ss
-              LEFT JOIN presence p ON p.student_schedule_id = ss.student_schedule_id
-              JOIN student s ON ss.student_id = s.id
-              WHERE ss.schedule_date BETWEEN ? AND ?
-              AND ss.schedule_date <= CURDATE()";
-
-$chart_params = [$chart_start, $chart_end];
-
+// Daily recap and chart source data (by actual date, not weekday).
+// Rule:
+// - If schedule window not closed yet -> "Menunggu", not counted as final alpa.
+// - Chart only uses final (closed) dates so admin does not see premature "Tidak Hadir".
+$daily_schedule_sql = "SELECT
+                        ss.student_schedule_id,
+                        ss.schedule_date,
+                        COALESCE(ss.time_in, sh.time_in) as schedule_time_in,
+                        COALESCE(ss.time_out, sh.time_out) as schedule_time_out,
+                        p.presence_id
+                    FROM student_schedule ss
+                    JOIN student s ON ss.student_id = s.id
+                    JOIN teacher_schedule ts ON ss.teacher_schedule_id = ts.schedule_id
+                    LEFT JOIN shift sh ON ts.shift_id = sh.shift_id
+                    LEFT JOIN presence p ON p.student_schedule_id = ss.student_schedule_id
+                    WHERE ss.schedule_date BETWEEN ? AND ?";
+$daily_schedule_params = [$cycle_start_date, $cycle_end_date];
 if ($filter_class) {
-    $chart_sql .= " AND s.class_id = ?";
-    $chart_params[] = $filter_class;
+    $daily_schedule_sql .= " AND s.class_id = ?";
+    $daily_schedule_params[] = $filter_class;
+}
+$daily_schedule_sql .= " ORDER BY ss.schedule_date ASC, COALESCE(ss.time_in, sh.time_in) ASC";
+$daily_schedule_stmt = $db->query($daily_schedule_sql, $daily_schedule_params);
+$daily_schedule_rows = $daily_schedule_stmt ? $daily_schedule_stmt->fetchAll() : [];
+
+$daily_buckets = [];
+foreach ($daily_schedule_rows as $schedule_row) {
+    $schedule_date = trim((string)($schedule_row['schedule_date'] ?? ''));
+    if ($schedule_date === '') {
+        continue;
+    }
+
+    if (!isset($daily_buckets[$schedule_date])) {
+        $daily_buckets[$schedule_date] = [
+            'date' => $schedule_date,
+            'total' => 0,
+            'recorded' => 0,
+            'closed_total' => 0,
+            'closed_recorded' => 0,
+            'pending' => 0,
+        ];
+    }
+
+    $daily_buckets[$schedule_date]['total']++;
+    $has_presence = !empty($schedule_row['presence_id']);
+    if ($has_presence) {
+        $daily_buckets[$schedule_date]['recorded']++;
+    }
+
+    [, $schedule_end_dt] = buildScheduleWindow(
+        $schedule_date,
+        (string)($schedule_row['schedule_time_in'] ?? '00:00:00'),
+        (string)($schedule_row['schedule_time_out'] ?? '00:00:00'),
+        $tz,
+        0
+    );
+
+    if ($now_wib > $schedule_end_dt) {
+        $daily_buckets[$schedule_date]['closed_total']++;
+        if ($has_presence) {
+            $daily_buckets[$schedule_date]['closed_recorded']++;
+        }
+    } else {
+        $daily_buckets[$schedule_date]['pending']++;
+    }
 }
 
-$chart_sql .= " GROUP BY DAYOFWEEK(ss.schedule_date)";
+$daily_summary_rows = [];
+$chart_series_rows = [];
+if (!empty($daily_buckets)) {
+    krsort($daily_buckets); // newest first for recap table
+    foreach ($daily_buckets as $daily_bucket) {
+        $total = (int)($daily_bucket['total'] ?? 0);
+        $recorded = (int)($daily_bucket['recorded'] ?? 0);
+        $closed_total = (int)($daily_bucket['closed_total'] ?? 0);
+        $closed_recorded = (int)($daily_bucket['closed_recorded'] ?? 0);
+        $pending = (int)($daily_bucket['pending'] ?? 0);
+        $final_absent = max(0, $closed_total - $closed_recorded);
 
-$chart_rows = $db->query($chart_sql, $chart_params)->fetchAll();
+        $is_waiting = $pending > 0 || ($closed_total <= 0 && $total > 0);
+        $status_key = $is_waiting ? 'menunggu' : 'closed';
+        $final_percentage = $closed_total > 0 ? (int)round(($closed_recorded / $closed_total) * 100) : 0;
 
-foreach ($chart_rows as $row) {
-    $day_idx = (int)($row['day_idx'] ?? 0); // 1=Sunday ... 7=Saturday
-    $present = (int)($row['present'] ?? 0);
-    $total_sched = (int)($row['total_sched'] ?? 0);
-    $absent = max(0, $total_sched - $present);
+        $daily_row = [
+            'date' => (string)$daily_bucket['date'],
+            'total' => $total,
+            'recorded' => $recorded,
+            'closed_total' => $closed_total,
+            'closed_recorded' => $closed_recorded,
+            'final_absent' => $final_absent,
+            'pending' => $pending,
+            'status_key' => $status_key,
+            'status_label' => $is_waiting ? 'Menunggu' : 'Final',
+            'final_percentage' => $final_percentage,
+        ];
+        $daily_summary_rows[] = $daily_row;
 
-    // Map Monday(2) -> 0, Tuesday(3) -> 1, ..., Saturday(7) -> 5
-    if ($day_idx >= 2 && $day_idx <= 7) {
-        $pos = $day_idx - 2;
-        if ($pos >= 0 && $pos < 6) {
-            $chart_present[$pos] = $present;
-            $chart_absent[$pos] = $absent;
+        if (!$is_waiting && $closed_total > 0) {
+            $chart_series_rows[] = [
+                'date' => (string)$daily_bucket['date'],
+                'present' => $closed_recorded,
+                'absent' => $final_absent,
+                'total' => $closed_total,
+                'percentage' => $final_percentage,
+            ];
         }
     }
 }
 
-$chart_max = max(array_merge($chart_present, $chart_absent));
+// Chart payload sorted ascending by date.
+usort($chart_series_rows, static function ($a, $b) {
+    return strcmp((string)($a['date'] ?? ''), (string)($b['date'] ?? ''));
+});
+
+$chart_labels = [];
+$chart_present = [];
+$chart_absent = [];
+foreach ($chart_series_rows as $series_row) {
+    $chart_labels[] = date('d/m', strtotime((string)$series_row['date']));
+    $chart_present[] = (int)($series_row['present'] ?? 0);
+    $chart_absent[] = (int)($series_row['absent'] ?? 0);
+}
+
+$chart_max = 0;
+if (!empty($chart_present) || !empty($chart_absent)) {
+    $chart_max = max(array_merge($chart_present, $chart_absent));
+}
 $chart_suggested_max = $chart_max > 0 ? $chart_max : 1;
 
 // Dynamic title for statistik based on selected date/range
@@ -343,6 +427,21 @@ if ($filter_class !== '') {
     }
 }
 
+$export_class_detail_label = $selected_class_label;
+if ($filter_class === '') {
+    $allClassNames = [];
+    foreach ($classes as $class_item) {
+        $className = trim((string)($class_item['class_name'] ?? ''));
+        if ($className !== '') {
+            $allClassNames[] = $className;
+        }
+    }
+    $allClassNames = array_values(array_unique($allClassNames));
+    if (!empty($allClassNames)) {
+        $export_class_detail_label = 'Semua Kelas (' . implode(', ', $allClassNames) . ')';
+    }
+}
+
 $selected_status_label = 'Semua Status';
 if ($is_alpa_filter) {
     $selected_status_label = 'Alpa';
@@ -354,6 +453,7 @@ if ($is_alpa_filter) {
         }
     }
 }
+$chart_mode_label = $chart_mode === 'bar' ? 'Grafik Batang' : 'Grafik Garis';
 
 $format_report_attendance = static function (array $attendance) use ($resolve_status_category): array {
     $status_category = $resolve_status_category($attendance);
@@ -554,12 +654,12 @@ if (isset($_GET['export'])) {
     $sheet->setCellValue('A1', 'Periode');
     $sheet->setCellValue('B1', $cycle_start_date . ' s/d ' . $cycle_end_date);
     $sheet->setCellValue('F1', 'Kelas');
-    $sheet->setCellValue('G1', $selected_class_label);
+    $sheet->setCellValue('G1', $export_class_detail_label);
     $sheet->mergeCells('B1:E1');
     $sheet->mergeCells('G1:J1');
 
     $sheet->setCellValue('A2', 'Status');
-    $sheet->setCellValue('B2', $selected_status_label);
+    $sheet->setCellValue('B2', $selected_status_label . ' | ' . $chart_mode_label);
     $sheet->setCellValue('F2', 'Printed');
     $sheet->setCellValue('G2', $printed_at . ' oleh ' . $printed_by);
     $sheet->mergeCells('B2:E2');
@@ -684,6 +784,302 @@ if (isset($_GET['export'])) {
     }
     $sheet->freezePane('A5');
 
+    // Export chart sheet (mode follows selected chart view from UI).
+    $chartSheet = $spreadsheet->createSheet();
+    $chartSheet->setTitle('Grafik Absensi');
+    $chartSheet->setCellValue('A1', 'Grafik Statistik Absensi');
+    $chartSheet->mergeCells('A1:I1');
+    $chartSheet->setCellValue('A2', 'Periode');
+    $chartSheet->setCellValue('B2', $cycle_start_date . ' s/d ' . $cycle_end_date);
+    $chartSheet->mergeCells('B2:C2');
+    $chartSheet->setCellValue('D2', 'Mode');
+    $chartSheet->setCellValue('E2', $chart_mode_label);
+    $chartSheet->mergeCells('E2:I2');
+    $chartSheet->setCellValue('A3', 'Kelas');
+    $chartSheet->setCellValue('B3', $export_class_detail_label);
+    $chartSheet->mergeCells('B3:I3');
+    $chartSheet->setCellValue('A4', 'Keterangan');
+    $chartSheet->setCellValue('B4', 'Hanya tanggal berstatus FINAL (closed). Tanggal menunggu tidak dihitung sebagai Tidak Hadir.');
+    $chartSheet->mergeCells('B4:I4');
+
+    $chartTableHeaderRow = 5;
+    $chartSheet->setCellValue('A' . $chartTableHeaderRow, 'Tanggal');
+    $chartSheet->setCellValue('B' . $chartTableHeaderRow, 'Hadir');
+    $chartSheet->setCellValue('C' . $chartTableHeaderRow, 'Tidak Hadir');
+    $chartSheet->setCellValue('D' . $chartTableHeaderRow, 'Total Final');
+    $chartSheet->setCellValue('E' . $chartTableHeaderRow, '% Hadir');
+    $chartSheet->mergeCells('E' . $chartTableHeaderRow . ':I' . $chartTableHeaderRow);
+
+    $chartSheet->getStyle('A1:I1')->applyFromArray($tableHeaderStyle);
+    $chartSheet->getStyle('A2:A4')->applyFromArray($metaLabelStyle);
+    $chartSheet->getStyle('B2:C2')->applyFromArray($metaValueStyle);
+    $chartSheet->getStyle('D2')->applyFromArray($metaLabelStyle);
+    $chartSheet->getStyle('E2:I2')->applyFromArray($metaValueStyle);
+    $chartSheet->getStyle('B3:I4')->applyFromArray($metaValueStyle);
+    $chartSheet->getStyle('A' . $chartTableHeaderRow . ':I' . $chartTableHeaderRow)->applyFromArray($tableHeaderStyle);
+    $chartSheet->getStyle('A1:I1')->getFont()->setBold(true);
+    $chartSheet->getStyle('A2:A4')->getFont()->setBold(true);
+    $chartSheet->getStyle('D2')->getFont()->setBold(true);
+    $chartSheet->getStyle('A' . $chartTableHeaderRow . ':I' . $chartTableHeaderRow)->getFont()->setBold(true);
+    $chartSheet->getStyle('A1:I1')->getAlignment()->setVertical(\PhpOffice\PhpSpreadsheet\Style\Alignment::VERTICAL_CENTER);
+    $chartSheet->getStyle('A' . $chartTableHeaderRow . ':I' . $chartTableHeaderRow)
+        ->getAlignment()
+        ->setHorizontal(\PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER)
+        ->setVertical(\PhpOffice\PhpSpreadsheet\Style\Alignment::VERTICAL_CENTER);
+    $chartSheet->getStyle('B3:I4')->getAlignment()->setWrapText(true);
+
+    $chartExportRows = $chart_series_rows;
+    $chartHasRealRows = !empty($chartExportRows);
+    if (!$chartHasRealRows) {
+        $chartExportRows = [[
+            'date' => '-',
+            'present' => 0,
+            'absent' => 0,
+            'total' => 0,
+            'percentage' => 0,
+        ]];
+    }
+
+    $chartDataStartRow = $chartTableHeaderRow + 1;
+    $chartRowPointer = $chartDataStartRow;
+    foreach ($chartExportRows as $chartRow) {
+        $chartDateLabel = (string)($chartRow['date'] ?? '-');
+        if ($chartDateLabel !== '-' && strtotime($chartDateLabel) !== false) {
+            $chartDateLabel = date('d/m/Y', strtotime($chartDateLabel));
+        }
+        $presentCount = (int)($chartRow['present'] ?? 0);
+        $absentCount = (int)($chartRow['absent'] ?? 0);
+        $totalCount = (int)($chartRow['total'] ?? 0);
+        $percentageCount = (int)($chartRow['percentage'] ?? 0);
+
+        $chartSheet->setCellValue('A' . $chartRowPointer, $chartDateLabel);
+        $chartSheet->setCellValue('B' . $chartRowPointer, $presentCount . ' (siswa)');
+        $chartSheet->setCellValue('C' . $chartRowPointer, $absentCount . ' (siswa)');
+        $chartSheet->setCellValue('D' . $chartRowPointer, $totalCount . ' (siswa)');
+        $chartSheet->setCellValue('E' . $chartRowPointer, $percentageCount);
+        $chartSheet->mergeCells('E' . $chartRowPointer . ':I' . $chartRowPointer);
+        $chartRowPointer++;
+    }
+    $chartDataEndRow = max($chartDataStartRow, $chartRowPointer - 1);
+    $chartSheet->getStyle('A1:I4')->applyFromArray($borderStyle);
+    $chartSheet->getStyle('A' . $chartTableHeaderRow . ':I' . $chartDataEndRow)->applyFromArray($borderStyle);
+    $chartSheet->getStyle('B' . $chartDataStartRow . ':D' . $chartDataEndRow)
+        ->getAlignment()
+        ->setHorizontal(\PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER)
+        ->setVertical(\PhpOffice\PhpSpreadsheet\Style\Alignment::VERTICAL_CENTER);
+    $chartSheet->getStyle('E' . $chartDataStartRow . ':I' . $chartDataEndRow)
+        ->getAlignment()
+        ->setHorizontal(\PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER)
+        ->setVertical(\PhpOffice\PhpSpreadsheet\Style\Alignment::VERTICAL_CENTER);
+    $chartSheet->getStyle('B' . $chartDataStartRow . ':I' . $chartDataEndRow)->getFont()->setBold(true);
+    $chartSheet->getStyle('E' . $chartDataStartRow . ':I' . $chartDataEndRow)->getNumberFormat()->setFormatCode('0');
+    $chartSheet->getColumnDimension('A')->setWidth(16);
+    $chartSheet->getColumnDimension('B')->setWidth(15);
+    $chartSheet->getColumnDimension('C')->setWidth(18);
+    $chartSheet->getColumnDimension('D')->setWidth(16);
+    $chartSheet->getColumnDimension('E')->setWidth(13);
+    $chartSheet->getColumnDimension('F')->setWidth(4);
+    $chartSheet->getColumnDimension('G')->setWidth(4);
+    $chartSheet->getColumnDimension('H')->setWidth(4);
+    $chartSheet->getColumnDimension('I')->setWidth(4);
+
+    if (!$chartHasRealRows) {
+        $chartSheet->setCellValue('A' . ($chartDataEndRow + 2), 'Belum ada data FINAL pada rentang tanggal ini.');
+        $chartSheet->mergeCells('A' . ($chartDataEndRow + 2) . ':I' . ($chartDataEndRow + 2));
+    }
+
+    // Generate chart as embedded PNG image for maximum Excel compatibility.
+    // Native chart XML from PhpSpreadsheet may be repaired/removed by some Excel versions.
+    $chartImageTempPath = null;
+    if (function_exists('imagecreatetruecolor')) {
+        $chartWidth = 1320;
+        $chartHeight = 560;
+        $chartImage = imagecreatetruecolor($chartWidth, $chartHeight);
+        if ($chartImage instanceof \GdImage) {
+            if (function_exists('imageantialias')) {
+                @imageantialias($chartImage, true);
+            }
+
+            $colBg = imagecolorallocate($chartImage, 255, 255, 255);
+            $colPanel = imagecolorallocate($chartImage, 243, 248, 253);
+            $colBorder = imagecolorallocate($chartImage, 203, 213, 225);
+            $colGrid = imagecolorallocate($chartImage, 226, 232, 240);
+            $colAxis = imagecolorallocate($chartImage, 100, 116, 139);
+            $colText = imagecolorallocate($chartImage, 15, 23, 42);
+            $colMuted = imagecolorallocate($chartImage, 71, 85, 105);
+            $colPresent = imagecolorallocate($chartImage, 22, 163, 74);
+            $colAbsent = imagecolorallocate($chartImage, 220, 38, 38);
+            $colPresentFill = imagecolorallocatealpha($chartImage, 22, 163, 74, 90);
+            $colAbsentFill = imagecolorallocatealpha($chartImage, 220, 38, 38, 90);
+
+            imagefilledrectangle($chartImage, 0, 0, $chartWidth, $chartHeight, $colBg);
+            imagefilledrectangle($chartImage, 1, 1, $chartWidth - 2, $chartHeight - 2, $colPanel);
+            imagerectangle($chartImage, 0, 0, $chartWidth - 1, $chartHeight - 1, $colBorder);
+
+            imagestring($chartImage, 5, 24, 18, 'Statistik Absensi per Tanggal - ' . $chart_mode_label, $colText);
+            imagestring($chartImage, 2, 24, 42, 'Periode: ' . $cycle_start_date . ' s/d ' . $cycle_end_date, $colMuted);
+            imagestring($chartImage, 2, 24, 58, 'Kelas: ' . $selected_class_label, $colMuted);
+
+            $legendY = 80;
+            imagefilledrectangle($chartImage, 24, $legendY, 42, $legendY + 12, $colPresent);
+            imagerectangle($chartImage, 24, $legendY, 42, $legendY + 12, $colPresent);
+            imagestring($chartImage, 3, 48, $legendY - 1, 'Hadir', $colText);
+            imagefilledrectangle($chartImage, 122, $legendY, 140, $legendY + 12, $colAbsent);
+            imagerectangle($chartImage, 122, $legendY, 140, $legendY + 12, $colAbsent);
+            imagestring($chartImage, 3, 146, $legendY - 1, 'Tidak Hadir', $colText);
+
+            $plotLeft = 86;
+            $plotTop = 102;
+            $plotRight = $chartWidth - 54;
+            $plotBottom = $chartHeight - 78;
+            $plotWidth = max(1, $plotRight - $plotLeft);
+            $plotHeight = max(1, $plotBottom - $plotTop);
+
+            imagefilledrectangle($chartImage, $plotLeft, $plotTop, $plotRight, $plotBottom, $colBg);
+            imagerectangle($chartImage, $plotLeft, $plotTop, $plotRight, $plotBottom, $colBorder);
+
+            $chartLabelsExport = [];
+            $chartPresentExport = [];
+            $chartAbsentExport = [];
+            foreach ($chartExportRows as $chartRow) {
+                $rawDate = (string)($chartRow['date'] ?? '-');
+                if ($rawDate !== '-' && strtotime($rawDate) !== false) {
+                    $chartLabelsExport[] = date('d/m', strtotime($rawDate));
+                } else {
+                    $chartLabelsExport[] = $rawDate;
+                }
+                $chartPresentExport[] = (int)($chartRow['present'] ?? 0);
+                $chartAbsentExport[] = (int)($chartRow['absent'] ?? 0);
+            }
+
+            $pointCount = count($chartLabelsExport);
+            if (!$chartHasRealRows || $pointCount <= 0) {
+                imagestring($chartImage, 4, $plotLeft + 20, (int)(($plotTop + $plotBottom) / 2) - 10, 'Belum ada data FINAL untuk ditampilkan pada grafik.', $colMuted);
+            } else {
+                $maxValue = max(1, max($chartPresentExport), max($chartAbsentExport));
+                $gridRows = 5;
+                $axisMax = max(1, (int)ceil($maxValue / $gridRows) * $gridRows);
+
+                $valueToY = static function (int $value) use ($plotBottom, $plotHeight, $axisMax): int {
+                    $safe = max(0, $value);
+                    return $plotBottom - (int)round(($safe / max(1, $axisMax)) * $plotHeight);
+                };
+
+                for ($i = 0; $i <= $gridRows; $i++) {
+                    $gridY = $plotBottom - (int)round(($plotHeight / $gridRows) * $i);
+                    imageline($chartImage, $plotLeft, $gridY, $plotRight, $gridY, $colGrid);
+                    $gridValue = (int)round(($axisMax / $gridRows) * $i);
+                    imagestring($chartImage, 2, max(4, $plotLeft - 46), $gridY - 7, (string)$gridValue, $colAxis);
+                }
+                imageline($chartImage, $plotLeft, $plotTop, $plotLeft, $plotBottom, $colAxis);
+                imageline($chartImage, $plotLeft, $plotBottom, $plotRight, $plotBottom, $colAxis);
+
+                $xCenters = [];
+                if ($pointCount === 1) {
+                    $xCenters[] = $plotLeft + (int)round($plotWidth / 2);
+                } else {
+                    $stepX = $plotWidth / max(1, ($pointCount - 1));
+                    for ($i = 0; $i < $pointCount; $i++) {
+                        $xCenters[] = $plotLeft + (int)round($stepX * $i);
+                    }
+                }
+
+                if ($chart_mode === 'bar') {
+                    $slotWidth = $plotWidth / max(1, $pointCount);
+                    $barWidth = (int)max(7, min(38, floor($slotWidth * 0.32)));
+                    for ($i = 0; $i < $pointCount; $i++) {
+                        $centerX = $pointCount === 1
+                            ? $xCenters[$i]
+                            : (int)round($plotLeft + ($slotWidth * $i) + ($slotWidth / 2));
+                        $presentY = $valueToY($chartPresentExport[$i] ?? 0);
+                        $absentY = $valueToY($chartAbsentExport[$i] ?? 0);
+
+                        $presentX1 = $centerX - $barWidth - 2;
+                        $presentX2 = $centerX - 2;
+                        $absentX1 = $centerX + 2;
+                        $absentX2 = $centerX + $barWidth + 2;
+
+                        imagefilledrectangle($chartImage, $presentX1, $presentY, $presentX2, $plotBottom - 1, $colPresentFill);
+                        imagerectangle($chartImage, $presentX1, $presentY, $presentX2, $plotBottom - 1, $colPresent);
+                        imagefilledrectangle($chartImage, $absentX1, $absentY, $absentX2, $plotBottom - 1, $colAbsentFill);
+                        imagerectangle($chartImage, $absentX1, $absentY, $absentX2, $plotBottom - 1, $colAbsent);
+                    }
+                } else {
+                    $presentPoints = [];
+                    $absentPoints = [];
+                    for ($i = 0; $i < $pointCount; $i++) {
+                        $x = $xCenters[$i];
+                        $presentPoints[] = ['x' => $x, 'y' => $valueToY($chartPresentExport[$i] ?? 0)];
+                        $absentPoints[] = ['x' => $x, 'y' => $valueToY($chartAbsentExport[$i] ?? 0)];
+                    }
+                    for ($i = 0; $i < $pointCount - 1; $i++) {
+                        imageline(
+                            $chartImage,
+                            $presentPoints[$i]['x'],
+                            $presentPoints[$i]['y'],
+                            $presentPoints[$i + 1]['x'],
+                            $presentPoints[$i + 1]['y'],
+                            $colPresent
+                        );
+                        imageline(
+                            $chartImage,
+                            $absentPoints[$i]['x'],
+                            $absentPoints[$i]['y'],
+                            $absentPoints[$i + 1]['x'],
+                            $absentPoints[$i + 1]['y'],
+                            $colAbsent
+                        );
+                    }
+                    foreach ($presentPoints as $pt) {
+                        imagefilledellipse($chartImage, $pt['x'], $pt['y'], 9, 9, $colPresent);
+                    }
+                    foreach ($absentPoints as $pt) {
+                        imagefilledellipse($chartImage, $pt['x'], $pt['y'], 9, 9, $colAbsent);
+                    }
+                }
+
+                $labelStride = max(1, (int)ceil($pointCount / 10));
+                for ($i = 0; $i < $pointCount; $i++) {
+                    $isBoundary = ($i === 0 || $i === $pointCount - 1);
+                    if (!$isBoundary && ($i % $labelStride) !== 0) {
+                        continue;
+                    }
+                    $x = $xCenters[$i];
+                    $label = (string)($chartLabelsExport[$i] ?? '-');
+                    $labelWidth = max(6, strlen($label) * 6);
+                    imagestring($chartImage, 2, max(4, $x - (int)($labelWidth / 2)), $plotBottom + 8, $label, $colAxis);
+                }
+            }
+
+            $tempDir = storage_path('app/temp');
+            if (!is_dir($tempDir)) {
+                @mkdir($tempDir, 0775, true);
+            }
+            if (is_dir($tempDir)) {
+                $chartImageTempPath = $tempDir . DIRECTORY_SEPARATOR . 'attendance-chart-' . uniqid('', true) . '.png';
+                if (!@imagepng($chartImage, $chartImageTempPath)) {
+                    $chartImageTempPath = null;
+                }
+            }
+
+            imagedestroy($chartImage);
+
+            if ($chartImageTempPath !== null && is_file($chartImageTempPath)) {
+                $chartImageAnchorRow = $chartDataEndRow + 3;
+                $chartDrawing = new \PhpOffice\PhpSpreadsheet\Worksheet\Drawing();
+                $chartDrawing->setName('Grafik Absensi');
+                $chartDrawing->setDescription('Grafik Statistik Absensi');
+                $chartDrawing->setPath($chartImageTempPath, true);
+                $chartDrawing->setCoordinates('A' . $chartImageAnchorRow);
+                $chartDrawing->setOffsetX(6);
+                $chartDrawing->setOffsetY(6);
+                $chartDrawing->setHeight(350);
+                $chartDrawing->setWorksheet($chartSheet);
+            }
+        }
+    }
+    $spreadsheet->setActiveSheetIndex(0);
+
     $fileRangeLabel = $filter_date_from === $filter_date_to
         ? $filter_date_from
         : ($filter_date_from . '_sd_' . $filter_date_to);
@@ -698,9 +1094,13 @@ if (isset($_GET['export'])) {
     header('Pragma: public');
 
     $writer = new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($spreadsheet);
+    $writer->setIncludeCharts(true);
     $writer->setPreCalculateFormulas(false);
     $writer->save('php://output');
     $spreadsheet->disconnectWorksheets();
+    if (isset($chartImageTempPath) && is_string($chartImageTempPath) && $chartImageTempPath !== '' && is_file($chartImageTempPath)) {
+        @unlink($chartImageTempPath);
+    }
     exit();
 }
 
@@ -1157,7 +1557,8 @@ if (isset($_GET['print'])) {
     <div class="d-flex justify-content-between align-items-center mb-3">
         <h5><i class="bi bi-clipboard-check"></i> Data Absensi</h5>
         <div class="d-flex gap-2">
-            <a href="?table=attendance&export=excel&date_from=<?php echo urlencode($filter_date_from); ?>&date_to=<?php echo urlencode($filter_date_to); ?>&class=<?php echo urlencode($filter_class); ?>&status=<?php echo urlencode($filter_status); ?>" 
+            <a id="attendanceExportExcelBtn"
+               href="?table=attendance&export=excel&date_from=<?php echo urlencode($filter_date_from); ?>&date_to=<?php echo urlencode($filter_date_to); ?>&class=<?php echo urlencode($filter_class); ?>&status=<?php echo urlencode($filter_status); ?>&chart_mode=<?php echo urlencode($chart_mode); ?>" 
                class="btn btn-success" data-no-loading="1">
                 <i class="bi bi-download"></i> Export Excel
             </a>
@@ -1364,66 +1765,165 @@ if (isset($_GET['print'])) {
     </div>
     
     <!-- Chart Section -->
-    <div class="row mt-4">
-        <div class="col-md-6">
-            <div class="table-container">
-                <h5><i class="bi bi-bar-chart"></i> <?php echo htmlspecialchars($statistik_title); ?></h5>
-                <div class="attendance-chart-wrap">
-                    <canvas id="attendanceChart"></canvas>
+    <div class="row mt-4 g-3">
+        <div class="col-lg-7">
+            <div class="table-container attendance-chart-panel">
+                <div class="attendance-chart-header">
+                    <h5 class="mb-0"><i class="bi bi-graph-up"></i> <?php echo htmlspecialchars($statistik_title); ?></h5>
+                    <div class="btn-group attendance-chart-type-toggle" role="group" aria-label="Pilih tipe grafik">
+                        <button type="button" class="btn btn-sm <?php echo $chart_mode === 'line' ? 'btn-primary' : 'btn-outline-primary'; ?>" data-chart-mode="line">
+                            <i class="bi bi-activity"></i> Grafik Garis
+                        </button>
+                        <button type="button" class="btn btn-sm <?php echo $chart_mode === 'bar' ? 'btn-primary' : 'btn-outline-primary'; ?>" data-chart-mode="bar">
+                            <i class="bi bi-bar-chart-line"></i> Grafik Batang
+                        </button>
+                    </div>
+                </div>
+
+                <input type="hidden" id="attendanceChartModeInput" value="<?php echo htmlspecialchars($chart_mode, ENT_QUOTES, 'UTF-8'); ?>">
+
+                <div class="attendance-chart-wrap attendance-chart-scroll" id="attendanceChartScroll">
+                    <div class="attendance-chart-inner" id="attendanceChartInner">
+                        <canvas id="attendanceChart"></canvas>
+                    </div>
+                </div>
+                <div class="attendance-chart-slider-wrap">
+                    <label for="attendanceChartXSlider">Geser Sumbu X</label>
+                    <input type="range" id="attendanceChartXSlider" min="0" max="0" value="0" step="1">
+                </div>
+                <div class="attendance-chart-note">
+                    Data grafik dihitung per tanggal dan hanya menampilkan tanggal berstatus <strong>Final (Closed)</strong>.
+                    Tanggal yang masih menunggu tidak dihitung sebagai tidak hadir.
+                </div>
+
+                <div class="attendance-chart-table-switch">
+                    <button type="button" class="btn btn-sm <?php echo $chart_mode === 'line' ? 'btn-primary' : 'btn-outline-secondary'; ?>" data-chart-table="line">
+                        Tabel Grafik Garis
+                    </button>
+                    <button type="button" class="btn btn-sm <?php echo $chart_mode === 'bar' ? 'btn-primary' : 'btn-outline-secondary'; ?>" data-chart-table="bar">
+                        Tabel Grafik Batang
+                    </button>
+                </div>
+
+                <div class="table-responsive attendance-graph-data-table <?php echo $chart_mode === 'bar' ? 'd-none' : ''; ?>" id="chartDataTableLineWrap">
+                    <table class="table table-sm no-card-table attendance-daily-summary-table">
+                        <thead>
+                            <tr>
+                                <th>Tanggal</th>
+                                <th>Total Final</th>
+                                <th>Hadir</th>
+                                <th>Tidak Hadir</th>
+                                <th>% Hadir</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php if (empty($chart_series_rows)): ?>
+                                <tr>
+                                    <td colspan="5" class="text-muted text-center">Belum ada data final (closed) untuk ditampilkan.</td>
+                                </tr>
+                            <?php else: ?>
+                                <?php foreach($chart_series_rows as $chart_row): ?>
+                                <?php
+                                    $chartPercentage = (int)($chart_row['percentage'] ?? 0);
+                                    $chartColor = $chartPercentage >= 80 ? 'success' : ($chartPercentage >= 60 ? 'warning' : 'danger');
+                                ?>
+                                <tr>
+                                    <td><?php echo date('d/m/Y', strtotime((string)$chart_row['date'])); ?></td>
+                                    <td><?php echo (int)($chart_row['total'] ?? 0); ?></td>
+                                    <td><?php echo (int)($chart_row['present'] ?? 0); ?></td>
+                                    <td><?php echo (int)($chart_row['absent'] ?? 0); ?></td>
+                                    <td><span class="badge bg-<?php echo $chartColor; ?>"><?php echo $chartPercentage; ?>%</span></td>
+                                </tr>
+                                <?php endforeach; ?>
+                            <?php endif; ?>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="table-responsive attendance-graph-data-table <?php echo $chart_mode === 'line' ? 'd-none' : ''; ?>" id="chartDataTableBarWrap">
+                    <table class="table table-sm no-card-table attendance-daily-summary-table">
+                        <thead>
+                            <tr>
+                                <th>Tanggal</th>
+                                <th>Total Final</th>
+                                <th>Hadir</th>
+                                <th>Tidak Hadir</th>
+                                <th>% Hadir</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php if (empty($chart_series_rows)): ?>
+                                <tr>
+                                    <td colspan="5" class="text-muted text-center">Belum ada data final (closed) untuk ditampilkan.</td>
+                                </tr>
+                            <?php else: ?>
+                                <?php foreach($chart_series_rows as $chart_row): ?>
+                                <?php
+                                    $chartPercentage = (int)($chart_row['percentage'] ?? 0);
+                                    $chartColor = $chartPercentage >= 80 ? 'success' : ($chartPercentage >= 60 ? 'warning' : 'danger');
+                                ?>
+                                <tr>
+                                    <td><?php echo date('d/m/Y', strtotime((string)$chart_row['date'])); ?></td>
+                                    <td><?php echo (int)($chart_row['total'] ?? 0); ?></td>
+                                    <td><?php echo (int)($chart_row['present'] ?? 0); ?></td>
+                                    <td><?php echo (int)($chart_row['absent'] ?? 0); ?></td>
+                                    <td><span class="badge bg-<?php echo $chartColor; ?>"><?php echo $chartPercentage; ?>%</span></td>
+                                </tr>
+                                <?php endforeach; ?>
+                            <?php endif; ?>
+                        </tbody>
+                    </table>
                 </div>
             </div>
         </div>
-        <div class="col-md-6">
+        <div class="col-lg-5">
             <div class="table-container">
                 <h5><i class="bi bi-calendar-month"></i> Rekap Harian</h5>
                 <div id="dailySummary">
-                    <?php
-                    // Weekly summary (Mon-Sat 15:00 WIB)
-                    $summary_sql = "SELECT 
-                                        ss.schedule_date as date,
-                                        COUNT(ss.student_schedule_id) as total,
-                                        SUM(CASE WHEN p.present_id IN ($present_status_ids_sql) THEN 1 ELSE 0 END) as present
-                                    FROM student_schedule ss
-                                    LEFT JOIN presence p ON p.student_schedule_id = ss.student_schedule_id
-                                    JOIN student s ON ss.student_id = s.id
-                                    WHERE ss.schedule_date BETWEEN ? AND ?
-                                    AND ss.schedule_date <= CURDATE()";
-                    $summary_params = [$cycle_start_date, $cycle_end_date];
-                    if ($filter_class) {
-                        $summary_sql .= " AND s.class_id = ?";
-                        $summary_params[] = $filter_class;
-                    }
-                    $summary_sql .= " GROUP BY ss.schedule_date ORDER BY ss.schedule_date DESC";
-
-                    $summary_stmt = $db->query($summary_sql, $summary_params);
-                    $summary = $summary_stmt->fetchAll();
-                    ?>
-                    
                     <div class="table-responsive">
                         <table class="table table-sm no-card-table attendance-daily-summary-table">
                             <thead>
                                 <tr>
                                     <th>Tanggal</th>
-                                    <th>Total</th>
-                                    <th>Hadir</th>
-                                    <th>%</th>
+                                    <th>Total Jadwal</th>
+                                    <th>Berhasil Absen</th>
+                                    <th>Tidak Hadir Final</th>
+                                    <th>% Final</th>
+                                    <th>Status</th>
                                 </tr>
                             </thead>
                             <tbody>
-                                <?php foreach($summary as $day): ?>
-                                <tr>
-                                    <td><?php echo date('d/m', strtotime($day['date'])); ?></td>
-                                    <td><?php echo $day['total']; ?></td>
-                                    <td><?php echo $day['present']; ?></td>
-                                    <td>
-                                        <?php 
-                                        $percentage = $day['total'] > 0 ? round(($day['present'] / $day['total']) * 100) : 0;
+                                <?php if (empty($daily_summary_rows)): ?>
+                                    <tr>
+                                        <td colspan="6" class="text-muted text-center">Tidak ada data jadwal pada rentang tanggal ini.</td>
+                                    </tr>
+                                <?php else: ?>
+                                    <?php foreach($daily_summary_rows as $day): ?>
+                                    <?php
+                                        $isWaitingSummary = (($day['status_key'] ?? '') === 'menunggu');
+                                        $percentage = (int)($day['final_percentage'] ?? 0);
                                         $color = $percentage >= 80 ? 'success' : ($percentage >= 60 ? 'warning' : 'danger');
-                                        ?>
-                                        <span class="badge bg-<?php echo $color; ?>"><?php echo $percentage; ?>%</span>
-                                    </td>
-                                </tr>
-                                <?php endforeach; ?>
+                                    ?>
+                                    <tr class="<?php echo $isWaitingSummary ? 'attendance-summary-waiting-row' : ''; ?>">
+                                        <td><?php echo date('d/m', strtotime((string)$day['date'])); ?></td>
+                                        <td><?php echo (int)($day['total'] ?? 0); ?></td>
+                                        <td><?php echo (int)($day['recorded'] ?? 0); ?></td>
+                                        <td><?php echo $isWaitingSummary ? '-' : (string)(int)($day['final_absent'] ?? 0); ?></td>
+                                        <td>
+                                            <?php if ($isWaitingSummary): ?>
+                                                <span class="badge bg-secondary">Menunggu</span>
+                                            <?php else: ?>
+                                                <span class="badge bg-<?php echo $color; ?>"><?php echo $percentage; ?>%</span>
+                                            <?php endif; ?>
+                                        </td>
+                                        <td>
+                                            <span class="badge <?php echo $isWaitingSummary ? 'bg-info text-dark' : 'bg-success'; ?>">
+                                                <?php echo $isWaitingSummary ? 'Menunggu' : 'Final'; ?>
+                                            </span>
+                                        </td>
+                                    </tr>
+                                    <?php endforeach; ?>
+                                <?php endif; ?>
                             </tbody>
                         </table>
                     </div>
@@ -1543,6 +2043,7 @@ function applyFilters() {
     let dateTo = $('#filterDateTo').val();
     const classId = $('#filterClass').val();
     const status = $('#filterStatus').val();
+    const chartMode = ($('#attendanceChartModeInput').val() || 'line').toLowerCase() === 'bar' ? 'bar' : 'line';
 
     if (dateFrom && dateTo && dateTo < dateFrom) {
         dateTo = dateFrom;
@@ -1555,6 +2056,7 @@ function applyFilters() {
     if (dateTo) url += '&date_to=' + encodeURIComponent(dateTo);
     if (classId) url += '&class=' + encodeURIComponent(classId);
     if (status) url += '&status=' + encodeURIComponent(status);
+    url += '&chart_mode=' + encodeURIComponent(chartMode);
     
     window.location.href = url;
 }
@@ -1568,55 +2070,254 @@ $(document).ready(function() {
         dateToEl.addEventListener('change', enforceAttendanceDateRange);
     }
 
-    // Initialize chart
-    const ctx = document.getElementById('attendanceChart').getContext('2d');
-    const chart = new Chart(ctx, {
-        type: 'bar',
-        data: {
-            labels: <?php echo json_encode($chart_labels, JSON_UNESCAPED_UNICODE); ?>,
-            datasets: [{
+    const chartLabels = <?php echo json_encode($chart_labels, JSON_UNESCAPED_UNICODE); ?>;
+    const chartPresentData = <?php echo json_encode($chart_present); ?>;
+    const chartAbsentData = <?php echo json_encode($chart_absent); ?>;
+    const chartSuggestedMax = <?php echo (int)$chart_suggested_max; ?>;
+    const chartModeInputEl = document.getElementById('attendanceChartModeInput');
+    const chartScrollEl = document.getElementById('attendanceChartScroll');
+    const chartInnerEl = document.getElementById('attendanceChartInner');
+    const chartSliderEl = document.getElementById('attendanceChartXSlider');
+    const chartTypeButtons = Array.from(document.querySelectorAll('[data-chart-mode]'));
+    const chartTableButtons = Array.from(document.querySelectorAll('[data-chart-table]'));
+    const lineTableWrap = document.getElementById('chartDataTableLineWrap');
+    const barTableWrap = document.getElementById('chartDataTableBarWrap');
+    const exportExcelBtn = document.getElementById('attendanceExportExcelBtn');
+    const chartCtxEl = document.getElementById('attendanceChart');
+    const chartCtx = chartCtxEl ? chartCtxEl.getContext('2d') : null;
+
+    let currentChartMode = chartModeInputEl && chartModeInputEl.value === 'bar' ? 'bar' : 'line';
+    let attendanceChartInstance = null;
+
+    const updateExportLink = () => {
+        if (!exportExcelBtn) {
+            return;
+        }
+        try {
+            const url = new URL(exportExcelBtn.getAttribute('href'), window.location.href);
+            url.searchParams.set('chart_mode', currentChartMode);
+            exportExcelBtn.setAttribute('href', url.pathname + '?' + url.searchParams.toString());
+        } catch (error) {
+            // no-op
+        }
+    };
+
+    const updateChartViewport = () => {
+        if (!chartScrollEl || !chartInnerEl) {
+            return;
+        }
+        const minPerPoint = currentChartMode === 'line' ? 120 : 96;
+        const targetWidth = Math.max(chartScrollEl.clientWidth, Math.max(1, chartLabels.length) * minPerPoint);
+        chartInnerEl.style.minWidth = targetWidth + 'px';
+
+        if (chartSliderEl) {
+            const maxScroll = Math.max(0, chartScrollEl.scrollWidth - chartScrollEl.clientWidth);
+            chartSliderEl.max = String(maxScroll);
+            chartSliderEl.value = String(Math.min(maxScroll, Math.round(chartScrollEl.scrollLeft)));
+            chartSliderEl.disabled = maxScroll <= 0;
+        }
+
+        if (attendanceChartInstance) {
+            attendanceChartInstance.resize();
+        }
+    };
+
+    const updateChartTypeButtons = () => {
+        chartTypeButtons.forEach((button) => {
+            const mode = (button.getAttribute('data-chart-mode') || '').toLowerCase() === 'bar' ? 'bar' : 'line';
+            button.classList.toggle('btn-primary', mode === currentChartMode);
+            button.classList.toggle('btn-outline-primary', mode !== currentChartMode);
+        });
+    };
+
+    const updateChartTableVisibility = () => {
+        if (lineTableWrap) {
+            lineTableWrap.classList.toggle('d-none', currentChartMode !== 'line');
+        }
+        if (barTableWrap) {
+            barTableWrap.classList.toggle('d-none', currentChartMode !== 'bar');
+        }
+        chartTableButtons.forEach((button) => {
+            const mode = (button.getAttribute('data-chart-table') || '').toLowerCase() === 'bar' ? 'bar' : 'line';
+            button.classList.toggle('btn-primary', mode === currentChartMode);
+            button.classList.toggle('btn-outline-secondary', mode !== currentChartMode);
+        });
+    };
+
+    const buildDatasets = (mode) => {
+        if (mode === 'line') {
+            return [
+                {
+                    label: 'Hadir',
+                    data: chartPresentData,
+                    borderColor: '#16a34a',
+                    backgroundColor: 'rgba(22, 163, 74, 0.22)',
+                    borderWidth: 3,
+                    pointRadius: 3,
+                    pointHoverRadius: 5,
+                    pointBackgroundColor: '#16a34a',
+                    pointBorderColor: '#ffffff',
+                    pointBorderWidth: 1.5,
+                    fill: true,
+                    tension: 0.35
+                },
+                {
+                    label: 'Tidak Hadir',
+                    data: chartAbsentData,
+                    borderColor: '#dc2626',
+                    backgroundColor: 'rgba(220, 38, 38, 0.17)',
+                    borderWidth: 3,
+                    pointRadius: 3,
+                    pointHoverRadius: 5,
+                    pointBackgroundColor: '#dc2626',
+                    pointBorderColor: '#ffffff',
+                    pointBorderWidth: 1.5,
+                    fill: true,
+                    tension: 0.35
+                }
+            ];
+        }
+
+        return [
+            {
                 label: 'Hadir',
-                data: <?php echo json_encode($chart_present); ?>,
-                backgroundColor: '#28a745'
-            }, {
+                data: chartPresentData,
+                backgroundColor: 'rgba(22, 163, 74, 0.86)',
+                borderColor: '#166534',
+                borderWidth: 1.2,
+                borderRadius: 6,
+                maxBarThickness: 36
+            },
+            {
                 label: 'Tidak Hadir',
-                data: <?php echo json_encode($chart_absent); ?>,
-                backgroundColor: '#dc3545'
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            layout: {
-                padding: {
-                    top: 4,
-                    right: 8,
-                    bottom: 0,
-                    left: 0
-                }
+                data: chartAbsentData,
+                backgroundColor: 'rgba(220, 38, 38, 0.86)',
+                borderColor: '#7f1d1d',
+                borderWidth: 1.2,
+                borderRadius: 6,
+                maxBarThickness: 36
+            }
+        ];
+    };
+
+    const renderAttendanceChart = (mode) => {
+        if (!chartCtx) {
+            return;
+        }
+
+        if (attendanceChartInstance) {
+            attendanceChartInstance.destroy();
+            attendanceChartInstance = null;
+        }
+
+        attendanceChartInstance = new Chart(chartCtx, {
+            type: mode,
+            data: {
+                labels: chartLabels,
+                datasets: buildDatasets(mode)
             },
-            plugins: {
-                legend: {
-                    position: 'top',
-                    align: 'start',
-                    labels: {
-                        boxWidth: 28,
-                        boxHeight: 10,
-                        usePointStyle: false
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                animation: {
+                    duration: 450
+                },
+                layout: {
+                    padding: {
+                        top: 4,
+                        right: 8,
+                        bottom: 0,
+                        left: 0
                     }
-                }
-            },
-            scales: {
-                y: {
-                    beginAtZero: true,
-                    suggestedMax: <?php echo (int)$chart_suggested_max; ?>,
-                    ticks: {
-                        precision: 0
+                },
+                plugins: {
+                    legend: {
+                        position: 'top',
+                        align: 'start',
+                        labels: {
+                            boxWidth: 28,
+                            boxHeight: 10,
+                            usePointStyle: mode === 'line'
+                        }
+                    },
+                    tooltip: {
+                        mode: 'index',
+                        intersect: false
+                    }
+                },
+                interaction: {
+                    mode: 'index',
+                    intersect: false
+                },
+                scales: {
+                    x: {
+                        ticks: {
+                            autoSkip: false,
+                            maxRotation: 0,
+                            minRotation: 0
+                        },
+                        grid: {
+                            display: mode === 'bar'
+                        }
+                    },
+                    y: {
+                        beginAtZero: true,
+                        suggestedMax: chartSuggestedMax,
+                        ticks: {
+                            precision: 0
+                        }
                     }
                 }
             }
-        }
+        });
+
+        updateChartViewport();
+    };
+
+    if (chartScrollEl && chartSliderEl) {
+        chartScrollEl.addEventListener('scroll', () => {
+            const maxScroll = Math.max(0, chartScrollEl.scrollWidth - chartScrollEl.clientWidth);
+            chartSliderEl.max = String(maxScroll);
+            chartSliderEl.value = String(Math.min(maxScroll, Math.round(chartScrollEl.scrollLeft)));
+        });
+        chartSliderEl.addEventListener('input', () => {
+            chartScrollEl.scrollLeft = Number(chartSliderEl.value || 0);
+        });
+    }
+
+    chartTypeButtons.forEach((button) => {
+        button.addEventListener('click', () => {
+            const mode = (button.getAttribute('data-chart-mode') || '').toLowerCase() === 'bar' ? 'bar' : 'line';
+            currentChartMode = mode;
+            if (chartModeInputEl) {
+                chartModeInputEl.value = mode;
+            }
+            updateChartTypeButtons();
+            updateChartTableVisibility();
+            updateExportLink();
+            renderAttendanceChart(mode);
+        });
     });
+
+    chartTableButtons.forEach((button) => {
+        button.addEventListener('click', () => {
+            const mode = (button.getAttribute('data-chart-table') || '').toLowerCase() === 'bar' ? 'bar' : 'line';
+            currentChartMode = mode;
+            if (chartModeInputEl) {
+                chartModeInputEl.value = mode;
+            }
+            updateChartTypeButtons();
+            updateChartTableVisibility();
+            updateExportLink();
+            renderAttendanceChart(mode);
+        });
+    });
+
+    updateChartTypeButtons();
+    updateChartTableVisibility();
+    updateExportLink();
+    renderAttendanceChart(currentChartMode);
+    window.addEventListener('resize', updateChartViewport);
     
     // View location (Leaflet - student coordinates)
     $('.view-location-btn').click(function() {

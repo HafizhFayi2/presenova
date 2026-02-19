@@ -1,11 +1,20 @@
-Options -Indexes
+Options -Indexes -MultiViews
+DirectoryIndex public/index.php index.php
 
 <IfModule mod_rewrite.c>
     RewriteEngine On
 
-    # Avoid rewrite loop when already inside /public.
-    RewriteRule ^public/ - [L]
+    # Prevent rewrite loop for direct public front controller access.
+    RewriteRule ^public/index\.php$ - [L,NC]
 
-    # Forward all web requests to Laravel public directory.
-    RewriteRule ^(.*)$ public/$1 [L]
+    # Allow direct access for known static assets from project root URL.
+    RewriteRule ^(assets|uploads|face|scripts)(/.*)?$ public/$1$2 [L,NC,QSA]
+    RewriteRule ^(service-worker\.js|manifest\.json|robots\.txt|favicon\.ico)$ public/$1 [L,NC,QSA]
+    RewriteRule ^getstarted/index\.php$ public/getstarted/index.php [L,NC,QSA]
+
+    # If request already points to /public, keep it as is.
+    RewriteRule ^public/ - [L,NC]
+
+    # Force all dynamic URLs into Laravel front controller.
+    RewriteRule ^ public/index.php [L,QSA]
 </IfModule>

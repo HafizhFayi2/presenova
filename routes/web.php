@@ -7,6 +7,7 @@ use App\Http\Controllers\Dashboard\Ajax\DashboardAjaxController;
 use App\Http\Controllers\Dashboard\Print\SchedulePrintController;
 use App\Http\Controllers\HomeController;
 use App\Http\Controllers\UtilityPageController;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
 $appUrlPathPrefix = trim((string) parse_url((string) config('app.url'), PHP_URL_PATH), '/');
@@ -17,9 +18,14 @@ foreach ($prefixes as $prefix) {
     $groupAttributes = $prefix !== '' ? ['prefix' => $prefix] : [];
 
     Route::group($groupAttributes, function () use ($isBaseRoutes) {
-        $homeRoute = Route::get('/', [HomeController::class, 'index']);
+        $homeRoute = Route::get('/', [HomeController::class, 'getStarted']);
+        $getStartedRoute = Route::get('/getstarted/index.php', [HomeController::class, 'getStarted']);
+        Route::get('/public/getstarted/index.php', [HomeController::class, 'getStarted']);
+        $indexRoute = Route::get('/index.php', [HomeController::class, 'index']);
         if ($isBaseRoutes) {
             $homeRoute->name('home');
+            $getStartedRoute->name('home.getstarted');
+            $indexRoute->name('home.index');
         }
 
         Route::get('/laravel-health', function () {
@@ -31,6 +37,8 @@ foreach ($prefixes as $prefix) {
         });
 
         Route::get('/404.php', [HomeController::class, 'notFound']);
+        Route::get('/{errorCode}.php', [HomeController::class, 'error'])
+            ->where('errorCode', '[1-5][0-9]{2}');
 
         $loginShow = Route::get('/login.php', [LoginController::class, 'show']);
         $loginAuth = Route::post('/login.php', [LoginController::class, 'authenticate']);
@@ -106,11 +114,6 @@ foreach ($prefixes as $prefix) {
     });
 }
 
-Route::fallback(function () {
-    $prefix = trim((string) parse_url((string) config('app.url'), PHP_URL_PATH), '/');
-    if ($prefix === '') {
-        return redirect('/404.php');
-    }
-
-    return redirect('/' . $prefix . '/404.php');
+Route::fallback(function (Request $request) {
+    return app(HomeController::class)->error($request, 404);
 });

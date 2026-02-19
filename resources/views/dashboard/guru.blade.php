@@ -31,6 +31,14 @@ if (!$teacher) {
 }
 
 $generatedTeacherPassword = null;
+$teacherCodeForReset = trim((string) (($teacher['teacher_code'] ?? '') ?: ($teacher['teacher_username'] ?? '')));
+if ($teacherCodeForReset === '') {
+    $teacherCodeForReset = '-';
+}
+$teacherFullNameForReset = trim((string) ($teacher['teacher_name'] ?? ''));
+if ($teacherFullNameForReset === '') {
+    $teacherFullNameForReset = '-';
+}
 $defaultTeacherPasswordHash = hash('sha256', 'guru123' . PASSWORD_SALT);
 $currentTeacherPasswordHash = (string) ($teacher['teacher_password'] ?? '');
 if ($currentTeacherPasswordHash !== '' && hash_equals($defaultTeacherPasswordHash, $currentTeacherPasswordHash)) {
@@ -293,6 +301,17 @@ $guru_core_css_version = @filemtime(public_path('assets/css/guru.css')) ?: time(
                     <div class="teacher-password-alert">
                         <i class="fas fa-shield-alt"></i>
                         <span>Password default <code>guru123</code> terdeteksi dan sudah diganti otomatis agar akun lebih aman.</span>
+                    </div>
+
+                    <div class="teacher-password-meta" aria-label="Identitas guru yang direset">
+                        <div class="teacher-password-meta-item">
+                            <span class="teacher-password-meta-label">Kode Guru</span>
+                            <strong class="teacher-password-meta-value"><?php echo htmlspecialchars($teacherCodeForReset, ENT_QUOTES, 'UTF-8'); ?></strong>
+                        </div>
+                        <div class="teacher-password-meta-item">
+                            <span class="teacher-password-meta-label">Nama Lengkap</span>
+                            <strong class="teacher-password-meta-value"><?php echo htmlspecialchars($teacherFullNameForReset, ENT_QUOTES, 'UTF-8'); ?></strong>
+                        </div>
                     </div>
 
                     <div class="teacher-password-field">
