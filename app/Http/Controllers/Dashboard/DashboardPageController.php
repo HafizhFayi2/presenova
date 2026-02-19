@@ -10,16 +10,25 @@ class DashboardPageController extends Controller
 {
     public function admin(Request $request): Response
     {
-        return response()->view('dashboard.admin');
+        return $this->renderDashboard('dashboard.admin');
     }
 
     public function guru(Request $request): Response
     {
-        return response()->view('dashboard.guru');
+        return $this->renderDashboard('dashboard.guru');
     }
 
     public function siswa(Request $request): Response
     {
-        return response()->view('dashboard.siswa');
+        return $this->renderDashboard('dashboard.siswa');
+    }
+
+    private function renderDashboard(string $view): Response
+    {
+        return response()
+            ->view($view)
+            ->header('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0')
+            ->header('Pragma', 'no-cache')
+            ->header('Expires', '0');
     }
 }

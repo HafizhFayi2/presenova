@@ -412,32 +412,45 @@ $riwayat_izin = array_values(array_filter($riwayat, fn($i) => (int)($i['present_
                                                         $status_class = 'bg-danger';
                                                     }
                                                 ?>
-                                                    <tr class="schedule-row" 
+                                                    <?php
+                                                        $has_schedule_id = !empty($schedule['student_schedule_id']);
+                                                        $attendance_href = '?page=face_recognition';
+                                                        if ($has_schedule_id) {
+                                                            $attendance_href .= '&schedule_id=' . urlencode((string) $schedule['student_schedule_id']);
+                                                        }
+                                                        $action_variant = 'secondary';
+                                                        if ($can_attend) {
+                                                            $action_variant = ($now_ts > $base_end_ts) ? 'warning' : 'success';
+                                                        }
+                                                    ?>
+                                                    <tr class="schedule-row live-pending-row"
                                                         data-subject="<?= htmlspecialchars(strtolower((string)($schedule['subject'] ?? '')), ENT_QUOTES) ?>"
                                                         data-teacher="<?= htmlspecialchars(strtolower((string)($schedule['teacher_name'] ?? '')), ENT_QUOTES) ?>"
                                                         data-date="<?= $today_date ?>"
-                                                        data-status="pending">
+                                                        data-status="pending"
+                                                        data-countdown-start="<?= (int) $countdown_start_ts ?>"
+                                                        data-start="<?= (int) $start_ts ?>"
+                                                        data-base-end="<?= (int) $base_end_ts ?>"
+                                                        data-end="<?= (int) $overdue_end_ts ?>"
+                                                        data-has-schedule-id="<?= $has_schedule_id ? '1' : '0' ?>">
                                                         <td><span class="badge bg-info"><?= $schedule['shift_name'] ?></span></td>
                                                         <td><strong><?= htmlspecialchars($schedule['subject']) ?></strong></td>
                                                         <td><?= htmlspecialchars($schedule['teacher_name']) ?></td>
                                                         <td><?= $schedule['waktu'] ?></td>
                                                         <td>
-                                                            <span class="badge <?php echo $status_class; ?>"><?php echo $status_label; ?></span>
+                                                            <span class="badge js-pending-status <?php echo $status_class; ?>"><?php echo $status_label; ?></span>
                                                         </td>
                                                         <td>
-                                                            <?php if ($can_attend): ?>
-                                                                <a class="btn btn-sm btn-success btn-absensi-now" 
-                                                                   href="?page=face_recognition&schedule_id=<?= $schedule['student_schedule_id'] ?>"
-                                                                   data-schedule-id="<?= $schedule['student_schedule_id'] ?>"
+                                                                <a class="btn btn-sm btn-<?php echo $action_variant; ?> btn-absensi-now js-pending-action-link <?php echo ($can_attend && $has_schedule_id) ? '' : 'd-none'; ?>"
+                                                                   href="<?= htmlspecialchars($attendance_href, ENT_QUOTES) ?>"
+                                                                   data-schedule-id="<?= $has_schedule_id ? htmlspecialchars((string) $schedule['student_schedule_id'], ENT_QUOTES) : '' ?>"
                                                                    data-subject="<?= htmlspecialchars($schedule['subject']) ?>"
                                                                    data-time="<?= $schedule['time_in'] ?>">
                                                                     <i class="fas fa-camera"></i> Absen
                                                                 </a>
-                                                            <?php else: ?>
-                                                                <button class="btn btn-sm btn-secondary" disabled>
+                                                                <button class="btn btn-sm btn-secondary js-pending-action-btn <?php echo ($can_attend && $has_schedule_id) ? 'd-none' : ''; ?>" disabled>
                                                                     <i class="fas fa-camera"></i> Absen
                                                                 </button>
-                                                            <?php endif; ?>
                                                         </td>
                                                     </tr>
                                                 <?php endforeach; ?>
@@ -949,6 +962,87 @@ $riwayat_izin = array_values(array_filter($riwayat, fn($i) => (int)($i['present_
             window.location.href = '?page=face_recognition';
         }
     });
+
+    const pendingRows = Array.from(document.querySelectorAll('#pendingSection .live-pending-row'));
+    if (pendingRows.length > 0) {
+        const serverNowEpoch = <?php echo (int) $now_wib->getTimestamp(); ?>;
+        const clientStartMs = Date.now();
+        const statusClasses = ['bg-secondary', 'bg-info', 'bg-success', 'bg-warning', 'bg-danger'];
+        const actionClasses = ['btn-secondary', 'btn-success', 'btn-warning'];
+        const pad = (num) => String(num).padStart(2, '0');
+        const getNowEpoch = () => serverNowEpoch + Math.floor((Date.now() - clientStartMs) / 1000);
+        const formatCountdown = (seconds) => {
+            const safe = Math.max(0, seconds);
+            const mins = Math.floor(safe / 60);
+            const secs = safe % 60;
+            return `${pad(mins)}:${pad(secs)}`;
+        };
+
+        const evaluatePendingStatus = (nowEpoch, countdownStart, start, baseEnd, end) => {
+            if (nowEpoch < countdownStart) {
+                return { label: 'MENUNGGU', statusClass: 'bg-secondary', canAttend: false, actionClass: 'btn-secondary' };
+            }
+            if (nowEpoch >= countdownStart && nowEpoch < start) {
+                const remaining = Math.max(0, start - nowEpoch);
+                return {
+                    label: `COUNTDOWN ${formatCountdown(remaining)}`,
+                    statusClass: 'bg-info',
+                    canAttend: false,
+                    actionClass: 'btn-secondary'
+                };
+            }
+            if (nowEpoch >= start && nowEpoch <= baseEnd) {
+                return { label: 'ACTIVE', statusClass: 'bg-success', canAttend: true, actionClass: 'btn-success' };
+            }
+            if (nowEpoch > baseEnd && nowEpoch <= end) {
+                return { label: 'OVERDUE', statusClass: 'bg-warning', canAttend: true, actionClass: 'btn-warning' };
+            }
+            return { label: 'CLOSED', statusClass: 'bg-danger', canAttend: false, actionClass: 'btn-secondary' };
+        };
+
+        const applyPendingStatus = (row, state) => {
+            const statusEl = row.querySelector('.js-pending-status');
+            if (statusEl) {
+                statusEl.classList.remove(...statusClasses);
+                statusEl.classList.add(state.statusClass);
+                statusEl.textContent = state.label;
+            }
+
+            const hasScheduleId = row.dataset.hasScheduleId === '1';
+            const actionLink = row.querySelector('.js-pending-action-link');
+            const actionButton = row.querySelector('.js-pending-action-btn');
+            const showActionLink = state.canAttend && hasScheduleId;
+
+            if (actionLink) {
+                actionLink.classList.remove(...actionClasses);
+                actionLink.classList.add(state.actionClass);
+                actionLink.classList.toggle('d-none', !showActionLink);
+            }
+
+            if (actionButton) {
+                actionButton.classList.toggle('d-none', showActionLink);
+            }
+        };
+
+        const updatePendingStatuses = () => {
+            const nowEpoch = getNowEpoch();
+            pendingRows.forEach((row) => {
+                const countdownStart = parseInt(row.dataset.countdownStart || '0', 10);
+                const start = parseInt(row.dataset.start || '0', 10);
+                const baseEnd = parseInt(row.dataset.baseEnd || '0', 10);
+                const end = parseInt(row.dataset.end || '0', 10);
+                if (!countdownStart || !start || !baseEnd || !end) {
+                    return;
+                }
+
+                const state = evaluatePendingStatus(nowEpoch, countdownStart, start, baseEnd, end);
+                applyPendingStatus(row, state);
+            });
+        };
+
+        updatePendingStatuses();
+        setInterval(updatePendingStatuses, 1000);
+    }
     
     function getLocation() {
         $('#locationStatus').show();
