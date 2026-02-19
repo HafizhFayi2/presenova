@@ -92,6 +92,7 @@ $guru_section_css = [
     'profil' => 'guru_profil.css',
 ];
 $active_guru_section_css = $guru_section_css[$page] ?? null;
+$guru_core_css_version = @filemtime(public_path('assets/css/guru.css')) ?: time();
 ?>
 <!DOCTYPE html>
 <html lang="id" data-theme="<?php echo $theme; ?>">
@@ -160,7 +161,7 @@ $active_guru_section_css = $guru_section_css[$page] ?? null;
     </script>
     
     
-<link rel="stylesheet" href="../assets/css/guru.css" data-inline-style="extracted">
+<link rel="stylesheet" href="../assets/css/guru.css?v=<?php echo $guru_core_css_version; ?>" data-inline-style="extracted">
     <link rel="stylesheet" href="../assets/css/app-dialog.css">
     <?php if ($active_guru_section_css !== null): ?>
     <link rel="stylesheet" href="../assets/css/sections/<?php echo $active_guru_section_css; ?>">
@@ -275,30 +276,48 @@ $active_guru_section_css = $guru_section_css[$page] ?? null;
     </div>
 
     <?php if (!empty($generatedTeacherPassword)): ?>
-    <div class="modal fade" id="teacherAutoPasswordModal" tabindex="-1" aria-hidden="true">
-        <div class="modal-dialog modal-dialog-centered">
-            <div class="modal-content" id="teacherAutoPasswordCard">
-                <div class="modal-header">
-                    <h5 class="modal-title"><i class="fas fa-key me-2"></i>Password Guru Diperbarui</h5>
-                </div>
-                <div class="modal-body">
-                    <div class="alert alert-warning mb-3">
-                        Password default `guru123` terdeteksi dan telah diganti otomatis.
+    <div class="modal fade teacher-password-modal" id="teacherAutoPasswordModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered teacher-password-dialog">
+            <div class="modal-content teacher-password-card" id="teacherAutoPasswordCard">
+                <div class="teacher-password-accent" aria-hidden="true"></div>
+                <div class="modal-header teacher-password-header border-0">
+                    <div class="teacher-password-icon-wrap" aria-hidden="true">
+                        <i class="fas fa-key"></i>
                     </div>
-                    <label class="form-label">Password Baru</label>
-                    <div class="input-group">
-                        <input id="teacherAutoPasswordValue" type="text" class="form-control" readonly value="<?php echo htmlspecialchars($generatedTeacherPassword, ENT_QUOTES, 'UTF-8'); ?>">
-                        <button type="button" class="btn btn-outline-primary" id="copyTeacherAutoPasswordBtn">
-                            <i class="fas fa-copy"></i> Copy
-                        </button>
+                    <div class="teacher-password-headline">
+                        <h5 class="modal-title">Password Guru Diperbarui</h5>
+                        <p class="mb-0">Auto-rotate keamanan telah dilakukan.</p>
                     </div>
-                    <small class="text-muted">Simpan password ini sekarang. Anda dapat screenshot atau download PNG.</small>
                 </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-outline-secondary" id="downloadTeacherAutoPasswordBtn">
-                        <i class="fas fa-download"></i> Download PNG
+                <div class="modal-body teacher-password-body">
+                    <div class="teacher-password-alert">
+                        <i class="fas fa-shield-alt"></i>
+                        <span>Password default <code>guru123</code> terdeteksi dan sudah diganti otomatis agar akun lebih aman.</span>
+                    </div>
+
+                    <div class="teacher-password-field">
+                        <label class="form-label mb-2">Password Baru</label>
+                        <div class="input-group teacher-password-group">
+                            <input id="teacherAutoPasswordValue" type="text" class="form-control teacher-password-input" readonly value="<?php echo htmlspecialchars($generatedTeacherPassword, ENT_QUOTES, 'UTF-8'); ?>">
+                            <button type="button" class="btn teacher-password-copy-btn" id="copyTeacherAutoPasswordBtn">
+                                <i class="fas fa-copy me-1"></i><span>Copy</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div id="teacherAutoPasswordFeedback" class="teacher-password-feedback" aria-live="polite"></div>
+
+                    <p class="teacher-password-note mb-0">
+                        Simpan password ini sekarang. Anda dapat screenshot atau download PNG sebagai bukti.
+                    </p>
+                </div>
+                <div class="modal-footer teacher-password-footer border-0">
+                    <button type="button" class="btn teacher-password-download-btn" id="downloadTeacherAutoPasswordBtn">
+                        <i class="fas fa-download me-1"></i> Download PNG
                     </button>
-                    <button type="button" class="btn btn-primary" data-bs-dismiss="modal">Saya Sudah Simpan</button>
+                    <button type="button" class="btn teacher-password-confirm-btn" data-bs-dismiss="modal">
+                        Saya Sudah Simpan
+                    </button>
                 </div>
             </div>
         </div>
@@ -604,6 +623,9 @@ $(document).ready(function() {
         <?php if (!empty($generatedTeacherPassword)): ?>
         const teacherPasswordModalEl = document.getElementById('teacherAutoPasswordModal');
         const teacherPasswordCardEl = document.getElementById('teacherAutoPasswordCard');
+        const teacherPasswordFeedbackEl = document.getElementById('teacherAutoPasswordFeedback');
+        const teacherPasswordCopyBtnEl = document.getElementById('copyTeacherAutoPasswordBtn');
+        const teacherPasswordDownloadBtnEl = document.getElementById('downloadTeacherAutoPasswordBtn');
         const teacherPasswordModal = teacherPasswordModalEl ? bootstrap.Modal.getOrCreateInstance(teacherPasswordModalEl, {
             backdrop: 'static',
             keyboard: false
@@ -612,28 +634,69 @@ $(document).ready(function() {
             teacherPasswordModal.show();
         }
 
+        let teacherFeedbackTimer = null;
+        const setTeacherPasswordFeedback = (message, type = 'info') => {
+            if (!teacherPasswordFeedbackEl) {
+                return;
+            }
+            teacherPasswordFeedbackEl.textContent = message;
+            teacherPasswordFeedbackEl.classList.remove('is-info', 'is-success', 'is-error');
+            teacherPasswordFeedbackEl.classList.add(`is-${type}`);
+
+            if (teacherFeedbackTimer) {
+                clearTimeout(teacherFeedbackTimer);
+            }
+            teacherFeedbackTimer = setTimeout(() => {
+                teacherPasswordFeedbackEl.textContent = '';
+                teacherPasswordFeedbackEl.classList.remove('is-info', 'is-success', 'is-error');
+            }, 2600);
+        };
+
         $('#copyTeacherAutoPasswordBtn').on('click', async function() {
             const input = document.getElementById('teacherAutoPasswordValue');
             const value = input ? input.value : '';
             if (!value) {
+                setTeacherPasswordFeedback('Password tidak tersedia untuk disalin.', 'error');
                 return;
             }
             try {
                 await navigator.clipboard.writeText(value);
-                alert('Password berhasil disalin.');
-            } catch (err) {
-                if (input) {
-                    input.select();
-                    document.execCommand('copy');
+                setTeacherPasswordFeedback('Password berhasil disalin ke clipboard.', 'success');
+                if (teacherPasswordCopyBtnEl) {
+                    teacherPasswordCopyBtnEl.innerHTML = '<i class="fas fa-check me-1"></i><span>Tersalin</span>';
+                    teacherPasswordCopyBtnEl.classList.add('is-done');
+                    setTimeout(() => {
+                        teacherPasswordCopyBtnEl.innerHTML = '<i class="fas fa-copy me-1"></i><span>Copy</span>';
+                        teacherPasswordCopyBtnEl.classList.remove('is-done');
+                    }, 1500);
                 }
-                alert('Password disalin ke clipboard.');
+            } catch (err) {
+                let fallbackSuccess = false;
+                if (input && typeof document.execCommand === 'function') {
+                    try {
+                        input.select();
+                        fallbackSuccess = document.execCommand('copy') === true;
+                    } catch (copyError) {
+                        fallbackSuccess = false;
+                    }
+                }
+                if (fallbackSuccess) {
+                    setTeacherPasswordFeedback('Password berhasil disalin ke clipboard.', 'success');
+                } else {
+                    setTeacherPasswordFeedback('Gagal copy otomatis. Silakan salin manual.', 'error');
+                }
             }
         });
 
         $('#downloadTeacherAutoPasswordBtn').on('click', function() {
             if (!teacherPasswordCardEl || typeof html2canvas === 'undefined') {
-                alert('Fitur download PNG belum tersedia pada browser ini.');
+                setTeacherPasswordFeedback('Fitur download PNG belum tersedia pada browser ini.', 'error');
                 return;
+            }
+
+            if (teacherPasswordDownloadBtnEl) {
+                teacherPasswordDownloadBtnEl.disabled = true;
+                teacherPasswordDownloadBtnEl.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Menyiapkan PNG...';
             }
 
             html2canvas(teacherPasswordCardEl, {
@@ -644,8 +707,14 @@ $(document).ready(function() {
                 link.href = canvas.toDataURL('image/png');
                 link.download = 'password-guru-baru.png';
                 link.click();
+                setTeacherPasswordFeedback('PNG berhasil diunduh.', 'success');
             }).catch(() => {
-                alert('Gagal membuat PNG. Silakan gunakan screenshot manual.');
+                setTeacherPasswordFeedback('Gagal membuat PNG. Silakan gunakan screenshot manual.', 'error');
+            }).finally(() => {
+                if (teacherPasswordDownloadBtnEl) {
+                    teacherPasswordDownloadBtnEl.disabled = false;
+                    teacherPasswordDownloadBtnEl.innerHTML = '<i class="fas fa-download me-1"></i> Download PNG';
+                }
             });
         });
         <?php endif; ?>

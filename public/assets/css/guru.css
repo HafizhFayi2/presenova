@@ -1225,3 +1225,295 @@
                 width: auto !important;
         }
 }
+
+/* Auto-rotate teacher password modal */
+.teacher-password-dialog {
+    max-width: 560px;
+}
+
+.teacher-password-card {
+    position: relative;
+    overflow: hidden;
+    border-radius: 22px;
+    border: 1px solid rgba(14, 165, 233, 0.25);
+    background: linear-gradient(155deg, #ffffff 0%, #f8fcff 45%, #eef9ff 100%);
+    box-shadow: 0 30px 70px rgba(15, 23, 42, 0.22);
+}
+
+.teacher-password-accent {
+    height: 6px;
+    width: 100%;
+    background: linear-gradient(90deg, #0ea5e9 0%, #22d3ee 45%, #10b981 100%);
+}
+
+.teacher-password-header {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 18px 22px 10px;
+}
+
+.teacher-password-icon-wrap {
+    width: 50px;
+    height: 50px;
+    border-radius: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.2rem;
+    color: #082f49;
+    background: linear-gradient(135deg, #67e8f9 0%, #22d3ee 45%, #14b8a6 100%);
+    box-shadow: 0 14px 30px rgba(14, 165, 233, 0.35);
+}
+
+.teacher-password-headline .modal-title {
+    margin: 0;
+    font-size: 1.35rem;
+    font-weight: 700;
+    color: #0f172a;
+}
+
+.teacher-password-headline p {
+    margin-top: 2px;
+    font-size: 0.92rem;
+    color: #475569;
+}
+
+.teacher-password-body {
+    padding: 10px 22px 18px;
+}
+
+.teacher-password-alert {
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+    border-radius: 14px;
+    padding: 12px 14px;
+    margin-bottom: 16px;
+    background: linear-gradient(135deg, #fff8e1 0%, #ffefbf 100%);
+    border: 1px solid #facc15;
+    color: #7c2d12;
+    font-size: 0.92rem;
+    line-height: 1.45;
+}
+
+.teacher-password-alert i {
+    margin-top: 3px;
+    color: #b45309;
+}
+
+.teacher-password-alert code {
+    background: rgba(255, 255, 255, 0.72);
+    color: #7c2d12;
+    border-radius: 6px;
+    padding: 1px 6px;
+}
+
+.teacher-password-field .form-label {
+    font-weight: 700;
+    color: #0f172a;
+}
+
+.teacher-password-group {
+    border-radius: 14px;
+    overflow: hidden;
+    border: 1px solid #c7deee;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6);
+}
+
+.teacher-password-input.form-control {
+    border: 0;
+    background: #f8fbff;
+    font-family: "Courier New", Courier, monospace;
+    font-size: 1.08rem;
+    font-weight: 700;
+    letter-spacing: 0.4px;
+    color: #0f172a;
+    padding: 12px 14px;
+}
+
+.teacher-password-input.form-control:focus {
+    box-shadow: none;
+}
+
+.teacher-password-copy-btn {
+    border: 0;
+    border-left: 1px solid #c7deee;
+    background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+    color: #ffffff;
+    font-weight: 700;
+    min-width: 112px;
+}
+
+.teacher-password-copy-btn:hover,
+.teacher-password-copy-btn:focus {
+    color: #ffffff;
+    background: linear-gradient(135deg, #1d4ed8 0%, #1e40af 100%);
+}
+
+.teacher-password-copy-btn.is-done {
+    background: linear-gradient(135deg, #10b981 0%, #0d9488 100%);
+}
+
+.teacher-password-feedback {
+    min-height: 22px;
+    margin-top: 8px;
+    font-size: 0.86rem;
+    font-weight: 600;
+}
+
+.teacher-password-feedback.is-info {
+    color: #334155;
+}
+
+.teacher-password-feedback.is-success {
+    color: #047857;
+}
+
+.teacher-password-feedback.is-error {
+    color: #b91c1c;
+}
+
+.teacher-password-note {
+    font-size: 0.88rem;
+    color: #64748b;
+    margin-top: 2px;
+}
+
+.teacher-password-footer {
+    gap: 10px;
+    padding: 8px 22px 20px;
+}
+
+.teacher-password-download-btn,
+.teacher-password-confirm-btn {
+    border-radius: 12px;
+    font-weight: 700;
+    padding: 10px 14px;
+}
+
+.teacher-password-download-btn {
+    border: 1px solid #c7deee;
+    background: #f8fbff;
+    color: #0f172a;
+}
+
+.teacher-password-download-btn:hover,
+.teacher-password-download-btn:focus {
+    color: #0f172a;
+    background: #edf6ff;
+    border-color: #9dc6e6;
+}
+
+.teacher-password-confirm-btn {
+    border: 0;
+    background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%);
+    color: #ffffff;
+    box-shadow: 0 10px 24px rgba(3, 105, 161, 0.28);
+}
+
+.teacher-password-confirm-btn:hover,
+.teacher-password-confirm-btn:focus {
+    color: #ffffff;
+    background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%);
+}
+
+[data-theme="dark"] .teacher-password-card {
+    border-color: rgba(34, 211, 238, 0.28);
+    background: linear-gradient(165deg, #0f172a 0%, #111f34 55%, #0f2a36 100%);
+    box-shadow: 0 34px 80px rgba(2, 6, 23, 0.6);
+}
+
+[data-theme="dark"] .teacher-password-headline .modal-title,
+[data-theme="dark"] .teacher-password-field .form-label {
+    color: #e2e8f0;
+}
+
+[data-theme="dark"] .teacher-password-headline p {
+    color: #94a3b8;
+}
+
+[data-theme="dark"] .teacher-password-alert {
+    background: linear-gradient(135deg, rgba(120, 53, 15, 0.45) 0%, rgba(146, 64, 14, 0.5) 100%);
+    border-color: rgba(251, 191, 36, 0.45);
+    color: #fde68a;
+}
+
+[data-theme="dark"] .teacher-password-alert i {
+    color: #facc15;
+}
+
+[data-theme="dark"] .teacher-password-alert code {
+    background: rgba(15, 23, 42, 0.62);
+    color: #fde68a;
+}
+
+[data-theme="dark"] .teacher-password-group {
+    border-color: #334155;
+}
+
+[data-theme="dark"] .teacher-password-input.form-control {
+    background: #0b1220;
+    color: #e2e8f0;
+}
+
+[data-theme="dark"] .teacher-password-copy-btn {
+    border-left-color: #334155;
+}
+
+[data-theme="dark"] .teacher-password-feedback.is-info {
+    color: #cbd5e1;
+}
+
+[data-theme="dark"] .teacher-password-feedback.is-success {
+    color: #5eead4;
+}
+
+[data-theme="dark"] .teacher-password-feedback.is-error {
+    color: #fda4af;
+}
+
+[data-theme="dark"] .teacher-password-note {
+    color: #94a3b8;
+}
+
+[data-theme="dark"] .teacher-password-download-btn {
+    background: #111f34;
+    color: #e2e8f0;
+    border-color: #334155;
+}
+
+[data-theme="dark"] .teacher-password-download-btn:hover,
+[data-theme="dark"] .teacher-password-download-btn:focus {
+    background: #172740;
+    color: #f8fafc;
+    border-color: #4b647d;
+}
+
+@media (max-width: 576px) {
+    .teacher-password-dialog {
+        margin: 12px;
+    }
+
+    .teacher-password-header {
+        padding: 16px 16px 8px;
+    }
+
+    .teacher-password-body {
+        padding: 8px 16px 14px;
+    }
+
+    .teacher-password-footer {
+        padding: 8px 16px 16px;
+    }
+
+    .teacher-password-copy-btn {
+        min-width: 94px;
+        font-size: 0.88rem;
+    }
+
+    .teacher-password-confirm-btn,
+    .teacher-password-download-btn {
+        width: 100%;
+    }
+}
