@@ -1,6 +1,6 @@
 // Service Worker for PWA
-const STATIC_CACHE_NAME = "attendance-static-v20260218-3";
-const RUNTIME_CACHE_NAME = "attendance-runtime-v20260218-3";
+const STATIC_CACHE_NAME = "attendance-static-v20260219-2";
+const RUNTIME_CACHE_NAME = "attendance-runtime-v20260219-2";
 
 function resolveAppUrl(path) {
   const scopePath = new URL(self.registration.scope).pathname.replace(/\/+$/, "");
@@ -31,6 +31,7 @@ const staticUrlsToCache = [
   "manifest.json",
   "assets/images/logo-192.png",
   "assets/images/logo-512.png",
+  "assets/images/presenova.png",
 ].map(resolveAppUrl);
 
 function isSameOrigin(requestUrl) {
@@ -74,6 +75,11 @@ function isDynamicRoute(request) {
   );
 }
 
+function isDashboardRoute(request) {
+  const pathname = getLocalPathname(request.url).toLowerCase();
+  return pathname.startsWith("/dashboard/");
+}
+
 function isAuthRoute(request) {
   const pathname = getLocalPathname(request.url).toLowerCase();
   return (
@@ -106,7 +112,10 @@ function isStaticAsset(request) {
   );
 }
 
-async function networkFirst(request, { cacheName = null, cacheResponse = false, forceNoStore = false } = {}) {
+async function networkFirst(
+  request,
+  { cacheName = null, cacheResponse = false, forceNoStore = false, allowCacheFallback = true } = {},
+) {
   try {
     const response = await fetch(request, forceNoStore ? { cache: "no-store" } : undefined);
 
@@ -117,11 +126,13 @@ async function networkFirst(request, { cacheName = null, cacheResponse = false, 
 
     return response;
   } catch (error) {
-    const cachedResponse = await caches.match(request);
-    if (cachedResponse) {
-      return cachedResponse;
+    if (allowCacheFallback) {
+      const cachedResponse = await caches.match(request);
+      if (cachedResponse) {
+        return cachedResponse;
+      }
     }
-    throw error;
+    return Response.error();
   }
 }
 
@@ -198,7 +209,13 @@ function shouldCacheDynamicResponse(response) {
 
   try {
     const responseUrl = (response.url || "").toLowerCase();
-    if (responseUrl.includes("/login.php") || responseUrl.includes("/logout.php") || responseUrl.includes("/forgot-password.php")) {
+    if (
+      responseUrl.includes("/dashboard/") ||
+      responseUrl.includes("/api/") ||
+      responseUrl.includes("/login.php") ||
+      responseUrl.includes("/logout.php") ||
+      responseUrl.includes("/forgot-password.php")
+    ) {
       return false;
     }
   } catch (error) {
@@ -229,8 +246,8 @@ self.addEventListener("fetch", (event) => {
   }
 
   if (isDynamicRoute(event.request)) {
-    if (isAuthRoute(event.request) || isApiRoute(event.request)) {
-      event.respondWith(networkFirst(event.request, { forceNoStore: true }));
+    if (isDashboardRoute(event.request) || isAuthRoute(event.request) || isApiRoute(event.request)) {
+      event.respondWith(networkFirst(event.request, { forceNoStore: true, allowCacheFallback: false }));
       return;
     }
 

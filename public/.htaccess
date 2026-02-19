@@ -33,6 +33,10 @@ DirectoryIndex index.php
 </IfModule>
 
 <IfModule mod_headers.c>
+    <FilesMatch "\.(?:css|js|mjs|map|png|jpe?g|gif|svg|ico|webp|avif|woff2?|ttf|eot|otf|wasm|webmanifest)$">
+        Header set Cache-Control "public, max-age=2592000, immutable"
+    </FilesMatch>
+
     <Files "service-worker.js">
         Header set Cache-Control "no-store, no-cache, must-revalidate, max-age=0"
         Header set Pragma "no-cache"
@@ -44,6 +48,28 @@ DirectoryIndex index.php
         Header set Pragma "no-cache"
         Header set Expires "0"
     </Files>
+</IfModule>
+
+<IfModule mod_expires.c>
+    ExpiresActive On
+    ExpiresByType text/css "access plus 30 days"
+    ExpiresByType application/javascript "access plus 30 days"
+    ExpiresByType text/javascript "access plus 30 days"
+    ExpiresByType application/x-javascript "access plus 30 days"
+    ExpiresByType image/png "access plus 30 days"
+    ExpiresByType image/jpeg "access plus 30 days"
+    ExpiresByType image/gif "access plus 30 days"
+    ExpiresByType image/webp "access plus 30 days"
+    ExpiresByType image/avif "access plus 30 days"
+    ExpiresByType image/svg+xml "access plus 30 days"
+    ExpiresByType image/x-icon "access plus 30 days"
+    ExpiresByType font/woff2 "access plus 30 days"
+    ExpiresByType font/woff "access plus 30 days"
+    ExpiresByType application/font-woff "access plus 30 days"
+    ExpiresByType application/vnd.ms-fontobject "access plus 30 days"
+    ExpiresByType font/ttf "access plus 30 days"
+    ExpiresByType application/wasm "access plus 30 days"
+    ExpiresByType application/manifest+json "access plus 1 day"
 </IfModule>
 
 <IfModule php_module>

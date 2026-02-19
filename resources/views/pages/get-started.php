@@ -679,8 +679,8 @@
             display: inline-flex;
             align-items: center;
             gap: 10px;
-            opacity: 0.28;
-            filter: drop-shadow(0 0 14px rgba(62, 220, 255, 0.34));
+            opacity: 0.36;
+            filter: drop-shadow(0 0 16px rgba(62, 220, 255, 0.42));
             transform-origin: center;
             will-change: transform, opacity;
         }
@@ -697,6 +697,7 @@
         .fx-icon {
             width: 44px;
             height: 44px;
+            position: relative;
             border-radius: 50%;
             border: 1px solid rgba(126, 226, 255, 0.26);
             background: radial-gradient(circle at 30% 30%, rgba(27, 146, 189, 0.42), rgba(7, 29, 64, 0.22));
@@ -709,6 +710,10 @@
         .fx-icon i {
             color: #6eeeff;
             font-size: 1.05rem;
+            display: inline-block;
+            transform-origin: center;
+            transform-style: preserve-3d;
+            backface-visibility: hidden;
             text-shadow: 0 0 12px rgba(91, 236, 255, 0.74);
         }
 
@@ -739,9 +744,39 @@
             min-width: 132px;
         }
 
+        .floating-tech:is(.fx-writer, .fx-rocket-jet, .fx-face, .fx-location, .fx-protected, .fx-storage) {
+            min-width: 228px;
+            height: 54px;
+            padding: 8px 12px;
+            border-radius: 999px;
+            border: 1px solid rgba(145, 227, 255, 0.34);
+            background: linear-gradient(90deg, rgba(3, 18, 42, 0.72) 0%, rgba(10, 48, 86, 0.32) 50%, rgba(3, 18, 42, 0.72) 100%);
+            box-shadow: inset 0 0 0 1px rgba(173, 233, 255, 0.14), 0 12px 24px rgba(1, 14, 36, 0.34);
+            backdrop-filter: blur(2px);
+        }
+
+        .floating-tech:is(.fx-writer, .fx-rocket-jet, .fx-face, .fx-location, .fx-protected, .fx-storage)::before {
+            inset: 0;
+            border-radius: inherit;
+            background: linear-gradient(90deg, rgba(170, 237, 255, 0.14), rgba(170, 237, 255, 0));
+            opacity: 0.72;
+        }
+
+        .floating-tech:is(.fx-writer, .fx-rocket-jet, .fx-face, .fx-location, .fx-protected, .fx-storage) .fx-writing {
+            max-width: 150px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            letter-spacing: 0.05em;
+            font-size: 0.74rem;
+        }
+
+        .floating-tech:is(.fx-writer, .fx-rocket-jet, .fx-face, .fx-location, .fx-protected, .fx-storage) .fx-writing .ai-typewriter {
+            min-width: 142px;
+        }
+
         .fx-writer {
-            top: 18%;
-            left: 6.5%;
+            top: 22%;
+            left: 7%;
             animation: techFloatWriter 10.2s ease-in-out infinite;
         }
 
@@ -763,6 +798,234 @@
             animation: techFloatPulse 14.2s ease-in-out infinite;
         }
 
+        .fx-rocket-jet {
+            top: 40%;
+            left: 7%;
+            animation: techFloatRocketJet 9.8s ease-in-out infinite;
+            opacity: 0.36;
+        }
+
+        .rocket-pack {
+            position: relative;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 44px;
+            height: 64px;
+            margin-right: 2px;
+            animation: rocketBodyDrift 1.4s ease-in-out infinite;
+        }
+
+        .rocket-body {
+            position: absolute;
+            left: 50%;
+            top: 1px;
+            transform: translateX(-50%);
+            display: grid;
+            place-items: center;
+            width: 22px;
+            height: 22px;
+            z-index: 2;
+        }
+
+        .rocket-body i {
+            color: #8af4ff;
+            font-size: 1.02rem;
+            line-height: 1;
+            text-shadow: 0 0 14px rgba(91, 236, 255, 0.85);
+            transform: rotate(-45deg);
+        }
+
+        .rocket-flame {
+            position: absolute;
+            left: 50%;
+            transform: translateX(-50%);
+            border-radius: 32% 32% 55% 55%;
+            pointer-events: none;
+        }
+
+        .rocket-flame-main {
+            top: 22px;
+            width: 8px;
+            height: 16px;
+            background: linear-gradient(180deg, rgba(255, 232, 149, 0.95) 0%, rgba(255, 140, 64, 0.92) 62%, rgba(255, 80, 70, 0.85) 100%);
+            filter: blur(0.3px);
+            animation: rocketFlameMain 0.24s ease-in-out infinite;
+            z-index: 1;
+        }
+
+        .rocket-flame-a {
+            top: 24px;
+            left: 50%;
+            width: 5px;
+            height: 10px;
+            background: linear-gradient(180deg, rgba(255, 214, 122, 0.86), rgba(255, 111, 76, 0.86));
+            animation: rocketFlameSideLeft 0.22s ease-in-out infinite;
+            z-index: 0;
+        }
+
+        .rocket-flame-b {
+            top: 24px;
+            left: 50%;
+            width: 5px;
+            height: 10px;
+            background: linear-gradient(180deg, rgba(255, 214, 122, 0.86), rgba(255, 111, 76, 0.86));
+            animation: rocketFlameSideRight 0.26s ease-in-out infinite reverse;
+            z-index: 0;
+        }
+
+        .rocket-trail {
+            position: absolute;
+            left: 50%;
+            top: 34px;
+            width: 8px;
+            height: 22px;
+            transform: translateX(-50%);
+            border-radius: 0 0 14px 14px;
+            background: linear-gradient(180deg, rgba(239, 252, 255, 0.96) 0%, rgba(205, 243, 255, 0.84) 40%, rgba(175, 231, 255, 0.5) 72%, rgba(133, 213, 255, 0.1) 100%);
+            filter: blur(0.3px);
+            animation: rocketTrailPulse 0.32s ease-in-out infinite;
+            z-index: 0;
+            pointer-events: none;
+        }
+
+        .rocket-smoke {
+            position: absolute;
+            left: 50%;
+            bottom: 4px;
+            border-radius: 50%;
+            background: rgba(204, 244, 255, 0.62);
+            filter: blur(0.1px);
+            pointer-events: none;
+            opacity: 0;
+            z-index: 0;
+        }
+
+        .rocket-smoke.m1 {
+            width: 5px;
+            height: 5px;
+            animation: rocketSmokePuff 1.15s ease-out infinite;
+        }
+
+        .rocket-smoke.m2 {
+            width: 4px;
+            height: 4px;
+            animation: rocketSmokePuff 1.15s ease-out infinite 0.3s;
+        }
+
+        .rocket-smoke.m3 {
+            width: 3px;
+            height: 3px;
+            animation: rocketSmokePuff 1.15s ease-out infinite 0.58s;
+        }
+
+        .rocket-spark {
+            position: absolute;
+            left: 50%;
+            top: 34px;
+            width: 2px;
+            height: 2px;
+            border-radius: 50%;
+            background: #9af9ff;
+            box-shadow: 0 0 10px rgba(154, 249, 255, 0.8);
+            pointer-events: none;
+            opacity: 0;
+        }
+
+        .rocket-spark.s1 {
+            animation: rocketSparkTrail 0.92s linear infinite;
+        }
+
+        .rocket-spark.s2 {
+            width: 2px;
+            height: 2px;
+            animation: rocketSparkTrail 0.85s linear infinite 0.2s;
+        }
+
+        .rocket-spark.s3 {
+            width: 2px;
+            height: 2px;
+            animation: rocketSparkTrail 0.8s linear infinite 0.42s;
+        }
+
+        .fx-star {
+            top: 12%;
+            left: 31%;
+            animation: techFloatStar 12.4s ease-in-out infinite;
+        }
+
+        .fx-satellite {
+            top: 13%;
+            right: 23%;
+            animation: techFloatSatellite 15.4s ease-in-out infinite;
+        }
+
+        .fx-cpu {
+            top: 48%;
+            left: 4.5%;
+            animation: techFloatCpu 13.1s ease-in-out infinite;
+        }
+
+        .fx-network {
+            top: 49%;
+            right: 4.5%;
+            animation: techFloatNetwork 14.3s ease-in-out infinite;
+        }
+
+        .fx-rocket {
+            top: 84%;
+            left: 9%;
+            animation: techFloatRocket 11.3s ease-in-out infinite;
+        }
+
+        .fx-shield {
+            top: 86%;
+            right: 21%;
+            animation: techFloatShield 16.1s ease-in-out infinite;
+        }
+
+        .fx-location {
+            top: 22%;
+            right: 7%;
+            animation: techFloatLocation 12.1s ease-in-out infinite;
+        }
+
+        .fx-face {
+            top: 58%;
+            left: 7%;
+            animation: techFloatFace 10.9s ease-in-out infinite;
+        }
+
+        .fx-protected {
+            top: 40%;
+            right: 7%;
+            animation: techFloatProtected 13.7s ease-in-out infinite;
+        }
+
+        .fx-storage {
+            top: 58%;
+            right: 7%;
+            animation: techFloatStorage 12.8s ease-in-out infinite;
+        }
+
+        .fx-sync {
+            top: 27%;
+            left: 21%;
+            animation: techFloatSync 12.5s ease-in-out infinite;
+        }
+
+        .fx-cloud {
+            top: 57%;
+            left: 2.2%;
+            animation: techFloatCloud 13.2s ease-in-out infinite;
+        }
+
+        .fx-analytics {
+            top: 74%;
+            left: 23%;
+            animation: techFloatAnalytics 14.1s ease-in-out infinite;
+        }
+
         .fx-writer .fx-icon i {
             animation: writerTap 1.2s steps(2, end) infinite;
         }
@@ -777,6 +1040,125 @@
 
         .fx-pulse .fx-icon i {
             animation: techPulseGlow 2s ease-in-out infinite;
+        }
+
+        .fx-star .fx-icon i {
+            animation: techSparkle 1.9s ease-in-out infinite;
+        }
+
+        .fx-satellite .fx-icon i {
+            animation: techSatellite 3.8s linear infinite;
+        }
+
+        .fx-cpu .fx-icon i {
+            animation: techCodeBlink 1.3s ease-in-out infinite;
+        }
+
+        .fx-network .fx-icon i {
+            animation: techPulseGlow 2.3s ease-in-out infinite;
+        }
+
+        .fx-rocket .fx-icon i {
+            animation: techRocket 2.5s ease-in-out infinite;
+        }
+
+        .fx-shield .fx-icon i {
+            animation: techShield 2.8s ease-in-out infinite;
+        }
+
+        .fx-location .fx-icon i {
+            animation: locationPin 1.8s ease-in-out infinite;
+        }
+
+        .fx-location .fx-icon::after {
+            content: '';
+            position: absolute;
+            inset: 6px;
+            border: 1px solid rgba(140, 236, 255, 0.46);
+            border-radius: 50%;
+            animation: locationRing 1.8s ease-out infinite;
+            pointer-events: none;
+        }
+
+        .fx-face .fx-icon {
+            overflow: hidden;
+        }
+
+        .fx-face .fx-icon::before {
+            content: '';
+            position: absolute;
+            inset: 7px;
+            border: 1px solid rgba(124, 235, 255, 0.45);
+            border-radius: 9px;
+            pointer-events: none;
+        }
+
+        .fx-face .fx-icon::after {
+            content: '';
+            position: absolute;
+            left: 8px;
+            right: 8px;
+            top: 9px;
+            height: 2px;
+            border-radius: 999px;
+            background: linear-gradient(90deg, rgba(62, 227, 255, 0), rgba(162, 247, 255, 0.96), rgba(62, 227, 255, 0));
+            animation: faceScanLine 2.1s linear infinite;
+            pointer-events: none;
+        }
+
+        .fx-face .fx-icon i {
+            animation: facePulse 2s ease-in-out infinite;
+        }
+
+        .fx-protected .fx-icon i {
+            animation: protectPulse 2.2s ease-in-out infinite;
+        }
+
+        .fx-protected .fx-icon::after {
+            content: '';
+            position: absolute;
+            width: 7px;
+            height: 7px;
+            right: 5px;
+            bottom: 5px;
+            border-radius: 50%;
+            background: #72f5a8;
+            box-shadow: 0 0 8px rgba(114, 245, 168, 0.92);
+            animation: protectDot 1.5s ease-in-out infinite;
+            pointer-events: none;
+        }
+
+        .fx-storage .fx-icon i {
+            animation: storageBob 2.4s ease-in-out infinite;
+        }
+
+        .fx-storage .fx-icon::after {
+            content: '';
+            position: absolute;
+            left: 10px;
+            right: 10px;
+            bottom: 7px;
+            height: 3px;
+            border-radius: 999px;
+            background: linear-gradient(90deg, rgba(88, 228, 255, 0.25), rgba(184, 246, 255, 0.96), rgba(88, 228, 255, 0.25));
+            animation: storageFlow 1.8s ease-in-out infinite;
+            pointer-events: none;
+        }
+
+        .fx-sync .fx-icon i {
+            animation: techGearSpin 3.8s linear infinite;
+        }
+
+        .fx-cloud .fx-icon i {
+            animation: cloudPulse 2.1s ease-in-out infinite;
+        }
+
+        .fx-analytics .fx-icon i {
+            animation: graphPulse 1.9s ease-in-out infinite;
+        }
+
+        .fx-rocket-jet .fx-writing .ai-typewriter {
+            min-width: 152px;
         }
 
         @keyframes techFloatWriter {
@@ -798,6 +1180,77 @@
         @keyframes techFloatPulse {
             0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
             50% { transform: translate3d(-8px, -9px, 0) scale(1.03); }
+        }
+
+        @keyframes techFloatRocketJet {
+            0%, 100% { transform: translate3d(0, 0, 0); }
+            30% { transform: translate3d(10px, -6px, 0); }
+            60% { transform: translate3d(-5px, 8px, 0); }
+        }
+
+        @keyframes techFloatStar {
+            0%, 100% { transform: translate3d(0, 0, 0); }
+            50% { transform: translate3d(7px, -7px, 0); }
+        }
+
+        @keyframes techFloatSatellite {
+            0%, 100% { transform: translate3d(0, 0, 0); }
+            50% { transform: translate3d(-8px, -5px, 0); }
+        }
+
+        @keyframes techFloatCpu {
+            0%, 100% { transform: translate3d(0, 0, 0); }
+            50% { transform: translate3d(7px, 5px, 0); }
+        }
+
+        @keyframes techFloatNetwork {
+            0%, 100% { transform: translate3d(0, 0, 0); }
+            50% { transform: translate3d(-7px, 8px, 0); }
+        }
+
+        @keyframes techFloatRocket {
+            0%, 100% { transform: translate3d(0, 0, 0); }
+            50% { transform: translate3d(8px, -10px, 0); }
+        }
+
+        @keyframes techFloatShield {
+            0%, 100% { transform: translate3d(0, 0, 0); }
+            50% { transform: translate3d(-8px, -6px, 0); }
+        }
+
+        @keyframes techFloatLocation {
+            0%, 100% { transform: translate3d(0, 0, 0); }
+            50% { transform: translate3d(-7px, -6px, 0); }
+        }
+
+        @keyframes techFloatFace {
+            0%, 100% { transform: translate3d(0, 0, 0); }
+            50% { transform: translate3d(8px, -5px, 0); }
+        }
+
+        @keyframes techFloatProtected {
+            0%, 100% { transform: translate3d(0, 0, 0); }
+            50% { transform: translate3d(-6px, 7px, 0); }
+        }
+
+        @keyframes techFloatStorage {
+            0%, 100% { transform: translate3d(0, 0, 0); }
+            50% { transform: translate3d(7px, 7px, 0); }
+        }
+
+        @keyframes techFloatSync {
+            0%, 100% { transform: translate3d(0, 0, 0); }
+            50% { transform: translate3d(8px, -6px, 0); }
+        }
+
+        @keyframes techFloatCloud {
+            0%, 100% { transform: translate3d(0, 0, 0); }
+            50% { transform: translate3d(6px, 8px, 0); }
+        }
+
+        @keyframes techFloatAnalytics {
+            0%, 100% { transform: translate3d(0, 0, 0); }
+            50% { transform: translate3d(8px, -8px, 0); }
         }
 
         @keyframes fxDotPulse {
@@ -823,6 +1276,122 @@
         @keyframes techPulseGlow {
             0%, 100% { transform: scale(0.95); text-shadow: 0 0 12px rgba(91, 236, 255, 0.6); }
             50% { transform: scale(1.08); text-shadow: 0 0 20px rgba(129, 245, 255, 0.95); }
+        }
+
+        @keyframes techSparkle {
+            0%, 100% { transform: scale(0.9); opacity: 0.68; }
+            50% { transform: scale(1.15); opacity: 1; }
+        }
+
+        @keyframes techSatellite {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        @keyframes techRocket {
+            0%, 100% { transform: translateY(0) rotate(-8deg); }
+            50% { transform: translateY(-3px) rotate(6deg); }
+        }
+
+        @keyframes techShield {
+            0%, 100% { opacity: 0.66; transform: scale(0.94); }
+            50% { opacity: 1; transform: scale(1.07); }
+        }
+
+        @keyframes locationPin {
+            0%, 100% { transform: translateY(0) rotate(0deg) scale(0.96); }
+            20% { transform: translateY(-3px) rotate(-12deg) scale(1.02); }
+            45% { transform: translateY(0) rotate(8deg) scale(1.04); }
+            70% { transform: translateY(-2px) rotate(-6deg) scale(1); }
+        }
+
+        @keyframes locationRing {
+            0% { opacity: 0.62; transform: scale(0.65); }
+            100% { opacity: 0; transform: scale(1.25); }
+        }
+
+        @keyframes faceScanLine {
+            0% { top: 10px; opacity: 0.16; }
+            10% { opacity: 0.92; }
+            50% { top: 28px; opacity: 0.9; }
+            90% { opacity: 0.25; }
+            100% { top: 10px; opacity: 0.16; }
+        }
+
+        @keyframes facePulse {
+            0%, 100% { transform: perspective(280px) rotateY(0deg) scale(0.94); opacity: 0.82; }
+            45% { transform: perspective(280px) rotateY(180deg) scale(1.02); opacity: 1; }
+            55% { transform: perspective(280px) rotateY(180deg) scale(1.02); opacity: 1; }
+        }
+
+        @keyframes protectPulse {
+            0%, 100% { transform: perspective(260px) rotateX(0deg) scale(0.94); opacity: 0.75; }
+            40% { transform: perspective(260px) rotateX(22deg) scale(1.03); opacity: 1; }
+            70% { transform: perspective(260px) rotateX(-16deg) scale(1.01); opacity: 0.95; }
+        }
+
+        @keyframes protectDot {
+            0%, 100% { opacity: 0.3; transform: scale(0.8); }
+            50% { opacity: 1; transform: scale(1.18); }
+        }
+
+        @keyframes storageBob {
+            0%, 100% { transform: translateY(0) rotate(0deg) scale(0.95); }
+            25% { transform: translateY(-2px) rotate(-12deg) scale(1); }
+            50% { transform: translateY(-3px) rotate(8deg) scale(1.05); }
+            75% { transform: translateY(-1px) rotate(-6deg) scale(1); }
+        }
+
+        @keyframes storageFlow {
+            0%, 100% { opacity: 0.35; transform: scaleX(0.82); }
+            50% { opacity: 1; transform: scaleX(1); }
+        }
+
+        @keyframes cloudPulse {
+            0%, 100% { opacity: 0.66; transform: scale(0.95); }
+            50% { opacity: 1; transform: scale(1.08); }
+        }
+
+        @keyframes graphPulse {
+            0%, 100% { opacity: 0.64; transform: scale(0.94); }
+            50% { opacity: 1; transform: scale(1.07); }
+        }
+
+        @keyframes rocketBodyDrift {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-2px); }
+        }
+
+        @keyframes rocketFlameMain {
+            0%, 100% { height: 17px; opacity: 0.76; transform: translateX(-50%) scaleY(0.92); }
+            50% { height: 24px; opacity: 1; transform: translateX(-50%) scaleY(1.08); }
+        }
+
+        @keyframes rocketFlameSideLeft {
+            0%, 100% { height: 11px; opacity: 0.62; transform: translateX(-120%) scaleY(0.9); }
+            50% { height: 15px; opacity: 0.95; transform: translateX(-140%) scaleY(1.07); }
+        }
+
+        @keyframes rocketFlameSideRight {
+            0%, 100% { height: 11px; opacity: 0.62; transform: translateX(20%) scaleY(0.9); }
+            50% { height: 15px; opacity: 0.95; transform: translateX(40%) scaleY(1.07); }
+        }
+
+        @keyframes rocketSparkTrail {
+            0% { opacity: 0; transform: translate3d(-50%, 0, 0) scale(0.55); }
+            18% { opacity: 1; }
+            100% { opacity: 0; transform: translate3d(-50%, 24px, 0) scale(0.08); }
+        }
+
+        @keyframes rocketTrailPulse {
+            0%, 100% { height: 28px; opacity: 0.7; }
+            50% { height: 36px; opacity: 0.95; }
+        }
+
+        @keyframes rocketSmokePuff {
+            0% { opacity: 0; transform: translate(-50%, 0) scale(0.5); }
+            22% { opacity: 0.64; }
+            100% { opacity: 0; transform: translate(-50%, 14px) scale(1.4); }
         }
 
         .hero-content-shell {
@@ -1120,15 +1689,46 @@
         }
 
         @media (max-width: 992px) {
-            .floating-tech {
-                transform: scale(0.86);
-                transform-origin: center;
+            .light-pillar-wrap {
+                filter: contrast(1.1) saturate(1.18) brightness(1.02);
             }
 
-            .fx-writer { top: 18%; left: 3.5%; }
-            .fx-gear { top: 24%; right: 3.5%; }
-            .fx-code { top: 64%; left: 12%; }
-            .fx-pulse { top: 76%; right: 3%; }
+            .pillar-aura-2,
+            .pillar-aura-3 {
+                opacity: 0.14;
+            }
+
+            .floating-tech {
+                transform: none;
+                opacity: 0.4;
+            }
+
+            .floating-tech:is(.fx-writer, .fx-rocket-jet, .fx-face, .fx-location, .fx-protected, .fx-storage) {
+                min-width: 192px;
+                height: 46px;
+                padding: 6px 10px;
+            }
+
+            .floating-tech:is(.fx-writer, .fx-rocket-jet, .fx-face, .fx-location, .fx-protected, .fx-storage) .fx-writing {
+                max-width: 118px;
+                font-size: 0.66rem;
+            }
+
+            .floating-tech:is(.fx-writer, .fx-rocket-jet, .fx-face, .fx-location, .fx-protected, .fx-storage) .fx-writing .ai-typewriter {
+                min-width: 112px;
+            }
+
+            .fx-icon {
+                width: 36px;
+                height: 36px;
+            }
+
+            .fx-writer { top: 21%; left: 2.2%; }
+            .fx-rocket-jet { top: 39%; left: 2.2%; }
+            .fx-face { top: 57%; left: 2.2%; }
+            .fx-location { top: 21%; right: 2.2%; }
+            .fx-protected { top: 39%; right: 2.2%; }
+            .fx-storage { top: 57%; right: 2.2%; }
 
             .hero-title {
                 font-size: clamp(2rem, 7vw, 3.5rem);
@@ -1149,7 +1749,86 @@
 
         @media (max-width: 768px) {
             .ai-fx-layer {
+                display: block;
+            }
+
+            .light-pillar-wrap {
+                filter: contrast(1.1) saturate(1.16) brightness(1.01);
+            }
+
+            .pillar-aura {
                 display: none;
+            }
+
+            .floating-tech {
+                transform: none;
+                opacity: 0.42;
+            }
+
+            .fx-face,
+            .fx-storage {
+                display: none;
+            }
+
+            .floating-tech.fx-writer,
+            .floating-tech.fx-rocket-jet,
+            .floating-tech.fx-location,
+            .floating-tech.fx-protected {
+                min-width: 114px;
+                height: 36px;
+                padding: 5px 8px;
+                border-color: rgba(145, 227, 255, 0.3);
+                backdrop-filter: none;
+                opacity: 0.64;
+                box-shadow: inset 0 0 0 1px rgba(173, 233, 255, 0.16), 0 8px 18px rgba(1, 14, 36, 0.38);
+            }
+
+            .floating-tech.fx-writer .fx-writing,
+            .floating-tech.fx-rocket-jet .fx-writing,
+            .floating-tech.fx-location .fx-writing,
+            .floating-tech.fx-protected .fx-writing {
+                display: block !important;
+                max-width: 70px;
+                font-size: 0.58rem;
+                letter-spacing: 0.035em;
+                text-overflow: clip;
+                overflow: hidden;
+                white-space: nowrap;
+                opacity: 0.95;
+            }
+
+            .floating-tech.fx-writer .fx-writing .ai-typewriter,
+            .floating-tech.fx-rocket-jet .fx-writing .ai-typewriter,
+            .floating-tech.fx-location .fx-writing .ai-typewriter,
+            .floating-tech.fx-protected .fx-writing .ai-typewriter {
+                min-width: 0;
+            }
+
+            .floating-tech.fx-rocket-jet {
+                opacity: 0.5;
+            }
+
+            .fx-icon {
+                width: 26px;
+                height: 26px;
+            }
+
+            .fx-glow-dot {
+                width: 5px;
+                height: 5px;
+                right: -2px;
+                top: -5px;
+                box-shadow: 0 0 12px rgba(124, 245, 255, 0.98);
+            }
+
+            .fx-writer { top: 19%; left: 0.8%; }
+            .fx-rocket-jet { top: 34%; left: 0.8%; }
+            .fx-location { top: 19%; right: 0.8%; }
+            .fx-protected { top: 34%; right: 0.8%; }
+
+            .fx-rocket-jet .rocket-pack {
+                transform: scale(0.64);
+                margin-right: 0;
             }
 
             body {
@@ -1221,19 +1900,44 @@
                 <div class="ai-fx-layer" aria-hidden="true">
                     <div class="floating-tech fx-writer">
                         <span class="fx-icon"><i class="fa-solid fa-keyboard"></i></span>
-                        <span class="fx-writing"><span class="ai-typewriter" data-words="writer|auto verify|smart typing"></span></span>
+                        <span class="fx-writing"><span class="ai-typewriter" data-words="writer|auto verify|smart typing" data-words-mobile="writer|auto|smart">writer</span></span>
                         <span class="fx-glow-dot"></span>
                     </div>
-                    <div class="floating-tech fx-gear">
-                        <span class="fx-icon"><i class="fa-solid fa-gear"></i></span>
+                    <div class="floating-tech fx-rocket-jet">
+                        <span class="rocket-pack">
+                            <span class="rocket-body"><i class="fa-solid fa-rocket"></i></span>
+                            <span class="rocket-flame rocket-flame-main"></span>
+                            <span class="rocket-flame rocket-flame-a"></span>
+                            <span class="rocket-flame rocket-flame-b"></span>
+                            <span class="rocket-trail"></span>
+                            <span class="rocket-smoke m1"></span>
+                            <span class="rocket-smoke m2"></span>
+                            <span class="rocket-smoke m3"></span>
+                            <span class="rocket-spark s1"></span>
+                            <span class="rocket-spark s2"></span>
+                            <span class="rocket-spark s3"></span>
+                        </span>
+                        <span class="fx-writing"><span class="ai-typewriter" data-words="launch mode|booster online|ignite thrust" data-words-mobile="boost|ignite|launch">launch mode</span></span>
                         <span class="fx-glow-dot"></span>
                     </div>
-                    <div class="floating-tech fx-code">
-                        <span class="fx-icon"><i class="fa-solid fa-code"></i></span>
+                    <div class="floating-tech fx-face">
+                        <span class="fx-icon"><i class="fa-solid fa-user-check"></i></span>
+                        <span class="fx-writing"><span class="ai-typewriter" data-words="face recognition|scan identity|match secured"></span></span>
                         <span class="fx-glow-dot"></span>
                     </div>
-                    <div class="floating-tech fx-pulse">
-                        <span class="fx-icon"><i class="fa-solid fa-heart"></i></span>
+                    <div class="floating-tech fx-location">
+                        <span class="fx-icon"><i class="fa-solid fa-location-dot"></i></span>
+                        <span class="fx-writing"><span class="ai-typewriter" data-words="location valid|gps lock|radius safe" data-words-mobile="gps|lock|radius">location valid</span></span>
+                        <span class="fx-glow-dot"></span>
+                    </div>
+                    <div class="floating-tech fx-protected">
+                        <span class="fx-icon"><i class="fa-solid fa-lock"></i></span>
+                        <span class="fx-writing"><span class="ai-typewriter" data-words="protected mode|security active|access guarded" data-words-mobile="secure|shield|guard">protected mode</span></span>
+                        <span class="fx-glow-dot"></span>
+                    </div>
+                    <div class="floating-tech fx-storage">
+                        <span class="fx-icon"><i class="fa-solid fa-database"></i></span>
+                        <span class="fx-writing"><span class="ai-typewriter" data-words="file storage|backup synced|data archived"></span></span>
                         <span class="fx-glow-dot"></span>
                     </div>
                 </div>
@@ -1318,7 +2022,7 @@
                 noiseIntensity: 0.06,
                 mixBlendMode: 'screen',
                 pillarRotation: 25,
-                quality: 'high'
+                quality: 'medium'
             };
 
             root.style.mixBlendMode = config.mixBlendMode;
@@ -1340,20 +2044,26 @@
             const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
             const mouse = new THREE.Vector2(0, 0);
 
+            const prefersReducedMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+            const saveDataEnabled = !!(navigator.connection && navigator.connection.saveData);
+            const memoryHint = typeof navigator.deviceMemory === 'number' ? navigator.deviceMemory : 8;
             const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-            const isLowEndDevice = isMobile || (navigator.hardwareConcurrency && navigator.hardwareConcurrency <= 4);
+            const isLowEndDevice = isMobile || (navigator.hardwareConcurrency && navigator.hardwareConcurrency <= 4) || memoryHint <= 4;
             let effectiveQuality = config.quality;
             if (isLowEndDevice && effectiveQuality === 'high') {
                 effectiveQuality = 'medium';
+            }
+            if (memoryHint <= 2 || saveDataEnabled || prefersReducedMotion) {
+                effectiveQuality = 'low';
             }
             if (isMobile && effectiveQuality !== 'low') {
                 effectiveQuality = 'low';
             }
 
             const qualitySettings = {
-                low: { iterations: 24, waveIterations: 1, pixelRatio: 0.5, precision: 'mediump', stepMultiplier: 1.5 },
-                medium: { iterations: 40, waveIterations: 2, pixelRatio: 0.65, precision: 'mediump', stepMultiplier: 1.2 },
-                high: { iterations: 80, waveIterations: 4, pixelRatio: Math.min(window.devicePixelRatio || 1, 2), precision: 'highp', stepMultiplier: 1.0 }
+                low: { iterations: 18, waveIterations: 1, pixelRatio: 0.42, precision: 'mediump', stepMultiplier: 1.65, targetFPS: 26 },
+                medium: { iterations: 32, waveIterations: 2, pixelRatio: 0.6, precision: 'mediump', stepMultiplier: 1.28, targetFPS: 40 },
+                high: { iterations: 56, waveIterations: 3, pixelRatio: Math.min(window.devicePixelRatio || 1, 1.35), precision: 'highp', stepMultiplier: 1.08, targetFPS: 52 }
             };
             const settings = qualitySettings[effectiveQuality] || qualitySettings.medium;
 
@@ -1480,8 +2190,10 @@
 
             const width = root.clientWidth || window.innerWidth;
             const height = root.clientHeight || window.innerHeight;
+            let dynamicPixelRatio = settings.pixelRatio;
+            const minPixelRatio = Math.max(0.34, settings.pixelRatio * 0.75);
             renderer.setSize(width, height);
-            renderer.setPixelRatio(settings.pixelRatio);
+            renderer.setPixelRatio(dynamicPixelRatio);
             root.appendChild(renderer.domElement);
 
             const pillarRotRad = (config.pillarRotation * Math.PI) / 180;
@@ -1522,8 +2234,10 @@
             let animationId = null;
             let lastTime = performance.now();
             let shaderTime = 0;
-            const targetFPS = effectiveQuality === 'low' ? 30 : 60;
+            const targetFPS = settings.targetFPS || (effectiveQuality === 'low' ? 30 : 60);
             const frameTime = 1000 / targetFPS;
+            let slowFrames = 0;
+            let fastFrames = 0;
 
             const animate = function (currentTime) {
                 const deltaTime = currentTime - lastTime;
@@ -1534,10 +2248,64 @@
                     material.uniforms.uRotSin.value = Math.sin(shaderTime * 0.5);
                     renderer.render(scene, camera);
                     lastTime = currentTime - (deltaTime % frameTime);
+
+                    if (deltaTime > frameTime * 1.8) {
+                        slowFrames += 1;
+                        fastFrames = Math.max(0, fastFrames - 1);
+                    } else if (deltaTime < frameTime * 0.92) {
+                        fastFrames += 1;
+                        slowFrames = Math.max(0, slowFrames - 1);
+                    } else {
+                        slowFrames = Math.max(0, slowFrames - 1);
+                        fastFrames = Math.max(0, fastFrames - 1);
+                    }
+
+                    if (slowFrames >= 8 && dynamicPixelRatio > minPixelRatio) {
+                        dynamicPixelRatio = Math.max(minPixelRatio, dynamicPixelRatio - 0.08);
+                        const nowWidth = root.clientWidth || window.innerWidth;
+                        const nowHeight = root.clientHeight || window.innerHeight;
+                        renderer.setPixelRatio(dynamicPixelRatio);
+                        renderer.setSize(nowWidth, nowHeight, false);
+                        slowFrames = 0;
+                        fastFrames = 0;
+                    } else if (fastFrames >= 26 && dynamicPixelRatio < settings.pixelRatio) {
+                        dynamicPixelRatio = Math.min(settings.pixelRatio, dynamicPixelRatio + 0.04);
+                        const nowWidth = root.clientWidth || window.innerWidth;
+                        const nowHeight = root.clientHeight || window.innerHeight;
+                        renderer.setPixelRatio(dynamicPixelRatio);
+                        renderer.setSize(nowWidth, nowHeight, false);
+                        fastFrames = 0;
+                    }
                 }
                 animationId = requestAnimationFrame(animate);
             };
-            animationId = requestAnimationFrame(animate);
+
+            const startAnimation = function () {
+                if (animationId) {
+                    return;
+                }
+                lastTime = performance.now();
+                animationId = requestAnimationFrame(animate);
+            };
+
+            const stopAnimation = function () {
+                if (!animationId) {
+                    return;
+                }
+                cancelAnimationFrame(animationId);
+                animationId = null;
+            };
+
+            const handleVisibilityChange = function () {
+                if (document.hidden) {
+                    stopAnimation();
+                    return;
+                }
+                startAnimation();
+            };
+
+            document.addEventListener('visibilitychange', handleVisibilityChange, { passive: true });
+            startAnimation();
 
             let resizeTimeout = null;
             const handleResize = function () {
@@ -1547,6 +2315,7 @@
                 resizeTimeout = setTimeout(function () {
                     const nextWidth = root.clientWidth || window.innerWidth;
                     const nextHeight = root.clientHeight || window.innerHeight;
+                    renderer.setPixelRatio(dynamicPixelRatio);
                     renderer.setSize(nextWidth, nextHeight);
                     material.uniforms.uResolution.value.set(nextWidth, nextHeight);
                 }, 150);
@@ -1554,10 +2323,9 @@
             window.addEventListener('resize', handleResize, { passive: true });
 
             window.addEventListener('beforeunload', function () {
+                document.removeEventListener('visibilitychange', handleVisibilityChange);
                 window.removeEventListener('resize', handleResize);
-                if (animationId) {
-                    cancelAnimationFrame(animationId);
-                }
+                stopAnimation();
                 geometry.dispose();
                 material.dispose();
                 renderer.dispose();
@@ -1574,9 +2342,21 @@
             }
 
             const prefersReducedMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+            const compactViewport = window.matchMedia && window.matchMedia('(max-width: 768px)').matches;
+
+            if (prefersReducedMotion) {
+                typeNodes.forEach(function (node) {
+                    node.textContent = '';
+                });
+                return;
+            }
 
             typeNodes.forEach(function (node, index) {
-                const words = (node.dataset.words || '')
+                const wordsSource = compactViewport
+                    ? (node.dataset.wordsMobile || node.dataset.words || '')
+                    : (node.dataset.words || '');
+
+                const words = wordsSource
                     .split('|')
                     .map(function (item) { return item.trim(); })
                     .filter(Boolean);
@@ -1585,8 +2365,10 @@
                     return;
                 }
 
-                if (prefersReducedMotion) {
-                    node.textContent = words[0];
+                const computedStyle = window.getComputedStyle(node);
+                const visible = computedStyle.display !== 'none' && computedStyle.visibility !== 'hidden';
+                if (!visible) {
+                    node.textContent = '';
                     return;
                 }
 
@@ -1596,6 +2378,10 @@
                 let pauseTicks = 0;
 
                 const tick = function () {
+                    if (document.hidden) {
+                        return;
+                    }
+
                     const activeWord = words[wordIndex];
 
                     if (pauseTicks > 0) {
@@ -1624,7 +2410,8 @@
                 };
 
                 node.textContent = '';
-                const speed = 60 + (index * 9);
+                tick();
+                const speed = compactViewport ? (84 + (index * 6)) : (60 + (index * 9));
                 const timer = setInterval(tick, speed);
                 window.addEventListener('beforeunload', function () {
                     clearInterval(timer);

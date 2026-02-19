@@ -326,6 +326,30 @@
             transform: skewX(-45deg) scale(0, 1);
         }
 
+        .btn-submit:disabled:hover {
+            color: #ffffff;
+            transform: none;
+            box-shadow: none;
+        }
+
+        .btn-submit:disabled:hover::after {
+            transform: skewX(-45deg) scale(0, 1);
+        }
+
+        .btn-submit.is-loading,
+        .btn-submit.is-loading:hover {
+            background: var(--gradient-green);
+            color: #ffffff;
+            transform: none;
+            box-shadow: 0 10px 24px rgba(16, 185, 129, 0.28);
+            cursor: progress;
+        }
+
+        .btn-submit.is-loading::after,
+        .btn-submit.is-loading:hover::after {
+            transform: skewX(-45deg) scale(0, 1);
+        }
+
         /* Footer */
         .login-footer {
             text-align: center;
@@ -668,11 +692,13 @@
                 const submitBtn = this.querySelector('.btn-submit');
                 const originalText = submitBtn.innerHTML;
                 submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Memproses...';
+                submitBtn.classList.add('is-loading');
                 submitBtn.disabled = true;
                 
                 // Auto-enable after 5 seconds (in case of error)
                 setTimeout(() => {
                     submitBtn.innerHTML = originalText;
+                    submitBtn.classList.remove('is-loading');
                     submitBtn.disabled = false;
                 }, 5000);
                 

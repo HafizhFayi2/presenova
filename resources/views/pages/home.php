@@ -1228,7 +1228,7 @@
                 </div>
                 <div class="col-6 col-lg-9 text-end">
                     <ul class="nav-links d-none d-lg-flex justify-content-end">
-                        <li class="nav-link-item"><a href="#home">Beranda</a></li>
+                        <li class="nav-link-item"><a href="./">Beranda</a></li>
                         <li class="nav-link-item"><a href="#features">Fitur</a></li>
                         <li class="nav-link-item"><a href="#howto">Cara Kerja</a></li>
                         <li class="nav-link-item"><a href="#pwa">PWA</a></li>

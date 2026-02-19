@@ -76,7 +76,7 @@ class LoginController extends Controller
             $this->applyRememberCookie($remember, 'admin', (int) $admin->user_id);
             $this->touchActivityTimestamp($request, true);
 
-            return redirect($this->appPath('dashboard/admin.php'));
+            return redirect($this->freshDashboardPath('dashboard/admin.php'));
         }
 
         if ($role === 'guru') {
@@ -105,7 +105,7 @@ class LoginController extends Controller
             $this->applyRememberCookie($remember, 'guru', (int) $teacher->id);
             $this->touchActivityTimestamp($request, true);
 
-            return redirect($this->appPath('dashboard/guru.php'));
+            return redirect($this->freshDashboardPath('dashboard/guru.php'));
         }
 
         $studentNisn = preg_replace('/\s+/', '', $username);
@@ -139,7 +139,7 @@ class LoginController extends Controller
         $this->touchActivityTimestamp($request, true);
 
         if ($hasFace) {
-            return redirect($this->appPath('dashboard/siswa.php'));
+            return redirect($this->freshDashboardPath('dashboard/siswa.php'));
         }
 
         if (session('face_reference_missing') === true) {
@@ -224,11 +224,25 @@ class LoginController extends Controller
 
     private function roleDashboardPath(string $role): string
     {
-        return match ($role) {
-            'siswa' => $this->appPath('dashboard/siswa.php'),
-            'guru' => $this->appPath('dashboard/guru.php'),
-            default => $this->appPath('dashboard/admin.php'),
+        $path = match ($role) {
+            'siswa' => 'dashboard/siswa.php',
+            'guru' => 'dashboard/guru.php',
+            default => 'dashboard/admin.php',
         };
+
+        return $this->freshDashboardPath($path);
+    }
+
+    private function freshDashboardPath(string $path): string
+    {
+        return $this->appendTimestampQuery($this->appPath($path));
+    }
+
+    private function appendTimestampQuery(string $url): string
+    {
+        $separator = str_contains($url, '?') ? '&' : '?';
+
+        return $url . $separator . 't=' . time();
     }
 
     private function appPath(string $path): string
