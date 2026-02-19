@@ -141,6 +141,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     if ($updated) {
                         $success = "Password berhasil direset. Silakan login dengan password kode siswa.";
                         logForgotEvent('forgot_password_success', "student_reset|ip={$clientIp}|id_hash={$identifierHash}");
+                        if (function_exists('pushNotifyStudent')) {
+                            pushNotifyStudent(
+                                (int) ($student['id'] ?? 0),
+                                'password_changed',
+                                'Password Akun Direset',
+                                'Password akun siswa Anda direset melalui fitur lupa password. Segera ganti kembali setelah login.',
+                                '/login.php?role=siswa'
+                            );
+                        }
                     } else {
                         $error = "Terjadi kendala saat reset password. Coba lagi.";
                         logForgotEvent('forgot_password_failed', "update_failed|ip={$clientIp}|id_hash={$identifierHash}");

@@ -512,6 +512,16 @@ class DashboardAjaxController extends Controller
                     ['target' => 'student', 'reset_to' => 'student_nisn']
                 );
 
+                if (function_exists('pushNotifyStudent')) {
+                    pushNotifyStudent(
+                        (int) $id,
+                        'password_changed',
+                        'Password Akun Direset',
+                        'Password akun siswa Anda direset admin ke default NISN. Segera login dan ganti password demi keamanan.',
+                        '/login.php?role=siswa'
+                    );
+                }
+
                 return response()->json(['success' => true, 'message' => 'Password siswa berhasil direset ke NISN']);
             }
 
@@ -537,6 +547,15 @@ class DashboardAjaxController extends Controller
                     ['password' => 'masked'],
                     ['target' => 'teacher', 'reset_to' => 'guru123']
                 );
+
+                if (function_exists('logActivity')) {
+                    logActivity(
+                        (int) $id,
+                        'teacher',
+                        'password_reset_by_admin',
+                        'Password guru direset admin ke default. Guru wajib menyimpan password baru saat auto-rotate login berikutnya.'
+                    );
+                }
 
                 return response()->json(['success' => true, 'message' => 'Password berhasil direset ke "guru123"']);
             }
@@ -618,6 +637,10 @@ class DashboardAjaxController extends Controller
             ['password' => 'masked'],
             ['source' => 'guru/profil']
         );
+
+        if (function_exists('logActivity')) {
+            logActivity($teacherId, 'teacher', 'password_changed', 'Guru mengganti password melalui profil');
+        }
 
         return response()->json(['success' => true, 'message' => 'Password berhasil diubah']);
     }

@@ -15,6 +15,12 @@ $privateKey = trim((string) env('PUSH_VAPID_PRIVATE_KEY', ''));
 $subject = trim((string) env('PUSH_VAPID_SUBJECT', 'mailto:admin@presenova.local'));
 $nodeBin = trim((string) env('PUSH_NODE_BIN', 'node'));
 $sendScript = trim((string) env('PUSH_SEND_SCRIPT', public_path('scripts/webpush/send.js')));
+$pushTtlSeconds = (int) env('PUSH_TTL_SECONDS', 86400);
+if ($pushTtlSeconds < 60) {
+    $pushTtlSeconds = 60;
+} elseif ($pushTtlSeconds > 604800) {
+    $pushTtlSeconds = 604800;
+}
 
 if (!$pushEnabled || $publicKey === '' || $privateKey === '' || $nodeBin === '' || $sendScript === '' || !is_file($sendScript)) {
     exit(0);
@@ -55,7 +61,22 @@ function isDueAtMinute(?DateTimeImmutable $eventTime, string $nowMinute): bool
 
 function insertNotificationLog(int $studentId, ?int $scheduleId, string $type, string $scheduledAt): ?int
 {
-    $inserted = DB::table('push_notification_logs')->insertOrIgnore([
+    $checkQuery = DB::table('push_notification_logs')
+        ->where('student_id', $studentId)
+        ->where('type', $type)
+        ->where('scheduled_at', $scheduledAt);
+    if ($scheduleId === null) {
+        $checkQuery->whereNull('student_schedule_id');
+    } else {
+        $checkQuery->where('student_schedule_id', $scheduleId);
+    }
+
+    $existingId = (int) ($checkQuery->value('id') ?? 0);
+    if ($existingId > 0) {
+        return null;
+    }
+
+    DB::table('push_notification_logs')->insert([
         'student_id' => $studentId,
         'student_schedule_id' => $scheduleId,
         'type' => $type,
@@ -64,11 +85,12 @@ function insertNotificationLog(int $studentId, ?int $scheduleId, string $type, s
         'created_at' => now(),
     ]);
 
-    if ($inserted <= 0) {
-        return null;
+    $lastId = (int) DB::getPdo()->lastInsertId();
+    if ($lastId > 0) {
+        return $lastId;
     }
 
-    return (int) DB::getPdo()->lastInsertId();
+    return (int) ($checkQuery->orderByDesc('id')->value('id') ?? 0) ?: null;
 }
 
 function updateNotificationLog(int $logId, string $status, ?string $errorMessage = null): void
@@ -152,7 +174,16 @@ function dispatchPushTasks(array $tasks, string $nodeBin, string $sendScript, st
  * @param array<string, mixed> $payload
  * @return array{failed:int, errors:array<int, string>}
  */
-function sendPushToStudent(int $studentId, array $payload, string $nodeBin, string $sendScript, string $publicKey, string $privateKey, string $subject): array
+function sendPushToStudent(
+    int $studentId,
+    array $payload,
+    string $nodeBin,
+    string $sendScript,
+    string $publicKey,
+    string $privateKey,
+    string $subject,
+    int $pushTtlSeconds
+): array
 {
     $tokens = DB::table('push_tokens')
         ->where('student_id', $studentId)
@@ -186,7 +217,7 @@ function sendPushToStudent(int $studentId, array $payload, string $nodeBin, stri
             ],
             'payload' => $payload,
             'options' => [
-                'TTL' => 120,
+                'TTL' => $pushTtlSeconds,
             ],
         ];
     }
@@ -251,6 +282,24 @@ $schedules = DB::table('student_schedule as ss')
     ->map(static fn ($row) => (array) $row)
     ->all();
 
+$scheduleIds = array_values(array_filter(array_map(static fn ($row): int => (int) ($row['student_schedule_id'] ?? 0), $schedules)));
+$presenceBySchedule = [];
+if ($scheduleIds !== []) {
+    $presenceRows = DB::table('presence')
+        ->whereIn('student_schedule_id', $scheduleIds)
+        ->whereDate('presence_date', $today)
+        ->select('student_schedule_id', 'present_id', 'is_late')
+        ->get()
+        ->map(static fn ($row) => (array) $row)
+        ->all();
+    foreach ($presenceRows as $presenceRow) {
+        $presenceScheduleId = (int) ($presenceRow['student_schedule_id'] ?? 0);
+        if ($presenceScheduleId > 0) {
+            $presenceBySchedule[$presenceScheduleId] = $presenceRow;
+        }
+    }
+}
+
 foreach ($schedules as $schedule) {
     $studentId = (int) ($schedule['student_id'] ?? 0);
     if ($studentId <= 0 || !isset($tokenStudentLookup[$studentId])) {
@@ -269,12 +318,15 @@ foreach ($schedules as $schedule) {
         continue;
     }
 
+    $hasAttendance = $scheduleId > 0 && isset($presenceBySchedule[$scheduleId]);
     $reminderDt = $timeInDt->modify('-2 minutes');
+    $reminderFiveDt = $timeInDt->modify('-5 minutes');
     $lastTenDt = $timeOutDt->modify('-10 minutes');
     $toleranceStartDt = $timeOutDt->modify('-' . $toleranceMinutes . ' minutes');
     $overdueStartDt = $timeOutDt;
 
     $events = [
+        ['type' => 'reminder_5min', 'time' => $reminderFiveDt, 'title' => 'Pengingat Jadwal', 'body' => "5 menit lagi jadwal {$subjectName} dimulai. Siapkan absensi wajah.", 'url' => '/dashboard/siswa.php?page=face_recognition'],
         ['type' => 'reminder_2min', 'time' => $reminderDt, 'title' => 'Pengingat Jadwal', 'body' => "2 menit lagi jadwal {$subjectName} dimulai. Siapkan absensi wajah.", 'url' => '/dashboard/siswa.php?page=face_recognition'],
         ['type' => 'schedule_start', 'time' => $timeInDt, 'title' => 'Jadwal Dimulai', 'body' => "Jadwal {$subjectName} sudah dimulai. Anda sudah bisa absen wajah.", 'url' => '/dashboard/siswa.php?page=face_recognition'],
         ['type' => 'last_10_min', 'time' => $lastTenDt, 'title' => 'Sisa 10 Menit', 'body' => "Sisa 10 menit sebelum jadwal {$subjectName} berakhir. Segera absensi.", 'url' => '/dashboard/siswa.php?page=face_recognition'],
@@ -286,6 +338,10 @@ foreach ($schedules as $schedule) {
     }
 
     foreach ($events as $event) {
+        if ($hasAttendance) {
+            continue;
+        }
+
         $eventTime = $event['time'] instanceof DateTimeImmutable ? $event['time'] : null;
         if (!isDueAtMinute($eventTime, $nowMinute)) {
             continue;
@@ -303,7 +359,8 @@ foreach ($schedules as $schedule) {
             $sendScript,
             $publicKey,
             $privateKey,
-            $subject
+            $subject,
+            $pushTtlSeconds
         );
 
         if (($result['failed'] ?? 0) === 0) {
@@ -314,6 +371,115 @@ foreach ($schedules as $schedule) {
         $errors = $result['errors'] ?? [];
         $errorMessage = is_array($errors) && $errors !== [] ? implode(' | ', $errors) : 'Push failed';
         updateNotificationLog($logId, 'FAILED', $errorMessage);
+    }
+
+    if (!$hasAttendance && $now >= $reminderFiveDt && $now < $timeInDt) {
+        $remainingSeconds = max(0, $timeInDt->getTimestamp() - $now->getTimestamp());
+        $remainingMinutes = (int) ceil(max(0, $remainingSeconds) / 60);
+        if ($remainingMinutes >= 0 && $remainingMinutes <= 5) {
+            $countdownTitle = 'Countdown Absensi Berjalan';
+            $countdownBody = $remainingMinutes > 0
+                ? "Countdown jadwal {$subjectName}: {$remainingMinutes} menit menuju waktu mulai."
+                : "Countdown jadwal {$subjectName}: waktu mulai sudah tiba, segera lakukan absensi.";
+            $countdownLogId = insertNotificationLog(
+                $studentId,
+                $scheduleId > 0 ? $scheduleId : null,
+                'countdown_running',
+                $now->format('Y-m-d H:i:s')
+            );
+
+            if ($countdownLogId !== null) {
+                $countdownResult = sendPushToStudent(
+                    $studentId,
+                    ['title' => $countdownTitle, 'body' => $countdownBody, 'url' => '/dashboard/siswa.php?page=face_recognition'],
+                    $nodeBin,
+                    $sendScript,
+                    $publicKey,
+                    $privateKey,
+                    $subject,
+                    $pushTtlSeconds
+                );
+
+                if (($countdownResult['failed'] ?? 0) === 0) {
+                    updateNotificationLog($countdownLogId, 'SENT');
+                } else {
+                    $countdownErrors = $countdownResult['errors'] ?? [];
+                    $countdownErrorMessage = is_array($countdownErrors) && $countdownErrors !== [] ? implode(' | ', $countdownErrors) : 'Push failed';
+                    updateNotificationLog($countdownLogId, 'FAILED', $countdownErrorMessage);
+                }
+            }
+        }
+    }
+
+    if (!$hasAttendance && $now >= $timeInDt && $now <= $timeOutDt) {
+        $minuteNumber = (int) $now->format('i');
+        if (($minuteNumber % 10) === 0) {
+            $tenMinuteLogId = insertNotificationLog(
+                $studentId,
+                $scheduleId > 0 ? $scheduleId : null,
+                'reminder_every_10min',
+                $now->format('Y-m-d H:i:s')
+            );
+
+            if ($tenMinuteLogId !== null) {
+                $tenMinuteResult = sendPushToStudent(
+                    $studentId,
+                    [
+                        'title' => 'Pengingat Absensi',
+                        'body' => "Anda belum absensi pada jadwal {$subjectName}. Pengingat otomatis tiap 10 menit selama jadwal masih aktif.",
+                        'url' => '/dashboard/siswa.php?page=face_recognition',
+                    ],
+                    $nodeBin,
+                    $sendScript,
+                    $publicKey,
+                    $privateKey,
+                    $subject,
+                    $pushTtlSeconds
+                );
+
+                if (($tenMinuteResult['failed'] ?? 0) === 0) {
+                    updateNotificationLog($tenMinuteLogId, 'SENT');
+                } else {
+                    $tenMinuteErrors = $tenMinuteResult['errors'] ?? [];
+                    $tenMinuteErrorMessage = is_array($tenMinuteErrors) && $tenMinuteErrors !== [] ? implode(' | ', $tenMinuteErrors) : 'Push failed';
+                    updateNotificationLog($tenMinuteLogId, 'FAILED', $tenMinuteErrorMessage);
+                }
+            }
+        }
+    }
+
+    if (!$hasAttendance && isDueAtMinute($timeOutDt, $nowMinute)) {
+        $alpaLogId = insertNotificationLog(
+            $studentId,
+            $scheduleId > 0 ? $scheduleId : null,
+            'alpa_detected',
+            $timeOutDt->format('Y-m-d H:i:s')
+        );
+
+        if ($alpaLogId !== null) {
+            $alpaResult = sendPushToStudent(
+                $studentId,
+                [
+                    'title' => 'Status Alpa Terdeteksi',
+                    'body' => "Jadwal {$subjectName} ditutup tanpa absensi. Status tercatat sebagai Alpa.",
+                    'url' => '/dashboard/siswa.php?page=riwayat',
+                ],
+                $nodeBin,
+                $sendScript,
+                $publicKey,
+                $privateKey,
+                $subject,
+                $pushTtlSeconds
+            );
+
+            if (($alpaResult['failed'] ?? 0) === 0) {
+                updateNotificationLog($alpaLogId, 'SENT');
+            } else {
+                $alpaErrors = $alpaResult['errors'] ?? [];
+                $alpaErrorMessage = is_array($alpaErrors) && $alpaErrors !== [] ? implode(' | ', $alpaErrors) : 'Push failed';
+                updateNotificationLog($alpaLogId, 'FAILED', $alpaErrorMessage);
+            }
+        }
     }
 }
 
@@ -379,7 +545,146 @@ if ($tomorrowDt instanceof DateTimeImmutable && isDueAtMinute($tomorrowDt, $nowM
             $sendScript,
             $publicKey,
             $privateKey,
-            $subject
+            $subject,
+            $pushTtlSeconds
+        );
+
+        if (($result['failed'] ?? 0) === 0) {
+            updateNotificationLog($logId, 'SENT');
+            continue;
+        }
+
+        $errors = $result['errors'] ?? [];
+        $errorMessage = is_array($errors) && $errors !== [] ? implode(' | ', $errors) : 'Push failed';
+        updateNotificationLog($logId, 'FAILED', $errorMessage);
+    }
+}
+
+$weeklyResetTime = '15:00:00';
+$weeklyResetDt = DateTimeImmutable::createFromFormat('Y-m-d H:i:s', $today . ' ' . $weeklyResetTime, $timezone);
+if ((int) $now->format('N') === 6 && $weeklyResetDt instanceof DateTimeImmutable && isDueAtMinute($weeklyResetDt, $nowMinute)) {
+    $weekStartDate = $now->modify('monday this week')->format('Y-m-d');
+    $weekEndDate = $today;
+
+    $weeklySchedules = DB::table('student_schedule')
+        ->whereIn('student_id', $tokenStudentIds)
+        ->whereBetween('schedule_date', [$weekStartDate, $weekEndDate])
+        ->whereIn('status', ['ACTIVE', 'COMPLETED', 'CLOSED'])
+        ->select('student_schedule_id', 'student_id', 'schedule_date', 'time_in', 'time_out')
+        ->get()
+        ->map(static fn ($row) => (array) $row)
+        ->all();
+
+    $weeklyScheduleIds = array_values(array_filter(array_map(static fn ($row): int => (int) ($row['student_schedule_id'] ?? 0), $weeklySchedules)));
+    $weeklyPresenceMap = [];
+    if ($weeklyScheduleIds !== []) {
+        $weeklyPresenceRows = DB::table('presence')
+            ->whereIn('student_schedule_id', $weeklyScheduleIds)
+            ->whereBetween('presence_date', [$weekStartDate, $weekEndDate])
+            ->select('student_schedule_id', 'present_id', 'is_late')
+            ->get()
+            ->map(static fn ($row) => (array) $row)
+            ->all();
+
+        foreach ($weeklyPresenceRows as $presenceRow) {
+            $presenceScheduleId = (int) ($presenceRow['student_schedule_id'] ?? 0);
+            if ($presenceScheduleId > 0) {
+                $weeklyPresenceMap[$presenceScheduleId] = $presenceRow;
+            }
+        }
+    }
+
+    $studentSummary = [];
+    foreach ($tokenStudentIds as $studentIdRaw) {
+        $studentId = (int) $studentIdRaw;
+        if ($studentId <= 0) {
+            continue;
+        }
+        $studentSummary[$studentId] = [
+            'hadir' => 0,
+            'terlambat' => 0,
+            'sakit' => 0,
+            'izin' => 0,
+            'alpa' => 0,
+            'menunggu' => 0,
+        ];
+    }
+
+    foreach ($weeklySchedules as $schedule) {
+        $studentId = (int) ($schedule['student_id'] ?? 0);
+        $scheduleId = (int) ($schedule['student_schedule_id'] ?? 0);
+        if ($studentId <= 0 || !isset($studentSummary[$studentId]) || $scheduleId <= 0) {
+            continue;
+        }
+
+        if (isset($weeklyPresenceMap[$scheduleId])) {
+            $presentId = (int) ($weeklyPresenceMap[$scheduleId]['present_id'] ?? 0);
+            $isLate = strtoupper((string) ($weeklyPresenceMap[$scheduleId]['is_late'] ?? 'N')) === 'Y';
+            if ($presentId === 1) {
+                if ($isLate) {
+                    $studentSummary[$studentId]['terlambat']++;
+                } else {
+                    $studentSummary[$studentId]['hadir']++;
+                }
+            } elseif ($presentId === 2) {
+                $studentSummary[$studentId]['sakit']++;
+            } elseif ($presentId === 3) {
+                $studentSummary[$studentId]['izin']++;
+            } else {
+                $studentSummary[$studentId]['alpa']++;
+            }
+            continue;
+        }
+
+        $scheduleDate = (string) ($schedule['schedule_date'] ?? '');
+        $timeIn = (string) ($schedule['time_in'] ?? '');
+        $timeOut = (string) ($schedule['time_out'] ?? '');
+        $startDt = toDateTime($scheduleDate, $timeIn, $timezone);
+        $endDt = toDateTime($scheduleDate, $timeOut, $timezone);
+        if (!$startDt || !$endDt) {
+            $studentSummary[$studentId]['menunggu']++;
+            continue;
+        }
+        if ($endDt <= $startDt) {
+            $endDt = $endDt->modify('+1 day');
+        }
+
+        if ($now > $endDt) {
+            $studentSummary[$studentId]['alpa']++;
+        } else {
+            $studentSummary[$studentId]['menunggu']++;
+        }
+    }
+
+    foreach ($studentSummary as $studentId => $summary) {
+        $hadir = (int) ($summary['hadir'] ?? 0);
+        $terlambat = (int) ($summary['terlambat'] ?? 0);
+        $sakit = (int) ($summary['sakit'] ?? 0);
+        $izin = (int) ($summary['izin'] ?? 0);
+        $alpa = (int) ($summary['alpa'] ?? 0);
+        $menunggu = (int) ($summary['menunggu'] ?? 0);
+        $totalFinal = $hadir + $terlambat + $sakit + $izin + $alpa;
+
+        $body = "Rekap reset Sabtu: Hadir {$hadir}, Terlambat {$terlambat}, Sakit {$sakit}, Izin {$izin}, Alpa {$alpa}.";
+        if ($menunggu > 0) {
+            $body .= " Jadwal menunggu final: {$menunggu}.";
+        }
+        $body .= " Total final: {$totalFinal}.";
+
+        $logId = insertNotificationLog($studentId, null, 'weekly_reset_recap', $weeklyResetDt->format('Y-m-d H:i:s'));
+        if ($logId === null) {
+            continue;
+        }
+
+        $result = sendPushToStudent(
+            $studentId,
+            ['title' => 'Rekap Mingguan Absensi', 'body' => $body, 'url' => '/dashboard/siswa.php?page=riwayat'],
+            $nodeBin,
+            $sendScript,
+            $publicKey,
+            $privateKey,
+            $subject,
+            $pushTtlSeconds
         );
 
         if (($result['failed'] ?? 0) === 0) {

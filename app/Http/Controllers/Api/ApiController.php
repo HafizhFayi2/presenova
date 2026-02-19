@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Services\FaceMatcherService;
 use App\Services\ScheduleSyncService;
+use App\Services\StudentPushNotificationService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
@@ -13,7 +14,8 @@ use Illuminate\Support\Facades\DB;
 class ApiController extends Controller
 {
     public function __construct(
-        private readonly ScheduleSyncService $scheduleSyncService
+        private readonly ScheduleSyncService $scheduleSyncService,
+        private readonly StudentPushNotificationService $studentPushNotificationService
     ) {
     }
 
@@ -107,40 +109,60 @@ class ApiController extends Controller
         $userAgent = (string) $request->header('User-Agent', '');
         $platform = (string) $request->header('Sec-CH-UA-Platform', '');
         $browser = $this->detectBrowser($userAgent);
+        $now = now();
 
-        $sql = "
-            INSERT INTO push_tokens (
-                student_id, endpoint, p256dh, auth, content_encoding,
-                browser, platform, user_agent, is_active, created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'Y', NOW(), NOW())
-            ON DUPLICATE KEY UPDATE
-                student_id = VALUES(student_id),
-                p256dh = VALUES(p256dh),
-                auth = VALUES(auth),
-                content_encoding = VALUES(content_encoding),
-                browser = VALUES(browser),
-                platform = VALUES(platform),
-                user_agent = VALUES(user_agent),
-                is_active = 'Y',
-                updated_at = NOW()
-        ";
+        try {
+            $existingToken = DB::table('push_tokens')
+                ->where('endpoint', $endpoint)
+                ->orderByDesc('id')
+                ->select('id')
+                ->first();
 
-        $ok = DB::statement($sql, [
-            $studentId,
-            $endpoint,
-            $p256dh,
-            $auth,
-            $contentEncoding,
-            $browser,
-            $platform !== '' ? $platform : null,
-            $userAgent !== '' ? $userAgent : null,
-        ]);
+            $payload = [
+                'student_id' => $studentId,
+                'endpoint' => $endpoint,
+                'p256dh' => $p256dh,
+                'auth' => $auth,
+                'content_encoding' => $contentEncoding,
+                'browser' => $browser,
+                'platform' => $platform !== '' ? $platform : null,
+                'user_agent' => $userAgent !== '' ? $userAgent : null,
+                'is_active' => 'Y',
+                'updated_at' => $now,
+            ];
 
-        if (!$ok) {
+            if ($existingToken) {
+                $tokenId = (int) ($existingToken->id ?? 0);
+                if ($tokenId > 0) {
+                    DB::table('push_tokens')
+                        ->where('id', $tokenId)
+                        ->update($payload);
+
+                    DB::table('push_tokens')
+                        ->where('endpoint', $endpoint)
+                        ->where('id', '!=', $tokenId)
+                        ->update([
+                            'is_active' => 'N',
+                            'updated_at' => $now,
+                        ]);
+                } else {
+                    $tokenId = (int) DB::table('push_tokens')->insertGetId(array_merge($payload, [
+                        'created_at' => $now,
+                    ]));
+                }
+            } else {
+                $tokenId = (int) DB::table('push_tokens')->insertGetId(array_merge($payload, [
+                    'created_at' => $now,
+                ]));
+            }
+
+            return response()->json([
+                'success' => true,
+                'token_id' => $tokenId > 0 ? $tokenId : null,
+            ]);
+        } catch (\Throwable $e) {
             return response()->json(['success' => false, 'message' => 'Gagal menyimpan subscription']);
         }
-
-        return response()->json(['success' => true]);
     }
 
     public function removeSubscription(Request $request): JsonResponse
@@ -396,6 +418,14 @@ class ApiController extends Controller
         $payload['token_expires_at'] = $expiresAt;
         $payload['message'] = 'Verifikasi wajah berhasil';
 
+        $this->notifyStudent(
+            $studentId,
+            'deepface_verified',
+            'Verifikasi Wajah Berhasil',
+            'DeepFace berhasil memverifikasi wajah Anda dengan skor ' . number_format($similarity, 2) . '%.',
+            '/dashboard/siswa.php?page=face_recognition'
+        );
+
         return response()->json($payload);
     }
 
@@ -543,6 +573,13 @@ class ApiController extends Controller
 
         session(['has_face' => true]);
         $this->logActivity($studentId, 'student', 'register_face', 'Registrasi wajah berhasil');
+        $this->notifyStudent(
+            $studentId,
+            'face_registration_success',
+            'Registrasi Wajah Berhasil',
+            'Foto referensi wajah berhasil disimpan dan siap dipakai untuk verifikasi absensi.',
+            '/dashboard/siswa.php?page=profil'
+        );
 
         return response()->json([
             'success' => true,
@@ -870,6 +907,35 @@ class ApiController extends Controller
             }
             $this->logActivity($studentId, 'student', 'attendance', implode(' | ', $detailParts));
 
+            $scheduleLabelParts = [];
+            if ($subjectName !== '') {
+                $scheduleLabelParts[] = $subjectName;
+            }
+            if ($className !== '') {
+                $scheduleLabelParts[] = $className;
+            }
+            $scheduleLabel = $scheduleLabelParts !== [] ? implode(' - ', $scheduleLabelParts) : 'jadwal saat ini';
+
+            if ($isLate) {
+                $this->notifyStudent(
+                    $studentId,
+                    'attendance_overdue',
+                    'Absensi Terlambat',
+                    "Absensi {$presentLabel} tercatat terlambat {$lateTime} menit pada {$scheduleLabel}.",
+                    '/dashboard/siswa.php?page=riwayat',
+                    $scheduleId > 0 ? $scheduleId : null
+                );
+            } else {
+                $this->notifyStudent(
+                    $studentId,
+                    'attendance_success',
+                    'Absensi Berhasil',
+                    "Absensi {$presentLabel} berhasil tercatat pada {$scheduleLabel}.",
+                    '/dashboard/siswa.php?page=riwayat',
+                    $scheduleId > 0 ? $scheduleId : null
+                );
+            }
+
             return $this->attendanceJson($requestPath, [
                 'success' => true,
                 'message' => 'Absensi berhasil',
@@ -897,6 +963,16 @@ class ApiController extends Controller
                 'student_id' => $studentId,
                 'schedule_id' => $scheduleId,
             ]);
+            if ($studentId > 0) {
+                $this->notifyStudent(
+                    $studentId,
+                    'system_error',
+                    'Gangguan Sistem Absensi',
+                    'Sistem mengalami kendala saat menyimpan absensi. Silakan coba kembali beberapa saat lagi.',
+                    '/dashboard/siswa.php?page=face_recognition',
+                    $scheduleId > 0 ? $scheduleId : null
+                );
+            }
 
             return $this->attendanceJson($requestPath, ['success' => false, 'message' => 'Terjadi kesalahan server. Silakan coba lagi.'], 500);
         }
@@ -1135,6 +1211,32 @@ class ApiController extends Controller
             ]);
         } catch (\Throwable) {
             // Keep API non-blocking if logging fails.
+        }
+    }
+
+    private function notifyStudent(
+        int $studentId,
+        string $type,
+        string $title,
+        string $body,
+        string $url = '/dashboard/siswa.php?page=jadwal',
+        ?int $scheduleId = null
+    ): void {
+        if ($studentId <= 0) {
+            return;
+        }
+
+        try {
+            $this->studentPushNotificationService->notifyStudent(
+                $studentId,
+                trim($type) !== '' ? trim($type) : 'system_notice',
+                trim($title) !== '' ? trim($title) : 'Notifikasi Sistem',
+                trim($body),
+                $url,
+                $scheduleId
+            );
+        } catch (\Throwable) {
+            // Keep API response non-blocking.
         }
     }
 

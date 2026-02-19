@@ -31,6 +31,63 @@ if (!function_exists('getDefaultLocationId')) {
     }
 }
 
+if (!function_exists('getLocationNameById')) {
+    function getLocationNameById($db, $locationId) {
+        $locationId = (int) $locationId;
+        if ($locationId <= 0) {
+            return 'Tidak ditentukan';
+        }
+        $stmt = $db->query("SELECT location_name FROM school_location WHERE location_id = ? LIMIT 1", [$locationId]);
+        $row = $stmt ? $stmt->fetch() : null;
+        $name = trim((string) ($row['location_name'] ?? ''));
+
+        return $name !== '' ? $name : ('ID #' . $locationId);
+    }
+}
+
+if (!function_exists('notifyDefaultLocationChanged')) {
+    function notifyDefaultLocationChanged($db, $oldLocationId, $newLocationId, $actorLabel = 'admin') {
+        $oldLocationId = (int) $oldLocationId;
+        $newLocationId = (int) $newLocationId;
+        if ($newLocationId <= 0 || $oldLocationId === $newLocationId) {
+            return;
+        }
+
+        $oldName = getLocationNameById($db, $oldLocationId);
+        $newName = getLocationNameById($db, $newLocationId);
+        $title = 'Lokasi Default Absensi Diubah';
+        $body = "Patokan GPS absensi berubah dari {$oldName} ke {$newName}. Pastikan lokasi Anda sesuai sebelum melakukan absensi.";
+
+        $studentStmt = $db->query("SELECT id FROM student");
+        $students = $studentStmt ? $studentStmt->fetchAll() : [];
+        foreach ($students as $studentRow) {
+            $studentId = (int) ($studentRow['id'] ?? 0);
+            if ($studentId <= 0) {
+                continue;
+            }
+            if (function_exists('pushNotifyStudent')) {
+                pushNotifyStudent(
+                    $studentId,
+                    'default_location_changed',
+                    $title,
+                    $body,
+                    '/dashboard/siswa.php?page=face_recognition'
+                );
+            }
+        }
+
+        if (function_exists('logActivity')) {
+            $adminId = (int) ($_SESSION['user_id'] ?? 0);
+            logActivity(
+                $adminId,
+                'admin',
+                'default_location_changed',
+                "Default lokasi berubah {$oldName} -> {$newName} oleh {$actorLabel}"
+            );
+        }
+    }
+}
+
 if (!function_exists('locationRedirect')) {
     function locationRedirect($type, $message) {
         header("Location: admin.php?table=location&{$type}=" . urlencode($message));
@@ -96,6 +153,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             locationRedirect('error', implode(' ', $errors));
         }
 
+        $oldDefaultLocationId = getDefaultLocationId($db);
         $db->beginTransaction();
 
         if ($location_id === 0) {
@@ -137,6 +195,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         $db->commit();
+
+        if ($set_as_default && $oldDefaultLocationId !== (int) $location_id) {
+            notifyDefaultLocationChanged($db, $oldDefaultLocationId, (int) $location_id, 'admin/location_form');
+        }
+
         locationRedirect('success', $successMessage);
     } elseif (isset($_POST['site_id'])) {
         $time_tolerance = $_POST['time_tolerance'] ?? '';
@@ -179,6 +242,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             locationRedirect('error', implode(' ', $errors));
         }
 
+        $oldDefaultLocationId = getDefaultLocationId($db);
         $db->beginTransaction();
 
         if ($defaultLocation && $defaultLocation['is_active'] !== 'Y') {
@@ -209,6 +273,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         $db->commit();
+
+        if ($oldDefaultLocationId !== (int) $default_location_id) {
+            notifyDefaultLocationChanged($db, $oldDefaultLocationId, (int) $default_location_id, 'admin/location_setting');
+        }
+
         locationRedirect('success', 'Pengaturan sistem berhasil diperbarui!');
     }
 }
@@ -267,6 +336,7 @@ if (isset($_GET['action']) && $_GET['action'] === 'set_default' && isset($_GET['
         locationRedirect('error', 'Lokasi tidak ditemukan.');
     }
 
+    $oldDefaultLocationId = getDefaultLocationId($db);
     $db->beginTransaction();
 
     if ($locationRow['is_active'] !== 'Y') {
@@ -280,6 +350,11 @@ if (isset($_GET['action']) && $_GET['action'] === 'set_default' && isset($_GET['
     }
 
     $db->commit();
+
+    if ($oldDefaultLocationId !== (int) $location_id) {
+        notifyDefaultLocationChanged($db, $oldDefaultLocationId, (int) $location_id, 'admin/location_quick_action');
+    }
+
     locationRedirect('success', 'Lokasi default berhasil diperbarui!');
 }
 

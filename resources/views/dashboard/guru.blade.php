@@ -653,6 +653,28 @@ $(document).ready(function() {
             teacherPasswordModal.show();
         }
 
+        const notifyTeacherPasswordUpdate = async () => {
+            if (!('Notification' in window) || Notification.permission !== 'granted' || !('serviceWorker' in navigator)) {
+                return;
+            }
+
+            const teacherCode = <?php echo json_encode($teacherCodeForReset, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES); ?>;
+            const teacherName = <?php echo json_encode($teacherFullNameForReset, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES); ?>;
+
+            try {
+                const registration = await navigator.serviceWorker.ready;
+                registration.showNotification('Password Guru Diperbarui', {
+                    body: `Akun ${teacherName} (${teacherCode}) sudah dirotasi otomatis. Simpan password baru Anda sekarang.`,
+                    icon: '../assets/images/logo-192.png',
+                    badge: '../assets/images/logo-192.png',
+                    data: { url: '?page=profil' }
+                });
+            } catch (error) {
+                // Silent fail for unsupported browser states.
+            }
+        };
+        notifyTeacherPasswordUpdate();
+
         let teacherFeedbackTimer = null;
         const setTeacherPasswordFeedback = (message, type = 'info') => {
             if (!teacherPasswordFeedbackEl) {

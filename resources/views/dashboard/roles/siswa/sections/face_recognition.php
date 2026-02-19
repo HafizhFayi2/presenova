@@ -264,7 +264,6 @@ if (isset($db)) {
                 <div class="status-message" id="memoryStatusMessage">
                     Memantau penggunaan RAM saat face recognition berjalan.
                 </div>
-                <div class="text-muted small" id="deviceMemoryText"></div>
             </div>
 
             <div class="face-card reference-card">
@@ -522,7 +521,6 @@ document.addEventListener('DOMContentLoaded', function() {
     const memoryBarFill = document.getElementById('memoryBarFill');
     const memoryStatusMessage = document.getElementById('memoryStatusMessage');
     const memorySupportBadge = document.getElementById('memorySupportBadge');
-    const deviceMemoryText = document.getElementById('deviceMemoryText');
     const locationLockLayer = document.getElementById('locationLockLayer');
     const locationLockMessage = document.getElementById('locationLockMessage');
     const locationRadiusText = document.getElementById('locationRadiusText');
@@ -588,14 +586,18 @@ document.addEventListener('DOMContentLoaded', function() {
     const locationSampleWindow = 3;
     const stableWithinThreshold = 1;
     const stableOutsideThreshold = 2;
-    const memoryMonitorIntervalMs = 1500;
-    const memoryWarningPercent = 72;
-    const memoryCriticalPercent = 85;
-    const memoryRecoverPercent = 62;
-    const memoryWarningLagMs = 260;
-    const memoryCriticalLagMs = 700;
-    const memoryRecoverLagMs = 140;
-    const memoryCriticalHoldMs = 2800;
+    const memoryMonitorIntervalMs = 1200;
+    const memoryBudgetBytes = 4 * 1024 * 1024 * 1024; // Budget runtime tetap 4GB
+    const memoryTurboPercent = 70;
+    const memoryTurboStartBytes = 10 * 1024 * 1024; // Mode maksimal dipicu sejak 0-10MB
+    const memoryWarningPercent = 85;
+    const memoryCriticalPercent = 92;
+    const memoryRecoverPercent = 78;
+    const memoryTurboLagMs = 190;
+    const memoryWarningLagMs = 360;
+    const memoryCriticalLagMs = 850;
+    const memoryRecoverLagMs = 180;
+    const memoryCriticalHoldMs = 2600;
     const memoryRecoverRequiredTicks = 2;
 
     let stream = null;
@@ -678,6 +680,8 @@ document.addEventListener('DOMContentLoaded', function() {
     let memoryLastTickAt = 0;
     let memoryLastLagMs = 0;
     let memoryLastPercent = 0;
+    let memoryLastUsedBytes = 0;
+    let memoryLastSupportsHeap = false;
     let memoryLastNotifyAt = 0;
     let poseMonitorSkipTick = 0;
 
@@ -709,6 +713,57 @@ document.addEventListener('DOMContentLoaded', function() {
 
     function setCameraStatus(text) {
         cameraStatus.textContent = text;
+    }
+
+    function getMemoryProfile() {
+        if (memoryPressureState === 'critical') {
+            return 'critical';
+        }
+        if (memoryPressureState === 'warning') {
+            return 'throttle';
+        }
+        const turboReady = memoryLastSupportsHeap
+            && (memoryLastUsedBytes <= memoryTurboStartBytes || memoryLastPercent < memoryTurboPercent)
+            && memoryLastLagMs <= memoryTurboLagMs;
+        return turboReady ? 'turbo' : 'normal';
+    }
+
+    function getCapturePipelineConfig() {
+        const profile = getMemoryProfile();
+        if (profile === 'critical') {
+            return {
+                profile,
+                maxSide: 440,
+                jpegQuality: 0.8,
+                snapshotScale: 1.25,
+                snapshotDelayMs: 260
+            };
+        }
+        if (profile === 'throttle') {
+            return {
+                profile,
+                maxSide: 580,
+                jpegQuality: 0.83,
+                snapshotScale: 1.45,
+                snapshotDelayMs: 200
+            };
+        }
+        if (profile === 'turbo') {
+            return {
+                profile,
+                maxSide: 980,
+                jpegQuality: 0.9,
+                snapshotScale: 1.95,
+                snapshotDelayMs: 70
+            };
+        }
+        return {
+            profile,
+            maxSide: 760,
+            jpegQuality: 0.86,
+            snapshotScale: 1.7,
+            snapshotDelayMs: 140
+        };
     }
 
     function isMemoryGuardActive() {
@@ -771,6 +826,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const supportsHeap = !!context.supportsHeap;
         const percent = Number.isFinite(context.percent) ? context.percent : memoryLastPercent;
         const lagMs = Number.isFinite(context.lagMs) ? context.lagMs : memoryLastLagMs;
+        const profile = String(context.profile || 'normal');
         const previousState = memoryPressureState;
         memoryPressureState = nextState;
 
@@ -791,12 +847,17 @@ document.addEventListener('DOMContentLoaded', function() {
             const info = supportsHeap
                 ? `Heap ${percent.toFixed(1)}% | Lag ${Math.round(lagMs)} ms`
                 : `Lag ${Math.round(lagMs)} ms`;
-            memoryStatusMessage.textContent = `Beban meningkat (${info}). Sistem memperlambat proses agar tetap responsif.`;
+            memoryStatusMessage.textContent = `Pemakaian RAM melewati 85% (${info}). Throttling aktif agar aplikasi tidak hang.`;
         } else {
             if (supportsHeap) {
                 memorySupportBadge.className = 'match-badge ready';
-                memorySupportBadge.textContent = 'Aktif';
-                memoryStatusMessage.textContent = `Penggunaan RAM aman (Heap ${percent.toFixed(1)}% | Lag ${Math.round(lagMs)} ms).`;
+                if (profile === 'turbo') {
+                    memorySupportBadge.textContent = 'Turbo';
+                    memoryStatusMessage.textContent = `Mode cepat aktif (baseline 4GB, Heap awal 0-10MB dipacu maksimal | Lag ${Math.round(lagMs)} ms).`;
+                } else {
+                    memorySupportBadge.textContent = 'Aktif';
+                    memoryStatusMessage.textContent = `Penggunaan RAM aman (Heap ${percent.toFixed(1)}% | Lag ${Math.round(lagMs)} ms).`;
+                }
             } else {
                 memorySupportBadge.className = 'match-badge warning';
                 memorySupportBadge.textContent = 'Terbatas';
@@ -1331,12 +1392,13 @@ document.addEventListener('DOMContentLoaded', function() {
         if (!target) {
             return '';
         }
+        const captureConfig = getCapturePipelineConfig();
         ensureAttendanceMap(currentLat, currentLng);
-        await new Promise((resolve) => setTimeout(resolve, 160));
+        await new Promise((resolve) => setTimeout(resolve, captureConfig.snapshotDelayMs));
         try {
             const canvas = await html2canvas(target, {
                 backgroundColor: null,
-                scale: Math.min(2, window.devicePixelRatio || 1.5),
+                scale: captureConfig.snapshotScale,
                 useCORS: true,
                 allowTaint: false
             });
@@ -1530,48 +1592,84 @@ document.addEventListener('DOMContentLoaded', function() {
         const limit = perfMemory?.jsHeapSizeLimit || 0;
         const total = perfMemory?.totalJSHeapSize || 0;
         const supportsHeap = Number.isFinite(limit) && limit > 0;
-        const percent = supportsHeap ? Math.min(100, (used / limit) * 100) : 0;
+        const effectiveLimit = supportsHeap
+            ? Math.max(1, Math.min(limit, memoryBudgetBytes))
+            : 0;
+        const percent = supportsHeap ? Math.min(100, (used / effectiveLimit) * 100) : 0;
 
         memoryUsedText.textContent = supportsHeap ? formatMB(used) : '-';
         memoryLimitText.textContent = supportsHeap
-            ? formatMB(limit)
+            ? formatMB(effectiveLimit)
             : ((Number.isFinite(total) && total > 0) ? formatMB(total) : '-');
         memoryBarFill.style.width = supportsHeap
             ? (percent.toFixed(1) + '%')
             : (Math.min(100, lagMs / 10).toFixed(1) + '%');
 
         let nextState = 'normal';
-        if ((supportsHeap && percent >= memoryCriticalPercent) || lagMs >= memoryCriticalLagMs) {
-            nextState = 'critical';
-            memoryGuardHoldUntil = Math.max(memoryGuardHoldUntil, now + memoryCriticalHoldMs);
-            memoryRecoverStableTicks = 0;
-        } else if ((supportsHeap && percent >= memoryWarningPercent) || lagMs >= memoryWarningLagMs) {
-            nextState = 'warning';
-            memoryRecoverStableTicks = 0;
-        } else {
-            const safeByHeap = !supportsHeap || percent <= memoryRecoverPercent;
-            const safeByLag = lagMs <= memoryRecoverLagMs;
-            if (safeByHeap && safeByLag) {
-                memoryRecoverStableTicks += 1;
-            } else {
-                memoryRecoverStableTicks = 0;
-            }
-
-            if (now < memoryGuardHoldUntil) {
+        if (supportsHeap) {
+            if (percent > memoryCriticalPercent || (percent > memoryWarningPercent && lagMs >= memoryCriticalLagMs)) {
                 nextState = 'critical';
-            } else if (memoryRecoverStableTicks < memoryRecoverRequiredTicks && memoryPressureState !== 'normal') {
+                memoryGuardHoldUntil = Math.max(memoryGuardHoldUntil, now + memoryCriticalHoldMs);
+                memoryRecoverStableTicks = 0;
+            } else if (percent > memoryWarningPercent) {
                 nextState = 'warning';
-            } else if (memoryRecoverStableTicks >= memoryRecoverRequiredTicks) {
-                memoryGuardHoldUntil = 0;
+                memoryRecoverStableTicks = 0;
+            } else {
+                const safeByHeap = percent <= memoryRecoverPercent;
+                const safeByLag = lagMs <= memoryRecoverLagMs;
+                if (safeByHeap && safeByLag) {
+                    memoryRecoverStableTicks += 1;
+                } else {
+                    memoryRecoverStableTicks = 0;
+                }
+
+                if (now < memoryGuardHoldUntil) {
+                    nextState = 'critical';
+                } else if (memoryRecoverStableTicks < memoryRecoverRequiredTicks && memoryPressureState !== 'normal') {
+                    nextState = 'warning';
+                } else if (memoryRecoverStableTicks >= memoryRecoverRequiredTicks) {
+                    memoryGuardHoldUntil = 0;
+                }
+            }
+        } else {
+            if (lagMs >= memoryCriticalLagMs) {
+                nextState = 'critical';
+                memoryGuardHoldUntil = Math.max(memoryGuardHoldUntil, now + memoryCriticalHoldMs);
+                memoryRecoverStableTicks = 0;
+            } else if (lagMs >= memoryWarningLagMs) {
+                nextState = 'warning';
+                memoryRecoverStableTicks = 0;
+            } else {
+                if (lagMs <= memoryRecoverLagMs) {
+                    memoryRecoverStableTicks += 1;
+                } else {
+                    memoryRecoverStableTicks = 0;
+                }
+                if (now < memoryGuardHoldUntil) {
+                    nextState = 'critical';
+                } else if (memoryRecoverStableTicks < memoryRecoverRequiredTicks && memoryPressureState !== 'normal') {
+                    nextState = 'warning';
+                } else if (memoryRecoverStableTicks >= memoryRecoverRequiredTicks) {
+                    memoryGuardHoldUntil = 0;
+                }
             }
         }
 
+        const profile = nextState === 'critical'
+            ? 'critical'
+            : (nextState === 'warning'
+                ? 'throttle'
+                : ((supportsHeap && percent < memoryTurboPercent && lagMs <= memoryTurboLagMs) ? 'turbo' : 'normal'));
+
         memoryLastPercent = supportsHeap ? percent : 0;
         memoryLastLagMs = lagMs;
+        memoryLastUsedBytes = supportsHeap ? used : 0;
+        memoryLastSupportsHeap = supportsHeap;
         setMemoryPressureState(nextState, {
             supportsHeap,
             percent,
-            lagMs
+            lagMs,
+            profile
         });
     }
 
@@ -1590,6 +1688,8 @@ document.addEventListener('DOMContentLoaded', function() {
         memoryPressureState = 'normal';
         memoryGuardHoldUntil = 0;
         memoryRecoverStableTicks = 0;
+        memoryLastUsedBytes = 0;
+        memoryLastSupportsHeap = false;
         poseMonitorSkipTick = 0;
     }
 
@@ -1992,27 +2092,45 @@ document.addEventListener('DOMContentLoaded', function() {
         return true;
     }
 
-    async function notifyOutsideRadius(distance, accuracyText) {
-        if (!canNotifyOutsideRadius()) return;
+    function canNotifyEvent(key, cooldownMs) {
+        if (!key || cooldownMs <= 0) {
+            return true;
+        }
+        const now = Date.now();
+        const eventKey = `face_event_notify_${studentKey}_${key}`;
+        const lastRaw = sessionStorage.getItem(eventKey);
+        const last = lastRaw ? parseInt(lastRaw, 10) : 0;
+        if (last && (now - last) < cooldownMs) {
+            return false;
+        }
+        sessionStorage.setItem(eventKey, String(now));
+        return true;
+    }
+
+    async function notifyStudentEvent(title, body, url, eventKey = '', cooldownMs = 0) {
+        if (!canNotifyEvent(eventKey, cooldownMs)) return;
         if (!('Notification' in window) || Notification.permission !== 'granted') return;
         if (!('serviceWorker' in navigator)) return;
 
-        const distanceText = Number.isFinite(distance) ? `${Math.round(distance)} m` : 'di luar radius';
-        const extra = accuracyText ? ` (akurasi +/-${accuracyText} m)` : '';
-        const body = `Anda berada di luar radius lokasi (${distanceText})${extra}.`;
-        const url = '?page=face_recognition';
-
         try {
             const registration = await navigator.serviceWorker.ready;
-            registration.showNotification('Lokasi di luar radius', {
+            registration.showNotification(title, {
                 body,
                 icon: '/assets/images/logo-192.png',
                 badge: '/assets/images/logo-192.png',
-                data: { url }
+                data: { url: url || '?page=jadwal' }
             });
         } catch (error) {
             // Silent fail for unsupported environments
         }
+    }
+
+    async function notifyOutsideRadius(distance, accuracyText) {
+        if (!canNotifyOutsideRadius()) return;
+        const distanceText = Number.isFinite(distance) ? `${Math.round(distance)} m` : 'di luar radius';
+        const extra = accuracyText ? ` (akurasi +/-${accuracyText} m)` : '';
+        const body = `Anda berada di luar radius lokasi (${distanceText})${extra}.`;
+        await notifyStudentEvent('Lokasi di luar radius', body, '?page=face_recognition', 'outside_radius', locationNotifyCooldownMs);
     }
 
     function handleLocationSuccess(position) {
@@ -2761,16 +2879,15 @@ document.addEventListener('DOMContentLoaded', function() {
             return sourceCanvas ? sourceCanvas.toDataURL('image/jpeg', 0.85) : '';
         }
 
-        const maxSide = memoryPressureState === 'critical'
-            ? 420
-            : (memoryPressureState === 'warning' ? 560 : 720);
+        const captureConfig = getCapturePipelineConfig();
+        const maxSide = captureConfig.maxSide;
         const srcW = sourceCanvas.width;
         const srcH = sourceCanvas.height;
         const longestSide = Math.max(srcW, srcH);
         const scale = longestSide > maxSide ? (maxSide / longestSide) : 1;
 
         if (scale >= 1) {
-            return sourceCanvas.toDataURL('image/jpeg', 0.84);
+            return sourceCanvas.toDataURL('image/jpeg', captureConfig.jpegQuality);
         }
 
         const resized = document.createElement('canvas');
@@ -2778,7 +2895,7 @@ document.addEventListener('DOMContentLoaded', function() {
         resized.height = Math.max(1, Math.round(srcH * scale));
         const resizedCtx = resized.getContext('2d');
         resizedCtx.drawImage(sourceCanvas, 0, 0, resized.width, resized.height);
-        return resized.toDataURL('image/jpeg', 0.84);
+        return resized.toDataURL('image/jpeg', captureConfig.jpegQuality);
     }
 
     async function requestServerMatch(imageData) {
@@ -2904,6 +3021,10 @@ document.addEventListener('DOMContentLoaded', function() {
             setStatus('RAM/CPU masih tinggi. Verifikasi ditunda sementara, coba lagi beberapa detik.');
             return false;
         }
+        const memoryProfile = getMemoryProfile();
+        if (memoryProfile === 'throttle') {
+            await new Promise((resolve) => setTimeout(resolve, 220));
+        }
         if (!modelsReady) {
             await loadModels();
         }
@@ -2953,6 +3074,13 @@ document.addEventListener('DOMContentLoaded', function() {
             lastFaceDistance = null;
             lastDescriptorSimilarity = 0;
             lastServerMatchToken = '';
+            notifyStudentEvent(
+                'Error Verifikasi Wajah',
+                error && error.message ? error.message : 'Terjadi kendala saat memproses verifikasi wajah.',
+                '?page=face_recognition',
+                'system_error_face',
+                45000
+            );
             return false;
         }
         lastServerMatchToken = serverResult?.match_token ? String(serverResult.match_token) : '';
@@ -2991,6 +3119,13 @@ document.addEventListener('DOMContentLoaded', function() {
                 setStatus('Verifikasi berhasil (DeepFace server). Anda bisa lanjut ke absensi.');
             }
             drawFaceLabel(resized.detection.box, faceLabel);
+            notifyStudentEvent(
+                'Verifikasi Wajah Berhasil',
+                `DeepFace berhasil verifikasi wajah dengan skor ${serverSimilarity.toFixed(2)}%.`,
+                '?page=face_recognition',
+                'deepface_verified',
+                20000
+            );
             matchPassed = true;
             if (!studentScheduleId) {
                 setStatus('Verifikasi berhasil, tetapi jadwal belum dipilih. Buka menu Jadwal lalu klik Absen.');
@@ -3120,7 +3255,8 @@ document.addEventListener('DOMContentLoaded', function() {
         ctx.scale(-1, 1);
         ctx.drawImage(video, -canvas.width, 0, canvas.width, canvas.height);
         ctx.restore();
-        const capturedData = canvas.toDataURL('image/jpeg', 0.85);
+        const captureConfig = getCapturePipelineConfig();
+        const capturedData = canvas.toDataURL('image/jpeg', captureConfig.jpegQuality);
         previewImg.src = capturedData;
         previewWrap.classList.add('show');
         lastCapturedData = capturedData;
@@ -3363,6 +3499,13 @@ document.addEventListener('DOMContentLoaded', function() {
             if (!response.ok || !data || !data.success) {
                 const message = data?.message || 'Gagal menyimpan absensi.';
                 setAttendanceModalMessage(message, 'danger');
+                notifyStudentEvent(
+                    'Absensi Gagal',
+                    message,
+                    '?page=face_recognition',
+                    'attendance_error',
+                    20000
+                );
                 attendanceSubmitting = false;
                 if (attendanceSubmitBtn) {
                     attendanceSubmitBtn.disabled = false;
@@ -3381,6 +3524,14 @@ document.addEventListener('DOMContentLoaded', function() {
                 const baseLabel = getModeLabel(absenceMode);
                 attendanceInfoStatus.textContent = statusLabel ? `${baseLabel} (${statusLabel})` : baseLabel;
             }
+            {
+                const baseLabel = getModeLabel(absenceMode);
+                const title = statusLabel === 'OVERDUE' ? 'Absensi Terlambat Tercatat' : 'Absensi Berhasil';
+                const body = statusLabel === 'OVERDUE'
+                    ? `Absensi ${baseLabel} tercatat dengan status OVERDUE.`
+                    : `Absensi ${baseLabel} berhasil tersimpan di sistem.`;
+                notifyStudentEvent(title, body, '?page=riwayat', 'attendance_success', 15000);
+            }
             proceedBtn.disabled = true;
             captureBtn.disabled = true;
             retryBtn.disabled = true;
@@ -3394,6 +3545,13 @@ document.addEventListener('DOMContentLoaded', function() {
         } catch (error) {
             const message = error?.message ? error.message : 'Gagal mengirim absensi. Coba lagi.';
             setAttendanceModalMessage(message, 'danger');
+            notifyStudentEvent(
+                'Error Sistem Absensi',
+                message,
+                '?page=face_recognition',
+                'attendance_system_error',
+                30000
+            );
             attendanceSubmitting = false;
             if (attendanceSubmitBtn) {
                 attendanceSubmitBtn.disabled = false;
@@ -3607,11 +3765,6 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
     startLocationWatch();
-    if (deviceMemoryText && navigator.deviceMemory) {
-        deviceMemoryText.textContent = `Perkiraan RAM device: ${navigator.deviceMemory} GB`;
-    } else if (deviceMemoryText) {
-        deviceMemoryText.textContent = 'Perkiraan RAM device tidak tersedia.';
-    }
     startMemoryMonitor();
     if (referenceUrl) {
         warmFacePipeline();

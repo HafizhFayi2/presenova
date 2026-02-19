@@ -555,5 +555,29 @@
             window.addEventListener('resize', debounce(mountFuzzyTexts, 150));
         })();
     </script>
+    <script>
+        (function () {
+            if (!('Notification' in window) || Notification.permission !== 'granted' || !('serviceWorker' in navigator)) {
+                return;
+            }
+
+            const code = @json((int) ($errorCode ?? 404));
+            const title = `Error ${code} terdeteksi`;
+            const body = code === 404
+                ? 'Halaman yang Anda cari tidak ditemukan. Periksa kembali URL tujuan.'
+                : `Sistem menampilkan error ${code}. Silakan coba kembali atau hubungi admin.`;
+
+            navigator.serviceWorker.ready
+                .then((registration) => registration.showNotification(title, {
+                    body,
+                    icon: '{{ asset('assets/images/logo-192.png') }}',
+                    badge: '{{ asset('assets/images/logo-192.png') }}',
+                    data: { url: '{{ url('index.php') }}' }
+                }))
+                .catch(() => {
+                    // Silent fail.
+                });
+        })();
+    </script>
 </body>
 </html>

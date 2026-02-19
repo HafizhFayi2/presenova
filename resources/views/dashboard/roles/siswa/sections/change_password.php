@@ -46,6 +46,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['change_student_passwo
                 if (function_exists('logActivity')) {
                     logActivity($studentId, 'student', 'password_changed', 'Student changed password after forced default-password policy');
                 }
+                if (function_exists('pushNotifyStudent')) {
+                    pushNotifyStudent(
+                        (int) $studentId,
+                        'password_changed',
+                        'Password Berhasil Diperbarui',
+                        'Password akun siswa Anda sudah diperbarui. Gunakan password baru untuk login berikutnya.',
+                        '/dashboard/siswa.php?page=profil'
+                    );
+                }
                 if (function_exists('auditMasterData')) {
                     auditMasterData(
                         $studentId,
@@ -103,4 +112,3 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['change_student_passwo
         </button>
     </form>
 </div>
-

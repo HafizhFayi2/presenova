@@ -1,6 +1,7 @@
 <?php
 
 use App\Services\FaceMatcherService;
+use App\Services\StudentPushNotificationService;
 use App\Support\Core\Auth;
 use App\Support\Core\Database;
 use App\Support\Core\DatabaseHelper;
@@ -360,6 +361,80 @@ if (!function_exists('logActivity')) {
             return true;
         } catch (\Throwable) {
             return false;
+        }
+    }
+}
+
+if (!function_exists('pushNotifyStudent')) {
+    function pushNotifyStudent(
+        $studentId,
+        $type,
+        $title,
+        $body,
+        $url = '/dashboard/siswa.php?page=jadwal',
+        $scheduleId = null,
+        $scheduledAt = null
+    ) {
+        $studentId = (int) $studentId;
+        $type = trim((string) $type);
+        $title = trim((string) $title);
+        $body = trim((string) $body);
+        if ($studentId <= 0 || $type === '' || $title === '') {
+            return false;
+        }
+
+        try {
+            /** @var StudentPushNotificationService $service */
+            $service = app(StudentPushNotificationService::class);
+            $result = $service->notifyStudent(
+                $studentId,
+                $type,
+                $title,
+                $body,
+                (string) $url,
+                $scheduleId !== null ? (int) $scheduleId : null,
+                $scheduledAt
+            );
+
+            return !empty($result['ok']) || !empty($result['duplicate']);
+        } catch (\Throwable) {
+            return false;
+        }
+    }
+}
+
+if (!function_exists('pushNotifyStudents')) {
+    function pushNotifyStudents(
+        $studentIds,
+        $type,
+        $title,
+        $body,
+        $url = '/dashboard/siswa.php?page=jadwal',
+        $scheduleId = null,
+        $scheduledAt = null
+    ) {
+        $ids = is_array($studentIds) ? $studentIds : [];
+        $type = trim((string) $type);
+        $title = trim((string) $title);
+        if ($ids === [] || $type === '' || $title === '') {
+            return 0;
+        }
+
+        try {
+            /** @var StudentPushNotificationService $service */
+            $service = app(StudentPushNotificationService::class);
+
+            return $service->notifyStudents(
+                array_map(static fn ($id): int => (int) $id, $ids),
+                $type,
+                $title,
+                (string) $body,
+                (string) $url,
+                $scheduleId !== null ? (int) $scheduleId : null,
+                $scheduledAt
+            );
+        } catch (\Throwable) {
+            return 0;
         }
     }
 }

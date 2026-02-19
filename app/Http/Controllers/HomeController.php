@@ -62,6 +62,17 @@ class HomeController extends Controller
         $statusText = (string) (SymfonyResponse::$statusTexts[$statusCode] ?? 'Error');
         $message = $this->resolveErrorMessage($statusCode);
 
+        $studentId = (int) session('student_id', 0);
+        if ($studentId > 0 && function_exists('pushNotifyStudent')) {
+            pushNotifyStudent(
+                $studentId,
+                'system_error',
+                'Error Sistem ' . $statusCode,
+                "Sistem menampilkan {$statusCode} {$statusText}. {$message}",
+                '/dashboard/siswa.php?page=dashboard'
+            );
+        }
+
         return response()->view('pages.not-found', [
             'errorCode' => $statusCode,
             'errorTitle' => $statusText,

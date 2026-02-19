@@ -65,6 +65,39 @@ php artisan migrate
 bash scripts/setup_deepface.sh --write-env
 ```
 
+## Setup Cron Push (VPS Linux)
+Jalankan installer cron (idempotent, aman di-run ulang):
+
+```bash
+bash scripts/install_push_cron_linux.sh /var/www/presenova
+```
+
+Catatan:
+- Script akan memasang cron per 1 menit untuk menjalankan `public/cron/send_notifications.php`.
+- Jika `flock` tersedia, eksekusi cron diberi lock agar tidak overlap.
+- Log cron tersimpan di `storage/logs/push-cron.log`.
+
+Verifikasi:
+
+```bash
+crontab -l | grep PRESENOVA_PUSH_CRON
+tail -f /var/www/presenova/storage/logs/push-cron.log
+```
+
+### Pastikan Subscription Siswa Masuk ke `push_tokens`
+1. Siswa login ke dashboard siswa (PWA aktif di halaman ini).
+2. Klik tombol aktifkan notifikasi jika browser meminta izin.
+3. Setelah izin `Allow`, subscription otomatis disimpan ke endpoint `api/save-subscription.php`.
+
+Cek di MySQL:
+
+```sql
+SELECT id, student_id, is_active, created_at, updated_at
+FROM push_tokens
+ORDER BY id DESC
+LIMIT 20;
+```
+
 ## Verifikasi
 - `php artisan route:list`
 - Login admin/guru/siswa

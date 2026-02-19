@@ -55,7 +55,7 @@ if ($now_wib >= $reset_time) {
     $reset_time->modify('+7 days');
 }
 $now_ts = $now_wib->getTimestamp();
-$countdown_seconds = 120;
+$countdown_seconds = 300;
 $tolerance_seconds = max(0, (int) $time_tolerance) * 60;
 
 // Generate jadwal berdasarkan class_id siswa
@@ -680,7 +680,7 @@ $(document).ready(function() {
 
     // Realtime status update (UTC+7)
     const toleranceMinutes = <?php echo (int) $time_tolerance; ?>;
-    const countdownSeconds = 120;
+    const countdownSeconds = 300;
 
     function getWeekStartWIB(date) {
         const d = new Date(date);

@@ -192,6 +192,37 @@ function changePassword() {
     $('#changePasswordModal').modal('show');
 }
 
+function notifyGuruPasswordChange(message) {
+    if (!('Notification' in window)) return;
+    if (Notification.permission !== 'granted') {
+        return;
+    }
+
+    const title = 'Password Guru Berhasil Diubah';
+    const body = message || 'Password akun guru berhasil diperbarui.';
+    const icon = '../assets/images/logo-192.png';
+
+    if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.ready.then(function(registration) {
+            registration.showNotification(title, {
+                body: body,
+                icon: icon,
+                badge: icon,
+                data: { url: '?page=profil' }
+            });
+        }).catch(function() {
+            // non-blocking
+        });
+        return;
+    }
+
+    try {
+        new Notification(title, { body: body, icon: icon });
+    } catch (e) {
+        // non-blocking
+    }
+}
+
 // Handle password change form submission
 $('#changePasswordModal form').on('submit', function(e) {
     e.preventDefault();
@@ -208,6 +239,7 @@ $('#changePasswordModal form').on('submit', function(e) {
                 const result = typeof response === 'string' ? JSON.parse(response) : response;
                 if(result.success) {
                     alert('Password berhasil diubah');
+                    notifyGuruPasswordChange('Password akun guru Anda berhasil diperbarui.');
                     $('#changePasswordModal').modal('hide');
                     form[0].reset();
                 } else {

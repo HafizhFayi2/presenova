@@ -164,6 +164,36 @@
     @if ($downloadPdf)
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
     <script>
+    function notifyPdfDownloaded() {
+        if (!('Notification' in window) || Notification.permission !== 'granted') {
+            return;
+        }
+
+        const title = 'Download PDF Berhasil';
+        const body = 'File PDF jadwal guru berhasil diunduh.';
+        const icon = @json(asset('assets/images/logo-192.png'));
+
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.ready.then(function (registration) {
+                registration.showNotification(title, {
+                    body: body,
+                    icon: icon,
+                    badge: icon,
+                    data: { url: window.location.href }
+                });
+            }).catch(function () {
+                // non-blocking
+            });
+            return;
+        }
+
+        try {
+            new Notification(title, { body: body, icon: icon });
+        } catch (e) {
+            // non-blocking
+        }
+    }
+
     window.addEventListener('load', function () {
         const target = document.querySelector('.print-sheet');
         if (!target || typeof window.html2pdf === 'undefined') {
@@ -182,6 +212,7 @@
 
         setTimeout(function () {
             window.html2pdf().set(opts).from(target).save().then(function () {
+                notifyPdfDownloaded();
                 setTimeout(function () {
                     window.close();
                 }, 250);

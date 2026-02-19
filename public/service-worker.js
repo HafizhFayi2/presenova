@@ -1,6 +1,6 @@
 // Service Worker for PWA
-const STATIC_CACHE_NAME = "attendance-static-v20260219-2";
-const RUNTIME_CACHE_NAME = "attendance-runtime-v20260219-2";
+const STATIC_CACHE_NAME = "attendance-static-v20260219-3";
+const RUNTIME_CACHE_NAME = "attendance-runtime-v20260219-3";
 
 function resolveAppUrl(path) {
   const scopePath = new URL(self.registration.scope).pathname.replace(/\/+$/, "");
@@ -303,7 +303,7 @@ self.addEventListener("message", (event) => {
 
 // Push notification handler
 self.addEventListener("push", (event) => {
-  let data = { title: "Notifikasi", body: "", url: "index.php" };
+  let data = { title: "Notifikasi", body: "", url: "dashboard/siswa.php?page=jadwal" };
   if (event.data) {
     try {
       data = event.data.json();
@@ -311,21 +311,64 @@ self.addEventListener("push", (event) => {
       data.body = event.data.text();
     }
   }
+  const rawUrl = typeof data.url === "string" ? data.url.trim() : "";
+  const targetUrl = rawUrl !== "" ? rawUrl : "dashboard/siswa.php?page=jadwal";
+  const title = typeof data.title === "string" && data.title.trim() !== "" ? data.title : "Notifikasi";
+  const body = typeof data.body === "string" ? data.body : "";
+  const tag =
+    typeof data.tag === "string" && data.tag.trim() !== ""
+      ? data.tag
+      : `presenova-${new Date().toISOString().slice(0, 16)}`;
   const options = {
-    body: data.body,
+    body,
     icon: resolveAppUrl("assets/images/logo-192.png"),
     badge: resolveAppUrl("assets/images/logo-192.png"),
     vibrate: [100, 50, 100],
+    tag,
+    renotify: false,
     data: {
-      url: data.url,
+      url: targetUrl,
     },
   };
 
-  event.waitUntil(self.registration.showNotification(data.title, options));
+  event.waitUntil(self.registration.showNotification(title, options));
 });
 
 // Notification click handler
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
-  event.waitUntil(clients.openWindow(resolveAppUrl(event.notification.data.url)));
+  event.waitUntil(
+    (async () => {
+      const targetUrl = resolveAppUrl((event.notification && event.notification.data && event.notification.data.url) || "");
+      const allClients = await clients.matchAll({
+        type: "window",
+        includeUncontrolled: true,
+      });
+
+      for (const client of allClients) {
+        if (!client || !client.url) {
+          continue;
+        }
+        try {
+          const clientUrl = new URL(client.url);
+          const intendedUrl = new URL(targetUrl, self.location.origin);
+          if (clientUrl.origin === intendedUrl.origin) {
+            if ("focus" in client) {
+              await client.focus();
+            }
+            if ("navigate" in client) {
+              await client.navigate(targetUrl);
+            }
+            return;
+          }
+        } catch (error) {
+          // continue
+        }
+      }
+
+      if (clients.openWindow) {
+        await clients.openWindow(targetUrl);
+      }
+    })(),
+  );
 });
