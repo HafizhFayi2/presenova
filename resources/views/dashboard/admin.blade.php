@@ -262,6 +262,12 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             }
         }
 
+        $facesRoot = BASE_PATH . DIRECTORY_SEPARATOR . 'uploads' . DIRECTORY_SEPARATOR . 'faces';
+        $faceDirectories = array_unique(array_filter($backupResult['face_directories'] ?? []));
+        foreach ($faceDirectories as $faceDirectory) {
+            pruneEmptyDirectoryTree($faceDirectory, $facesRoot);
+        }
+
         $success = "Siswa berhasil dihapus dan backup tersimpan.";
         header("Location: admin.php?table=student&success=" . urlencode($success));
         exit();
@@ -949,6 +955,110 @@ function copyFilesUnique($files, $destDir) {
     return $copied;
 }
 
+function collectFilesRecursive($directory) {
+    $files = [];
+    if (!$directory || !is_dir($directory)) {
+        return $files;
+    }
+
+    try {
+        $iterator = new RecursiveIteratorIterator(
+            new RecursiveDirectoryIterator($directory, FilesystemIterator::SKIP_DOTS)
+        );
+        foreach ($iterator as $fileInfo) {
+            if (!$fileInfo->isFile()) {
+                continue;
+            }
+            $files[] = $fileInfo->getPathname();
+        }
+    } catch (Throwable $e) {
+        return $files;
+    }
+
+    return array_values(array_unique($files));
+}
+
+function collectStudentReferenceArtifacts($student, $nisn) {
+    $files = [];
+    $directories = [];
+    $facesRootPath = BASE_PATH . DIRECTORY_SEPARATOR . 'uploads' . DIRECTORY_SEPARATOR . 'faces';
+    $facesRootReal = realpath($facesRootPath) ?: $facesRootPath;
+
+    foreach (['photo', 'photo_reference'] as $field) {
+        $rawValue = trim((string)($student[$field] ?? ''));
+        if ($rawValue === '') {
+            continue;
+        }
+        $resolved = resolve_face_reference_file_path($rawValue);
+        if (!$resolved || !is_file($resolved)) {
+            continue;
+        }
+        $files[] = $resolved;
+        $resolvedDir = dirname($resolved);
+        if ($resolvedDir && is_dir($resolvedDir)) {
+            $directories[] = $resolvedDir;
+        }
+    }
+
+    $nisn = trim((string)$nisn);
+    if ($nisn !== '' && is_dir($facesRootReal)) {
+        $nisnPattern = '/(^|[^0-9])' . preg_quote($nisn, '/') . '([^0-9]|$)/';
+        foreach (collectFilesRecursive($facesRootReal) as $candidateFile) {
+            if (!preg_match($nisnPattern, basename($candidateFile))) {
+                continue;
+            }
+            $files[] = $candidateFile;
+            $directories[] = dirname($candidateFile);
+        }
+    }
+
+    foreach (array_unique($directories) as $dir) {
+        $files = array_merge($files, collectFilesRecursive($dir));
+    }
+
+    $files = array_values(array_unique(array_filter($files, static fn($file) => $file && is_file($file))));
+    $directories = array_values(array_unique(array_filter($directories, static fn($dir) => $dir && is_dir($dir))));
+
+    return [
+        'files' => $files,
+        'directories' => $directories,
+    ];
+}
+
+function pruneEmptyDirectoryTree($startDir, $stopDir) {
+    $startReal = realpath((string)$startDir);
+    $stopReal = realpath((string)$stopDir);
+    if ($startReal === false || $stopReal === false) {
+        return;
+    }
+
+    $stopNorm = rtrim(str_replace('\\', '/', $stopReal), '/');
+    $current = $startReal;
+    while ($current && is_dir($current)) {
+        $currentNorm = rtrim(str_replace('\\', '/', $current), '/');
+        if ($currentNorm === $stopNorm || !str_starts_with($currentNorm . '/', $stopNorm . '/')) {
+            break;
+        }
+
+        $entries = @scandir($current);
+        if (!is_array($entries)) {
+            break;
+        }
+
+        $nonDotEntries = array_values(array_filter($entries, static fn($entry) => $entry !== '.' && $entry !== '..'));
+        if (!empty($nonDotEntries)) {
+            break;
+        }
+
+        @rmdir($current);
+        $parent = dirname($current);
+        if ($parent === $current) {
+            break;
+        }
+        $current = $parent;
+    }
+}
+
 function resetAutoIncrementIfEmpty($db, $tableNames, $nextValue = 0) {
     $tables = is_array($tableNames) ? $tableNames : [$tableNames];
 
@@ -1091,22 +1201,9 @@ function backupStudentData($db, $studentId, $reason) {
     }
     writeTextFile($dataDir . DIRECTORY_SEPARATOR . 'student.txt', $studentLines);
 
-    // Reference images
-    $referenceFiles = [];
-    $facesDir = BASE_PATH . '/uploads/faces/';
-    if (!empty($student['photo'])) {
-        $referenceFiles[] = $facesDir . $student['photo'];
-    }
-    if (!empty($student['photo_reference'])) {
-        $referenceFiles[] = $facesDir . $student['photo_reference'];
-    }
-    if ($nisn) {
-        $nisnMatches = glob($facesDir . '*' . $nisn . '*');
-        if ($nisnMatches) {
-            $referenceFiles = array_merge($referenceFiles, $nisnMatches);
-        }
-    }
-    $copiedReferences = copyFilesUnique($referenceFiles, $referencesDir);
+    // Reference images + pose dataset
+    $referenceArtifacts = collectStudentReferenceArtifacts($student, $nisn);
+    $copiedReferences = copyFilesUnique($referenceArtifacts['files'], $referencesDir);
 
     // Match logs
     $matchLogs = glob(BASE_PATH . '/uploads/temp/match_log_' . $studentId . '_*.json') ?: [];
@@ -1205,7 +1302,8 @@ function backupStudentData($db, $studentId, $reason) {
         'student' => $student,
         'copied_references' => array_keys($copiedReferences),
         'copied_attendance' => array_keys($copiedAttendance),
-        'match_log_files' => $matchLogs
+        'match_log_files' => $matchLogs,
+        'face_directories' => $referenceArtifacts['directories']
     ];
 }
 

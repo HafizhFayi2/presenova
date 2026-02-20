@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
+use App\Services\FaceMatcherService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
@@ -117,7 +118,12 @@ class LoginController extends Controller
             return $this->renderLoginPage($request, 'NISN atau password salah');
         }
 
-        $hasFace = $this->ensureStudentFaceReference((int) $student->id, (string) ($student->photo_reference ?? ''));
+        $studentPhotoReference = normalize_face_reference_path((string) ($student->photo_reference ?? ''));
+        $hasFace = $this->ensureStudentFaceReference(
+            (int) $student->id,
+            (string) ($student->photo_reference ?? ''),
+            (string) ($student->student_nisn ?? '')
+        );
 
         DB::table('student')
             ->where('id', (int) $student->id)
@@ -130,6 +136,7 @@ class LoginController extends Controller
             'student_name' => (string) ($student->student_name ?? ''),
             'class_id' => (int) ($student->class_id ?? 0),
             'role' => 'siswa',
+            'photo_reference' => $studentPhotoReference !== '' ? $studentPhotoReference : null,
             'has_face' => $hasFace,
             'has_pose_capture' => $this->hasPoseCaptureDataset((string) ($student->student_nisn ?? '')),
             'logged_in' => true,
@@ -464,25 +471,43 @@ class LoginController extends Controller
         }
     }
 
-    private function ensureStudentFaceReference(int $studentId, string $photoReference): bool
+    private function ensureStudentFaceReference(int $studentId, string $photoReference, string $studentNisn = ''): bool
     {
         if ($studentId <= 0) {
             return false;
         }
 
         $photoReference = trim($photoReference);
-        if ($photoReference === '') {
-            return false;
+        $studentNisn = trim($studentNisn);
+
+        $resolvedPath = resolve_face_reference_file_path($photoReference);
+        if ($resolvedPath === null && $studentNisn !== '') {
+            try {
+                /** @var FaceMatcherService $faceMatcher */
+                $faceMatcher = app(FaceMatcherService::class);
+                $fallbackPath = $faceMatcher->getReferencePath($studentNisn, $photoReference !== '' ? $photoReference : null);
+                if (is_string($fallbackPath) && $fallbackPath !== '' && is_file($fallbackPath)) {
+                    $resolvedPath = $fallbackPath;
+                }
+            } catch (\Throwable) {
+                $resolvedPath = null;
+            }
         }
 
-        $normalized = str_replace('\\', '/', $photoReference);
-        if (str_starts_with($normalized, 'uploads/faces/')) {
-            $normalized = substr($normalized, strlen('uploads/faces/'));
-        }
-        $normalized = ltrim($normalized, '/');
-        $path = public_path('uploads/faces/' . $normalized);
+        if ($resolvedPath !== null) {
+            $normalizedReference = normalize_face_reference_path($photoReference);
+            $relativeReference = face_reference_relative_from_file($resolvedPath);
+            if (
+                $relativeReference !== '' &&
+                ($normalizedReference === '' || strcasecmp($normalizedReference, $relativeReference) !== 0)
+            ) {
+                DB::table('student')
+                    ->where('id', $studentId)
+                    ->update([
+                        'photo_reference' => $relativeReference,
+                    ]);
+            }
 
-        if (is_file($path)) {
             return true;
         }
 

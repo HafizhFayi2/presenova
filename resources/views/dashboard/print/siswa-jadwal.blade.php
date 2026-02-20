@@ -5,15 +5,24 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Jadwal Pelajaran - Presenova</title>
     @php
-        $basePath = trim((string) request()->getBasePath(), '/');
-        if ($basePath === '') {
-            $basePath = trim((string) parse_url((string) config('app.url'), PHP_URL_PATH), '/');
-        }
-        $assetPrefix = $basePath === '' ? '' : '/' . $basePath;
         $printCssPath = public_path('assets/css/print/jadwal-print.css');
-        $printCssUrl = $assetPrefix . '/assets/css/print/jadwal-print.css?v=20260218b';
-        $logoUrl = $assetPrefix . '/assets/images/presenova.png';
-        $logoFallbackUrl = $assetPrefix . '/assets/images/logo-192.png';
+        $printCssUrl = asset('assets/css/print/jadwal-print.css') . '?v=20260220a';
+        $logoUrl = asset('assets/images/presenova.png');
+        $logoFallbackUrl = asset('assets/images/logo-192.png');
+        $logoPrimaryPath = public_path('assets/images/presenova.png');
+        $logoFallbackPath = public_path('assets/images/logo-192.png');
+        if (is_file($logoPrimaryPath)) {
+            $logoPrimaryBinary = file_get_contents($logoPrimaryPath);
+            if ($logoPrimaryBinary !== false) {
+                $logoUrl = 'data:image/png;base64,' . base64_encode($logoPrimaryBinary);
+            }
+        }
+        if (is_file($logoFallbackPath)) {
+            $logoFallbackBinary = file_get_contents($logoFallbackPath);
+            if ($logoFallbackBinary !== false) {
+                $logoFallbackUrl = 'data:image/png;base64,' . base64_encode($logoFallbackBinary);
+            }
+        }
         $printCssInline = is_file($printCssPath) ? file_get_contents($printCssPath) : '';
         $dayClassMap = [
             'senin' => 'day-senin',

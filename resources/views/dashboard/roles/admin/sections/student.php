@@ -94,6 +94,12 @@ $canRevealStudentCode = !$isOperatorView && ((int) ($_SESSION['level'] ?? 0) ===
             <tbody>
                 <?php if(count($students) > 0): ?>
                     <?php foreach($students as $index => $student): ?>
+                    <?php
+                        $hasReferencePhoto = false;
+                        if (!empty($student['photo_reference'])) {
+                            $hasReferencePhoto = resolve_face_reference_file_path((string) $student['photo_reference']) !== null;
+                        }
+                    ?>
                     <tr>
                         <td><?php echo $index + 1; ?></td>
                         <td>
@@ -118,7 +124,7 @@ $canRevealStudentCode = !$isOperatorView && ((int) ($_SESSION['level'] ?? 0) ===
                         <td><?php echo htmlspecialchars($student['class_name']); ?></td>
                         <td><?php echo htmlspecialchars($student['jurusan_name']); ?></td>
                         <td>
-                            <?php if(!empty($student['photo_reference'])): ?>
+                            <?php if($hasReferencePhoto): ?>
                             <span class="badge badge-success"><i class="fas fa-check-circle"></i> Terdaftar</span>
                             <?php else: ?>
                             <span class="badge badge-warning"><i class="fas fa-exclamation-circle"></i> Belum</span>

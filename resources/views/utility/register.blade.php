@@ -54,9 +54,20 @@ $student_row = $stmt ? $stmt->fetch() : null;
 $student_identity = $student_row ?: null;
 
 if ($student_row && !empty($student_row['photo_reference'])) {
-    $photo_reference = $student_row['photo_reference'];
-    $facePath = public_path('uploads/faces/' . $photo_reference);
-    $has_face = file_exists($facePath);
+    $photoReferenceRaw = (string) $student_row['photo_reference'];
+    $resolvedFacePath = resolve_face_reference_file_path($photoReferenceRaw);
+    $photo_reference = normalize_face_reference_path($photoReferenceRaw);
+    if ($photo_reference === '' && $resolvedFacePath) {
+        $photo_reference = face_reference_relative_from_file($resolvedFacePath);
+    }
+    $has_face = $resolvedFacePath !== null;
+
+    if ($has_face && $photo_reference !== '' && strcasecmp($photoReferenceRaw, $photo_reference) !== 0) {
+        $db->query(
+            "UPDATE student SET photo_reference = ? WHERE id = ?",
+            [$photo_reference, $student_id]
+        );
+    }
 
     if (!$has_face) {
         $db->query(
@@ -64,6 +75,19 @@ if ($student_row && !empty($student_row['photo_reference'])) {
             [$student_id]
         );
         $_SESSION['face_reference_notice'] = 'Sistem tidak menemukan photo referensi. Mohon photo ulang.';
+    }
+} elseif ($student_row && !empty($student_row['student_nisn']) && class_exists('FaceMatcher')) {
+    $fallbackMatcher = new FaceMatcher();
+    $fallbackPath = $fallbackMatcher->getReferencePath((string) $student_row['student_nisn'], null);
+    if ($fallbackPath && is_file($fallbackPath)) {
+        $photo_reference = face_reference_relative_from_file($fallbackPath);
+        if ($photo_reference !== '') {
+            $db->query(
+                "UPDATE student SET photo_reference = ? WHERE id = ?",
+                [$photo_reference, $student_id]
+            );
+        }
+        $has_face = true;
     }
 }
 
@@ -847,6 +871,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['face_data'])) {
             const poseOnlyMode = registerCard.dataset.poseOnly === '1';
             const hasPoseFromServer = registerCard.dataset.hasPose === '1';
             const modelBase = 'face/faces_logics/models';
+            const secureDeviceContext = window.isSecureContext === true
+                || ['localhost', '127.0.0.1', '::1'].includes(window.location.hostname);
             const poseRequiredPerSide = 5;
             const poseRequiredFront = 1;
             const poseYawSideThreshold = 0.12;
@@ -868,6 +894,38 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['face_data'])) {
             let poseLastCaptureAt = 0;
             let poseSaving = false;
             let cameraReady = false;
+
+            function getSecureContextMessage(featureName) {
+                const feature = featureName || 'fitur ini';
+                return `Akses ${feature} membutuhkan HTTPS. Buka aplikasi lewat https:// atau gunakan localhost.`;
+            }
+
+            function buildCameraErrorMessage(error) {
+                if (!secureDeviceContext) {
+                    return getSecureContextMessage('kamera');
+                }
+
+                const name = (error && error.name) ? String(error.name) : '';
+                if (name === 'NotAllowedError' || name === 'PermissionDeniedError') {
+                    return 'Izin kamera ditolak. Aktifkan izin kamera di browser lalu coba lagi.';
+                }
+                if (name === 'NotFoundError' || name === 'DevicesNotFoundError') {
+                    return 'Perangkat kamera tidak ditemukan.';
+                }
+                if (name === 'NotReadableError' || name === 'TrackStartError') {
+                    return 'Kamera sedang dipakai aplikasi lain. Tutup aplikasi lain lalu coba lagi.';
+                }
+                if (name === 'OverconstrainedError' || name === 'ConstraintNotSatisfiedError') {
+                    return 'Konfigurasi kamera tidak didukung perangkat ini.';
+                }
+
+                const rawMessage = error && error.message ? String(error.message) : '';
+                if (rawMessage !== '') {
+                    return `Tidak dapat mengakses kamera: ${rawMessage}`;
+                }
+
+                return 'Tidak dapat mengakses kamera. Pastikan izin kamera sudah diberikan.';
+            }
 
             function setRegisterStatus(message) {
                 if (!registerStatus) return;
@@ -1040,6 +1098,20 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['face_data'])) {
             
             // Initialize camera
             async function initCamera() {
+                if (!secureDeviceContext) {
+                    cameraReady = false;
+                    setRegisterStatus(getSecureContextMessage('kamera'));
+                    updateActionButtons();
+                    return;
+                }
+
+                if (!navigator.mediaDevices || typeof navigator.mediaDevices.getUserMedia !== 'function') {
+                    cameraReady = false;
+                    setRegisterStatus('Browser ini tidak mendukung akses kamera (getUserMedia).');
+                    updateActionButtons();
+                    return;
+                }
+
                 try {
                     stream = await navigator.mediaDevices.getUserMedia({ 
                         video: { 
@@ -1069,7 +1141,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['face_data'])) {
                 } catch (err) {
                     console.error('Error accessing camera:', err);
                     cameraReady = false;
-                    setRegisterStatus('Tidak dapat mengakses kamera. Pastikan izin kamera sudah diberikan.');
+                    setRegisterStatus(buildCameraErrorMessage(err));
+                    updateActionButtons();
                 }
             }
 

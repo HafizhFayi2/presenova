@@ -32,7 +32,7 @@
     <meta name="twitter:image" content="<?php echo htmlspecialchars($assetBaseUrl, ENT_QUOTES, 'UTF-8'); ?>assets/images/presenova.png"/>
     
     <!-- PWA -->
-    <link rel="manifest" href="<?php echo htmlspecialchars($assetBaseUrl, ENT_QUOTES, 'UTF-8'); ?>manifest.json">
+    <link rel="manifest" href="<?php echo htmlspecialchars($assetBaseUrl, ENT_QUOTES, 'UTF-8'); ?>manifest.json?v=20260220pwa">
     <meta name="color-scheme" content="light dark">
     <meta name="theme-color" content="#f8fafc" media="(prefers-color-scheme: light)">
     <meta name="theme-color" content="#0a0f1e" media="(prefers-color-scheme: dark)">
@@ -1796,5 +1796,4 @@
     </script>
 </body>
 </html>
-
 

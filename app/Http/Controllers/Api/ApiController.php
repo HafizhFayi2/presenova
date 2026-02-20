@@ -512,7 +512,7 @@ class ApiController extends Controller
         ]);
     }
 
-    public function registerFace(Request $request): JsonResponse
+    public function registerFace(Request $request, FaceMatcherService $faceMatcher): JsonResponse
     {
         $studentId = (int) session('student_id', 0);
         if (!$this->hasAuthenticatedSession() || $studentId <= 0) {
@@ -528,8 +528,45 @@ class ApiController extends Controller
         if (!$student) {
             return response()->json(['success' => false, 'message' => 'Data siswa tidak ditemukan']);
         }
-        if (!empty($student->photo_reference)) {
+
+        $storedReferenceRaw = trim((string) ($student->photo_reference ?? ''));
+        $existingReferencePath = resolve_face_reference_file_path($storedReferenceRaw);
+        if ($existingReferencePath === null) {
+            $fallbackReferencePath = $faceMatcher->getReferencePath(
+                (string) ($student->student_nisn ?? ''),
+                $storedReferenceRaw !== '' ? $storedReferenceRaw : null
+            );
+            if (is_string($fallbackReferencePath) && $fallbackReferencePath !== '' && is_file($fallbackReferencePath)) {
+                $existingReferencePath = $fallbackReferencePath;
+            }
+        }
+
+        if ($existingReferencePath !== null) {
+            $normalizedReference = face_reference_relative_from_file($existingReferencePath);
+            if (
+                $normalizedReference !== '' &&
+                (
+                    $storedReferenceRaw === '' ||
+                    strcasecmp(normalize_face_reference_path($storedReferenceRaw), $normalizedReference) !== 0
+                )
+            ) {
+                DB::table('student')
+                    ->where('id', $studentId)
+                    ->update([
+                        'photo_reference' => $normalizedReference,
+                    ]);
+            }
+
             return response()->json(['success' => false, 'message' => 'Wajah sudah terdaftar sebelumnya']);
+        }
+
+        if ($storedReferenceRaw !== '') {
+            DB::table('student')
+                ->where('id', $studentId)
+                ->update([
+                    'photo_reference' => null,
+                    'face_embedding' => null,
+                ]);
         }
 
         $imageData = trim((string) $request->input('image_data', ''));

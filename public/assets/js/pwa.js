@@ -37,6 +37,18 @@ function detectAppBasePath() {
 }
 
 const APP_BASE_PATH = detectAppBasePath();
+const LOCALHOST_NAMES = new Set(["localhost", "127.0.0.1", "::1"]);
+
+function supportsSecureDeviceFeatures() {
+  return (
+    window.isSecureContext === true || LOCALHOST_NAMES.has(window.location.hostname)
+  );
+}
+
+function secureRequirementMessage(featureName) {
+  const feature = featureName || "fitur ini";
+  return `Akses ${feature} membutuhkan HTTPS.`;
+}
 
 function resolvePresenovaUrl(path) {
   const rawPath = typeof path === "string" ? path.trim() : "";
@@ -237,6 +249,11 @@ class ServiceWorkerManager {
   }
 
   async register() {
+    if (!supportsSecureDeviceFeatures()) {
+      console.warn(secureRequirementMessage("service worker"));
+      return;
+    }
+
     if (!("serviceWorker" in navigator)) {
       console.log("Service workers are not supported");
       return;
@@ -337,6 +354,11 @@ class PushNotificationManager {
   }
 
   async init() {
+    if (!supportsSecureDeviceFeatures()) {
+      console.log(secureRequirementMessage("push notification"));
+      return;
+    }
+
     if (!("PushManager" in window)) {
       console.log("Push notifications are not supported");
       return;
@@ -373,11 +395,17 @@ class PushNotificationManager {
   }
 
   async requestPermission() {
+    if (!supportsSecureDeviceFeatures()) {
+      return false;
+    }
     const permission = await Notification.requestPermission();
     return permission === "granted";
   }
 
   async subscribe() {
+    if (!supportsSecureDeviceFeatures()) {
+      throw new Error(secureRequirementMessage("push notification"));
+    }
     if (!this.publicKey) {
       throw new Error("Public key not available");
     }
@@ -502,9 +530,19 @@ function updatePushButtonState() {
   const button = document.getElementById("enablePushBtn");
   if (!button) return;
 
+  if (!supportsSecureDeviceFeatures()) {
+    button.disabled = true;
+    button.dataset.state = "insecure";
+    button.innerHTML =
+      '<i class="fas fa-lock"></i><span>Notifikasi butuh HTTPS</span>';
+    button.title = secureRequirementMessage("push notification");
+    return;
+  }
+
   if (!("Notification" in window)) {
     button.disabled = true;
     button.dataset.state = "unsupported";
+    button.title = "";
     button.innerHTML =
       '<i class="fas fa-bell-slash"></i><span>Notifikasi tidak didukung</span>';
     return;
@@ -513,6 +551,7 @@ function updatePushButtonState() {
   if (Notification.permission === "denied") {
     button.disabled = true;
     button.dataset.state = "blocked";
+    button.title = "";
     button.innerHTML =
       '<i class="fas fa-bell-slash"></i><span>Notifikasi diblokir</span>';
     return;
@@ -521,6 +560,7 @@ function updatePushButtonState() {
   if (Notification.permission === "granted") {
     button.disabled = false;
     button.dataset.state = "enabled";
+    button.title = "";
     button.innerHTML =
       '<i class="fas fa-bell"></i><span>Notifikasi aktif</span>';
     return;
@@ -528,6 +568,7 @@ function updatePushButtonState() {
 
   button.disabled = false;
   button.dataset.state = "prompt";
+  button.title = "";
   button.innerHTML =
     '<i class="fas fa-bell"></i><span>Aktifkan Notifikasi</span>';
 }

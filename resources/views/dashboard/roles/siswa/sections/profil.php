@@ -108,31 +108,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_profile'])) {
 }
 
 if (!isset($profileImageUrl)) {
-    $profileImageUrl = null;
+    $profileImageUrl = '';
     if (!empty($student['photo'])) {
-        $photoPath = public_path('uploads/faces/' . $student['photo']);
-        if (file_exists($photoPath)) {
-            $profileImageUrl = '../uploads/faces/' . $student['photo'];
-        }
+        $profileImageUrl = face_reference_public_url((string) $student['photo']);
     }
-    if (!$profileImageUrl && !empty($student['photo_reference'])) {
-        $photoPath = public_path('uploads/faces/' . $student['photo_reference']);
-        if (file_exists($photoPath)) {
-            $profileImageUrl = '../uploads/faces/' . $student['photo_reference'];
-        }
+    if ($profileImageUrl === '' && !empty($student['photo_reference'])) {
+        $profileImageUrl = face_reference_public_url((string) $student['photo_reference']);
     }
-    if (!$profileImageUrl && !empty($student['student_nisn']) && class_exists('FaceMatcher')) {
+    if ($profileImageUrl === '' && !empty($student['student_nisn']) && class_exists('FaceMatcher')) {
         $faceMatcher = new FaceMatcher();
         $referencePath = $faceMatcher->getReferencePath(
             $student['student_nisn'],
             $student['photo_reference'] ?? ''
         );
         if ($referencePath) {
-            $profileImageUrl = $faceMatcher->toPublicUrl($referencePath, '..');
+            $normalizedReference = face_reference_relative_from_file($referencePath);
+            if ($normalizedReference !== '') {
+                $profileImageUrl = face_reference_public_url($normalizedReference);
+            }
+            if ($profileImageUrl === '') {
+                $profileImageUrl = $faceMatcher->toPublicUrl($referencePath, '..');
+            }
         }
     }
-    if (!$profileImageUrl) {
-        $profileImageUrl = '../assets/images/presenova.png';
+    if ($profileImageUrl === '') {
+        $profileImageUrl = asset('assets/images/presenova.png');
     }
 }
 

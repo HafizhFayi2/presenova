@@ -134,10 +134,25 @@ class FaceMatcherService
 
         $photoReference = trim((string) $photoReference);
         if ($photoReference !== '') {
-            $directCandidates = [
-                $photoReference,
-                $this->facesDir . ltrim($photoReference, '/\\')
-            ];
+            $normalizedReference = function_exists('normalize_face_reference_path')
+                ? normalize_face_reference_path($photoReference)
+                : ltrim(str_replace('\\', '/', $photoReference), '/');
+
+            $directCandidates = [$photoReference];
+            if ($normalizedReference !== '') {
+                $normalizedForFilesystem = str_replace('/', DIRECTORY_SEPARATOR, ltrim($normalizedReference, '/'));
+                $directCandidates[] = $normalizedReference;
+                $directCandidates[] = $this->facesDir . $normalizedForFilesystem;
+                $directCandidates[] = public_path('uploads/faces/' . ltrim($normalizedReference, '/'));
+            }
+
+            if (function_exists('resolve_face_reference_file_path')) {
+                $resolvedReference = resolve_face_reference_file_path($photoReference);
+                if (is_string($resolvedReference) && $resolvedReference !== '') {
+                    $directCandidates[] = $resolvedReference;
+                }
+            }
+
             foreach ($directCandidates as $candidate) {
                 if (is_file($candidate)) {
                     $files[] = $candidate;

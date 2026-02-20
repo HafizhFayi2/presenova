@@ -262,6 +262,199 @@ if (!function_exists('storage_face_reference_filename')) {
     }
 }
 
+if (!function_exists('normalize_public_relative_path')) {
+    function normalize_public_relative_path($path)
+    {
+        $path = trim((string) $path);
+        if ($path === '' || stripos($path, 'data:') === 0) {
+            return '';
+        }
+
+        if (preg_match('~^https?://~i', $path) === 1) {
+            $parsedPath = parse_url($path, PHP_URL_PATH);
+            $path = is_string($parsedPath) ? $parsedPath : '';
+        }
+
+        $path = str_replace('\\', '/', $path);
+        $pathNoFragment = strtok($path, '?#');
+        $path = $pathNoFragment === false ? '' : (string) $pathNoFragment;
+        if ($path === '') {
+            return '';
+        }
+
+        if (preg_match('~^[A-Za-z]:/~', $path) === 1 || str_starts_with($path, '/')) {
+            $lowerPath = strtolower($path);
+            $publicMarker = strpos($lowerPath, '/public/');
+            if ($publicMarker !== false) {
+                $path = substr($path, $publicMarker + strlen('/public/'));
+            }
+        }
+
+        $path = ltrim($path, '/');
+        if (str_starts_with(strtolower($path), 'public/')) {
+            $path = substr($path, strlen('public/'));
+        }
+
+        $segments = explode('/', $path);
+        $cleanSegments = [];
+        foreach ($segments as $segment) {
+            $segment = trim((string) $segment);
+            if ($segment === '' || $segment === '.') {
+                continue;
+            }
+            if ($segment === '..') {
+                array_pop($cleanSegments);
+                continue;
+            }
+            $cleanSegments[] = $segment;
+        }
+
+        return implode('/', $cleanSegments);
+    }
+}
+
+if (!function_exists('normalize_face_reference_path')) {
+    function normalize_face_reference_path($photoReference)
+    {
+        $path = normalize_public_relative_path($photoReference);
+        if ($path === '') {
+            return '';
+        }
+
+        $path = str_replace('\\', '/', $path);
+        $lower = strtolower($path);
+        $uploadsMarker = 'uploads/faces/';
+        $uploadsPos = strpos($lower, $uploadsMarker);
+        if ($uploadsPos !== false) {
+            $path = substr($path, $uploadsPos + strlen($uploadsMarker));
+        } elseif (str_starts_with($lower, 'faces/')) {
+            $path = substr($path, strlen('faces/'));
+        }
+
+        return normalize_public_relative_path($path);
+    }
+}
+
+if (!function_exists('face_reference_relative_from_file')) {
+    function face_reference_relative_from_file($filePath)
+    {
+        $filePath = trim((string) $filePath);
+        if ($filePath === '') {
+            return '';
+        }
+
+        $realFile = realpath($filePath);
+        $normalizedFile = str_replace('\\', '/', $realFile !== false ? $realFile : $filePath);
+        if ($normalizedFile === '') {
+            return '';
+        }
+
+        $facesRoot = realpath(public_path('uploads/faces'));
+        if ($facesRoot !== false) {
+            $normalizedFacesRoot = rtrim(str_replace('\\', '/', $facesRoot), '/');
+            if (str_starts_with($normalizedFile, $normalizedFacesRoot . '/')) {
+                $relative = substr($normalizedFile, strlen($normalizedFacesRoot) + 1);
+
+                return normalize_face_reference_path($relative);
+            }
+        }
+
+        $marker = '/uploads/faces/';
+        $markerPos = stripos($normalizedFile, $marker);
+        if ($markerPos !== false) {
+            $relative = substr($normalizedFile, $markerPos + strlen($marker));
+
+            return normalize_face_reference_path($relative);
+        }
+
+        return '';
+    }
+}
+
+if (!function_exists('resolve_face_reference_file_path')) {
+    function resolve_face_reference_file_path($photoReference)
+    {
+        $raw = trim((string) $photoReference);
+        if ($raw === '') {
+            return null;
+        }
+
+        $rawNormalized = str_replace('\\', '/', $raw);
+        if ((preg_match('~^[A-Za-z]:/~', $rawNormalized) === 1 || str_starts_with($rawNormalized, '/')) && is_file($raw)) {
+            $real = realpath($raw);
+            return $real !== false ? $real : $raw;
+        }
+
+        $normalized = normalize_face_reference_path($raw);
+        if ($normalized === '') {
+            return null;
+        }
+
+        $candidates = [
+            public_path('uploads/faces/' . $normalized),
+            public_path($normalized),
+            public_path('uploads/' . $normalized),
+        ];
+
+        foreach ($candidates as $candidate) {
+            if ($candidate !== '' && is_file($candidate)) {
+                $real = realpath($candidate);
+                return $real !== false ? $real : $candidate;
+            }
+        }
+
+        if (!str_contains($normalized, '/')) {
+            $facesRoot = public_path('uploads/faces');
+            if (is_dir($facesRoot)) {
+                try {
+                    $iterator = new RecursiveIteratorIterator(
+                        new RecursiveDirectoryIterator($facesRoot, FilesystemIterator::SKIP_DOTS)
+                    );
+                    foreach ($iterator as $fileInfo) {
+                        if (!$fileInfo->isFile()) {
+                            continue;
+                        }
+                        if (strcasecmp($fileInfo->getFilename(), $normalized) !== 0) {
+                            continue;
+                        }
+                        $real = realpath($fileInfo->getPathname());
+                        return $real !== false ? $real : $fileInfo->getPathname();
+                    }
+                } catch (\Throwable) {
+                    return null;
+                }
+            }
+        }
+
+        return null;
+    }
+}
+
+if (!function_exists('face_reference_public_url')) {
+    function face_reference_public_url($photoReference, $appendVersion = true)
+    {
+        $absolutePath = resolve_face_reference_file_path($photoReference);
+        if ($absolutePath === null) {
+            return '';
+        }
+
+        $relativePath = face_reference_relative_from_file($absolutePath);
+        if ($relativePath === '') {
+            return '';
+        }
+
+        $url = (string) url('uploads/faces/' . ltrim($relativePath, '/'));
+        if ($appendVersion) {
+            $version = @filemtime($absolutePath);
+            if ($version) {
+                $url .= (str_contains($url, '?') ? '&' : '?') . 'v=' . $version;
+            }
+        }
+
+        return $url;
+    }
+}
+
 if (!function_exists('calculateDistance')) {
     function calculateDistance($lat1, $lon1, $lat2, $lon2)
     {

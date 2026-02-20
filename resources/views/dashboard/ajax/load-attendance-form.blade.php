@@ -202,6 +202,8 @@ $(document).ready(function() {
     const hasReference = String($('#captureAttendanceBtn').data('has-reference')) === '1';
     const studentLabel = @json($studentLabel);
     const MODEL_URL = '../face/faces_logics/models';
+    const secureDeviceContext = window.isSecureContext === true
+        || ['localhost', '127.0.0.1', '::1'].includes(window.location.hostname);
     let currentDeviceId = null;
     let lastWorkingDeviceId = null;
     const attendanceContentEl = document.getElementById('attendanceContent');
@@ -226,8 +228,46 @@ $(document).ready(function() {
     
     // Step 1: Get GPS Location
     getGPSLocation();
+
+    function secureContextMessage(featureName) {
+        const feature = featureName || 'fitur ini';
+        return `Akses ${feature} membutuhkan HTTPS. Buka halaman menggunakan https:// atau localhost.`;
+    }
+
+    function cameraErrorMessage(error) {
+        if (!secureDeviceContext) {
+            return secureContextMessage('kamera');
+        }
+
+        const name = error && error.name ? String(error.name) : '';
+        if (name === 'NotAllowedError' || name === 'PermissionDeniedError') {
+            return 'Izin kamera ditolak. Aktifkan izin kamera di browser lalu coba lagi.';
+        }
+        if (name === 'NotFoundError' || name === 'DevicesNotFoundError') {
+            return 'Perangkat kamera tidak ditemukan.';
+        }
+        if (name === 'NotReadableError' || name === 'TrackStartError') {
+            return 'Kamera sedang dipakai aplikasi lain. Tutup aplikasi lain lalu coba lagi.';
+        }
+        if (name === 'OverconstrainedError' || name === 'ConstraintNotSatisfiedError') {
+            return 'Konfigurasi kamera tidak didukung perangkat ini.';
+        }
+
+        const rawMessage = error && error.message ? String(error.message) : '';
+        return rawMessage !== '' ? `Tidak dapat mengakses kamera: ${rawMessage}` : 'Tidak dapat mengakses kamera.';
+    }
     
     function getGPSLocation() {
+        if (!secureDeviceContext) {
+            $('#gpsStatus').html(`
+                <div class="alert alert-danger">
+                    <i class="fas fa-lock"></i>
+                    ${secureContextMessage('lokasi GPS')}
+                </div>
+            `);
+            return;
+        }
+
         if (navigator.geolocation) {
             navigator.geolocation.getCurrentPosition(
                 function(position) {
@@ -425,6 +465,25 @@ $(document).ready(function() {
     }
     
     function startCamera(deviceId = null) {
+        if (!secureDeviceContext) {
+            $('#cameraSection').html(`
+                <div class="alert alert-danger">
+                    <i class="fas fa-lock"></i>
+                    ${secureContextMessage('kamera')}
+                </div>
+            `);
+            return;
+        }
+        if (!navigator.mediaDevices || typeof navigator.mediaDevices.getUserMedia !== 'function') {
+            $('#cameraSection').html(`
+                <div class="alert alert-danger">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    Browser ini tidak mendukung akses kamera (getUserMedia).
+                </div>
+            `);
+            return;
+        }
+
         if (attendanceStream) {
             attendanceStream.getTracks().forEach(track => track.stop());
         }
@@ -494,7 +553,7 @@ $(document).ready(function() {
                 $('#cameraSection').html(`
                     <div class="alert alert-danger">
                         <i class="fas fa-exclamation-triangle"></i>
-                        Tidak dapat mengakses kamera: ${err.message}
+                        ${cameraErrorMessage(err)}
                     </div>
                 `);
             });

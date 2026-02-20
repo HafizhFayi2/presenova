@@ -8,7 +8,7 @@
     <link rel="canonical" href="<?php echo htmlspecialchars($siteUrl, ENT_QUOTES, 'UTF-8'); ?>">
     <title>get started - presenova</title>
     <meta name="theme-color" content="#04091d">
-    <link rel="manifest" href="<?php echo htmlspecialchars($assetBaseUrl, ENT_QUOTES, 'UTF-8'); ?>manifest.json">
+    <link rel="manifest" href="<?php echo htmlspecialchars($assetBaseUrl, ENT_QUOTES, 'UTF-8'); ?>manifest.json?v=20260220pwa">
     <link rel="apple-touch-icon" href="<?php echo htmlspecialchars($assetBaseUrl, ENT_QUOTES, 'UTF-8'); ?>assets/images/apple-touch-icon-white background.png">
     <link rel="icon" type="image/png" sizes="32x32" href="<?php echo htmlspecialchars($assetBaseUrl, ENT_QUOTES, 'UTF-8'); ?>assets/images/favicon-32x32_login.png">
 
@@ -90,7 +90,7 @@
             inset: 0;
             z-index: 1;
             mix-blend-mode: screen;
-            filter: contrast(1.2) saturate(1.32) brightness(1.06);
+            filter: contrast(1.22) saturate(1.36) brightness(1.08);
             opacity: 1;
         }
 
@@ -98,7 +98,42 @@
             width: 100% !important;
             height: 100% !important;
             display: block;
-            filter: contrast(1.05) saturate(1.08);
+            filter: contrast(1.06) saturate(1.12) brightness(1.04);
+        }
+
+        .light-pillar-wrap::before,
+        .light-pillar-wrap::after {
+            content: '';
+            position: absolute;
+            pointer-events: none;
+        }
+
+        .light-pillar-wrap::before {
+            inset: -12% -30%;
+            background:
+                radial-gradient(36% 62% at 52% 60%, rgba(56, 248, 229, 0.34) 0%, rgba(48, 186, 255, 0.22) 45%, rgba(0, 0, 0, 0) 78%);
+            filter: blur(24px);
+            opacity: 0.86;
+            mix-blend-mode: screen;
+        }
+
+        .light-pillar-wrap::after {
+            top: -10%;
+            bottom: -14%;
+            left: 50%;
+            width: min(44vw, 420px);
+            transform: translateX(-50%) rotate(2deg);
+            background: linear-gradient(
+                180deg,
+                rgba(204, 255, 253, 0) 0%,
+                rgba(120, 246, 255, 0.22) 22%,
+                rgba(82, 240, 255, 0.3) 46%,
+                rgba(93, 255, 206, 0.24) 64%,
+                rgba(177, 255, 247, 0) 100%
+            );
+            filter: blur(14px);
+            opacity: 0.82;
+            mix-blend-mode: screen;
         }
 
         .pillar-aura {
@@ -1690,12 +1725,12 @@
 
         @media (max-width: 992px) {
             .light-pillar-wrap {
-                filter: contrast(1.1) saturate(1.18) brightness(1.02);
+                filter: contrast(1.18) saturate(1.28) brightness(1.08);
             }
 
             .pillar-aura-2,
             .pillar-aura-3 {
-                opacity: 0.14;
+                opacity: 0.22;
             }
 
             .floating-tech {
@@ -1753,11 +1788,47 @@
             }
 
             .light-pillar-wrap {
-                filter: contrast(1.1) saturate(1.16) brightness(1.01);
+                filter: contrast(1.2) saturate(1.32) brightness(1.16);
+            }
+
+            .light-pillar-wrap::before {
+                inset: -8% -24%;
+                opacity: 0.95;
+                filter: blur(20px);
+                background:
+                    radial-gradient(42% 70% at 52% 58%, rgba(66, 252, 236, 0.4) 0%, rgba(30, 178, 255, 0.26) 42%, rgba(0, 0, 0, 0) 78%);
+            }
+
+            .light-pillar-wrap::after {
+                width: min(58vw, 380px);
+                transform: translateX(-50%) rotate(1deg);
+                opacity: 0.96;
+                filter: blur(12px);
             }
 
             .pillar-aura {
-                display: none;
+                display: block;
+            }
+
+            .pillar-aura-1 {
+                opacity: 0.36;
+                filter: blur(24px);
+            }
+
+            .pillar-aura-2 {
+                opacity: 0.2;
+                filter: blur(20px);
+            }
+
+            .pillar-aura-3 {
+                opacity: 0.16;
+                filter: blur(16px);
+            }
+
+            .hero-vignette {
+                background:
+                    linear-gradient(90deg, rgba(2, 6, 18, 0.26) 0%, rgba(2, 9, 23, 0.02) 50%, rgba(2, 6, 18, 0.24) 100%),
+                    radial-gradient(circle at center, transparent 16%, rgba(1, 6, 19, 0.05) 100%);
             }
 
             .floating-tech {
@@ -2060,8 +2131,16 @@
                 effectiveQuality = 'low';
             }
 
+            if (isMobile) {
+                config.intensity = 1.42;
+                config.glowAmount = 0.0036;
+                config.noiseIntensity = 0.045;
+                config.pillarWidth = 2.62;
+                config.pillarHeight = 0.44;
+            }
+
             const qualitySettings = {
-                low: { iterations: 18, waveIterations: 1, pixelRatio: 0.42, precision: 'mediump', stepMultiplier: 1.65, targetFPS: 26 },
+                low: { iterations: 20, waveIterations: 1, pixelRatio: 0.5, precision: 'mediump', stepMultiplier: 1.52, targetFPS: 26 },
                 medium: { iterations: 32, waveIterations: 2, pixelRatio: 0.6, precision: 'mediump', stepMultiplier: 1.28, targetFPS: 40 },
                 high: { iterations: 56, waveIterations: 3, pixelRatio: Math.min(window.devicePixelRatio || 1, 1.35), precision: 'highp', stepMultiplier: 1.08, targetFPS: 52 }
             };
