@@ -1,20 +1,45 @@
 <?php
-$auth = new \App\Support\Core\Auth();
+$appRootUrl = rtrim((string) url('/'), '/');
+$assetBaseUrl = $appRootUrl . '/';
+$loginUrl = (string) url('login.php');
+$registerUrl = (string) url('register.php');
+$dashboardUrl = (string) url('dashboard/siswa.php');
+$registerLogoutUrl = $registerUrl . '?logout=1';
+$registerUploadFaceUrl = $registerUrl . '?upload_face=1';
+$registerPoseOnlyUrl = $registerUrl . '?upload_face=1&pose_only=1';
+$appDialogCssUrl = (string) url('assets/css/app-dialog.css');
+$mainStyleCssUrl = (string) url('assets/css/style.css');
+$appDialogScriptUrl = (string) url('assets/js/app-dialog.js');
+$faceApiScriptUrl = (string) url('face/faces_logics/face-api.min.js');
+$faceModelBaseUrl = (string) url('face/faces_logics/models');
+$savePoseFramesUrl = (string) url('api/save_pose_frames.php');
+
+try {
+    $auth = new \App\Support\Core\Auth();
+} catch (\Throwable) {
+    header('Location: ' . $loginUrl . '?db_error=1');
+    exit();
+}
 
 // Handle logout request
 if (isset($_GET['logout'])) {
     $auth->logout();
-    header("Location: login.php?logout_success=1");
+    header('Location: ' . $loginUrl . '?logout_success=1');
     exit();
 }
 
 // Check if student is logged in
 if (!$auth->isLoggedIn() || !isset($_SESSION['student_id'])) {
-    header("Location: login.php");
+    header('Location: ' . $loginUrl);
     exit();
 }
 
-$db = new Database();
+try {
+    $db = new \App\Support\Core\Database();
+} catch (\Throwable) {
+    header('Location: ' . $loginUrl . '?db_error=1');
+    exit();
+}
 
 if (!function_exists('register_has_pose_capture_dataset')) {
     function register_has_pose_capture_dataset($studentNisn, $className, $studentName)
@@ -76,18 +101,22 @@ if ($student_row && !empty($student_row['photo_reference'])) {
         );
         $_SESSION['face_reference_notice'] = 'Sistem tidak menemukan photo referensi. Mohon photo ulang.';
     }
-} elseif ($student_row && !empty($student_row['student_nisn']) && class_exists('FaceMatcher')) {
-    $fallbackMatcher = new FaceMatcher();
-    $fallbackPath = $fallbackMatcher->getReferencePath((string) $student_row['student_nisn'], null);
-    if ($fallbackPath && is_file($fallbackPath)) {
-        $photo_reference = face_reference_relative_from_file($fallbackPath);
-        if ($photo_reference !== '') {
-            $db->query(
-                "UPDATE student SET photo_reference = ? WHERE id = ?",
-                [$photo_reference, $student_id]
-            );
+} elseif ($student_row && !empty($student_row['student_nisn'])) {
+    try {
+        $fallbackMatcher = app(\App\Services\FaceMatcherService::class);
+        $fallbackPath = $fallbackMatcher->getReferencePath((string) $student_row['student_nisn'], null);
+        if ($fallbackPath && is_file($fallbackPath)) {
+            $photo_reference = face_reference_relative_from_file($fallbackPath);
+            if ($photo_reference !== '') {
+                $db->query(
+                    "UPDATE student SET photo_reference = ? WHERE id = ?",
+                    [$photo_reference, $student_id]
+                );
+            }
+            $has_face = true;
         }
-        $has_face = true;
+    } catch (\Throwable) {
+        // Fallback matcher is optional; continue without blocking registration page.
     }
 }
 
@@ -101,15 +130,15 @@ $_SESSION['has_pose_capture'] = $has_pose_capture;
 
 // If student already has full data, redirect to dashboard.
 if ($has_face && $has_pose_capture) {
-    header("Location: dashboard/siswa.php");
+    header('Location: ' . $dashboardUrl);
     exit();
 }
 if ($pose_only && !$has_face) {
-    header("Location: register.php?upload_face=1");
+    header('Location: ' . $registerUploadFaceUrl);
     exit();
 }
 if ($has_face && !$has_pose_capture && !$pose_only) {
-    header("Location: register.php?upload_face=1&pose_only=1");
+    header('Location: ' . $registerPoseOnlyUrl);
     exit();
 }
 $pose_only_mode = $pose_only && $has_face && !$has_pose_capture;
@@ -148,13 +177,12 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['face_data'])) {
     }
     
     // Get student data for filename
-    $db = new Database();
     $sql = "SELECT s.student_nisn, s.student_name, c.class_name
             FROM student s
             LEFT JOIN class c ON s.class_id = c.class_id
             WHERE s.id = ?";
     $stmt = $db->query($sql, [$student_id]);
-    $student_data = $stmt->fetch();
+    $student_data = $stmt ? $stmt->fetch() : null;
     
     if (!empty($error)) {
         // Do nothing, show error from pose validation.
@@ -204,7 +232,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['face_data'])) {
                 $_SESSION['has_face'] = true;
                 
                 // Redirect after 2 seconds
-                header("refresh:2;url=dashboard/siswa.php");
+                header('Refresh:2;url=' . $dashboardUrl);
             } else {
                 $error = "Gagal menyimpan data ke database";
                 // Delete uploaded file
@@ -228,13 +256,13 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['face_data'])) {
     <meta name="color-scheme" content="light dark">
     <meta name="theme-color" content="#f8fafc" media="(prefers-color-scheme: light)">
     <meta name="theme-color" content="#0a0f1e" media="(prefers-color-scheme: dark)">
-    <link rel="apple-touch-icon" href="assets/images/apple-touch-icon-white background.png">
-    <link rel="icon" type="image/png" sizes="32x32" href="assets/images/favicon-16x16-white background.png" media="(prefers-color-scheme: light)">
-    <link rel="icon" type="image/png" sizes="32x32" href="assets/images/favicon-16x16-black background.png" media="(prefers-color-scheme: dark)">
-    <link rel="shortcut icon" type="image/png" href="assets/images/favicon-32x32.png">
+    <link rel="apple-touch-icon" href="<?php echo htmlspecialchars($assetBaseUrl, ENT_QUOTES, 'UTF-8'); ?>assets/images/apple-touch-icon-white background.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="<?php echo htmlspecialchars($assetBaseUrl, ENT_QUOTES, 'UTF-8'); ?>assets/images/favicon-16x16-white background.png" media="(prefers-color-scheme: light)">
+    <link rel="icon" type="image/png" sizes="32x32" href="<?php echo htmlspecialchars($assetBaseUrl, ENT_QUOTES, 'UTF-8'); ?>assets/images/favicon-16x16-black background.png" media="(prefers-color-scheme: dark)">
+    <link rel="shortcut icon" type="image/png" href="<?php echo htmlspecialchars($assetBaseUrl, ENT_QUOTES, 'UTF-8'); ?>assets/images/favicon-32x32.png">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="assets/css/app-dialog.css">
-    <link rel="stylesheet" href="assets/css/style.css">
+    <link rel="stylesheet" href="<?php echo htmlspecialchars($appDialogCssUrl, ENT_QUOTES, 'UTF-8'); ?>">
+    <link rel="stylesheet" href="<?php echo htmlspecialchars($mainStyleCssUrl, ENT_QUOTES, 'UTF-8'); ?>">
     <style>
         .register-container {
             min-height: 100vh;
@@ -669,7 +697,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['face_data'])) {
 <body>
     <!-- Logout Button -->
     <div class="logout-btn-container">
-        <a href="register.php?logout" class="logout-btn">
+        <a href="<?php echo htmlspecialchars($registerLogoutUrl, ENT_QUOTES, 'UTF-8'); ?>" class="logout-btn">
             <i class="fas fa-sign-out-alt"></i> Logout
         </a>
     </div>
@@ -818,7 +846,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['face_data'])) {
                     <div class="pose-only-complete" id="poseOnlyComplete" style="display: none;">
                         <h5><i class="fas fa-circle-check"></i> Pose Berhasil Disimpan</h5>
                         <p>Dataset pose sudah lengkap. Klik lanjut untuk masuk ke dashboard.</p>
-                        <a href="dashboard/siswa.php" class="btn btn-success btn-sm">
+                        <a href="<?php echo htmlspecialchars($dashboardUrl, ENT_QUOTES, 'UTF-8'); ?>" class="btn btn-success btn-sm">
                             <i class="fas fa-arrow-right"></i> Lanjut ke Dashboard
                         </a>
                     </div>
@@ -832,7 +860,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['face_data'])) {
                 
                 <!-- Additional Logout Button at Bottom -->
                 <div class="text-center mt-4">
-                    <a href="register.php?logout" class="btn btn-outline-danger btn-sm">
+                    <a href="<?php echo htmlspecialchars($registerLogoutUrl, ENT_QUOTES, 'UTF-8'); ?>" class="btn btn-outline-danger btn-sm">
                         <i class="fas fa-sign-out-alt"></i> Keluar dan Kembali ke Login
                     </a>
                 </div>
@@ -841,8 +869,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['face_data'])) {
     </div>
     
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    <script src="assets/js/app-dialog.js"></script>
-    <script src="face/faces_logics/face-api.min.js"></script>
+    <script src="<?php echo htmlspecialchars($appDialogScriptUrl, ENT_QUOTES, 'UTF-8'); ?>"></script>
+    <script src="<?php echo htmlspecialchars($faceApiScriptUrl, ENT_QUOTES, 'UTF-8'); ?>"></script>
     <script>
         document.addEventListener('DOMContentLoaded', function() {
             const registerCard = document.querySelector('.register-card');
@@ -870,7 +898,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['face_data'])) {
 
             const poseOnlyMode = registerCard.dataset.poseOnly === '1';
             const hasPoseFromServer = registerCard.dataset.hasPose === '1';
-            const modelBase = 'face/faces_logics/models';
+            const modelBase = '<?php echo htmlspecialchars($faceModelBaseUrl, ENT_QUOTES, 'UTF-8'); ?>';
             const secureDeviceContext = window.isSecureContext === true
                 || ['localhost', '127.0.0.1', '::1'].includes(window.location.hostname);
             const poseRequiredPerSide = 5;
@@ -1217,7 +1245,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['face_data'])) {
                         left: poseLeftFrames.map(item => item.imageData).filter(Boolean),
                         front: poseFrontFrames.map(item => item.imageData).filter(Boolean)
                     };
-                    const response = await fetch('api/save_pose_frames.php', {
+                    const response = await fetch('<?php echo htmlspecialchars($savePoseFramesUrl, ENT_QUOTES, 'UTF-8'); ?>', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify(payload)

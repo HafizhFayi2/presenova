@@ -130,25 +130,12 @@ class HomeController extends Controller
             return $scriptPrefix;
         }
 
-        $configPath = $this->normalizePathPrefix((string) parse_url((string) config('app.url'), PHP_URL_PATH));
-        if ($configPath === '') {
-            return '';
-        }
-
-        $requestPath = '/' . trim((string) parse_url((string) $request->server('REQUEST_URI', ''), PHP_URL_PATH), '/');
-        if ($requestPath === '/') {
-            return '';
-        }
-
-        if (preg_match('~^/' . preg_quote($configPath, '~') . '(?:/|$)~i', $requestPath) === 1) {
-            return $configPath;
-        }
-
         return '';
     }
 
     private function normalizePathPrefix(string $prefix): string
     {
+        $prefix = str_replace('\\', '/', $prefix);
         $prefix = trim($prefix, '/');
         if ($prefix === '') {
             return '';

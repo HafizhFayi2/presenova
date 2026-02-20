@@ -156,7 +156,7 @@
         <p class="description">{{ $descriptionText }}</p>
         <p class="request-path">Request: {{ $requestedPath }}</p>
         <div class="actions">
-            <a class="action-btn" href="{{ url('presenova/index.php') }}">Kembali ke Beranda</a>
+            <a class="action-btn" href="{{ url('index.php') }}">Kembali ke Beranda</a>
             <a class="action-btn" href="javascript:history.back()">Halaman Sebelumnya</a>
         </div>
     </main>

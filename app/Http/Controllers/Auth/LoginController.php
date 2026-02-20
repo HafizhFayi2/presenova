@@ -38,125 +38,131 @@ class LoginController extends Controller
             return redirect($this->appPath('login.php'));
         }
 
-        $role = (string) $request->input('role', 'siswa');
-        $username = trim((string) $request->input('username', ''));
-        $password = (string) $request->input('password', '');
-        $remember = $request->has('remember');
+        try {
+            $role = (string) $request->input('role', 'siswa');
+            $username = trim((string) $request->input('username', ''));
+            $password = (string) $request->input('password', '');
+            $remember = $request->has('remember');
 
-        if ($username === '' || $password === '') {
-            return $this->renderLoginPage($request, 'Username dan password harus diisi!');
-        }
+            if ($username === '' || $password === '') {
+                return $this->renderLoginPage($request, 'Username dan password harus diisi!');
+            }
 
-        if ($role === 'admin') {
-            $admin = DB::table('user')
-                ->where('username', $username)
-                ->whereIn('level', [1, 2])
+            if ($role === 'admin') {
+                $admin = DB::table('user')
+                    ->where('username', $username)
+                    ->whereIn('level', [1, 2])
+                    ->first();
+
+                if (!$admin || !$this->verifyPassword($password, (string) ($admin->password ?? ''))) {
+                    return $this->renderLoginPage($request, 'Username atau password admin salah!');
+                }
+
+                if (property_exists($admin, 'is_active') && (string) ($admin->is_active ?? 'Y') !== 'Y') {
+                    return $this->renderLoginPage($request, 'Akun admin tidak aktif.');
+                }
+
+                DB::table('user')
+                    ->where('user_id', (int) $admin->user_id)
+                    ->update(['last_login' => now()]);
+
+                $this->syncSession([
+                    'user_id' => (int) $admin->user_id,
+                    'username' => (string) ($admin->username ?? ''),
+                    'fullname' => (string) ($admin->fullname ?? ''),
+                    'level' => (int) ($admin->level ?? 0),
+                    'role' => 'admin',
+                    'logged_in' => true,
+                ]);
+
+                $this->applyRememberCookie($remember, 'admin', (int) $admin->user_id);
+                $this->touchActivityTimestamp($request, true);
+
+                return redirect($this->freshDashboardPath('dashboard/admin.php'));
+            }
+
+            if ($role === 'guru') {
+                $teacher = DB::table('teacher')
+                    ->where('teacher_code', $username)
+                    ->orWhere('teacher_username', $username)
+                    ->first();
+
+                if (!$teacher || !$this->verifyPassword($password, (string) ($teacher->teacher_password ?? ''))) {
+                    return $this->renderLoginPage($request, 'Kode guru atau password salah!');
+                }
+
+                DB::table('teacher')
+                    ->where('id', (int) $teacher->id)
+                    ->update(['created_login' => now()]);
+
+                $this->syncSession([
+                    'teacher_id' => (int) $teacher->id,
+                    'teacher_code' => (string) ($teacher->teacher_code ?? ''),
+                    'teacher_name' => (string) ($teacher->teacher_name ?? ''),
+                    'role' => 'guru',
+                    'level' => 2,
+                    'logged_in' => true,
+                ]);
+
+                $this->applyRememberCookie($remember, 'guru', (int) $teacher->id);
+                $this->touchActivityTimestamp($request, true);
+
+                return redirect($this->freshDashboardPath('dashboard/guru.php'));
+            }
+
+            $studentNisn = preg_replace('/\s+/', '', $username);
+            $student = DB::table('student')
+                ->where('student_nisn', $studentNisn)
                 ->first();
 
-            if (!$admin || !$this->verifyPassword($password, (string) ($admin->password ?? ''))) {
-                return $this->renderLoginPage($request, 'Username atau password admin salah!');
+            if (!$student || !$this->verifyPassword($password, (string) ($student->student_password ?? ''))) {
+                return $this->renderLoginPage($request, 'NISN atau password salah');
             }
 
-            if (property_exists($admin, 'is_active') && (string) ($admin->is_active ?? 'Y') !== 'Y') {
-                return $this->renderLoginPage($request, 'Akun admin tidak aktif.');
-            }
+            $studentPhotoReference = normalize_face_reference_path((string) ($student->photo_reference ?? ''));
+            $hasFace = $this->ensureStudentFaceReference(
+                (int) $student->id,
+                (string) ($student->photo_reference ?? ''),
+                (string) ($student->student_nisn ?? '')
+            );
 
-            DB::table('user')
-                ->where('user_id', (int) $admin->user_id)
-                ->update(['last_login' => now()]);
-
-            $this->syncSession([
-                'user_id' => (int) $admin->user_id,
-                'username' => (string) ($admin->username ?? ''),
-                'fullname' => (string) ($admin->fullname ?? ''),
-                'level' => (int) ($admin->level ?? 0),
-                'role' => 'admin',
-                'logged_in' => true,
-            ]);
-
-            $this->applyRememberCookie($remember, 'admin', (int) $admin->user_id);
-            $this->touchActivityTimestamp($request, true);
-
-            return redirect($this->freshDashboardPath('dashboard/admin.php'));
-        }
-
-        if ($role === 'guru') {
-            $teacher = DB::table('teacher')
-                ->where('teacher_code', $username)
-                ->orWhere('teacher_username', $username)
-                ->first();
-
-            if (!$teacher || !$this->verifyPassword($password, (string) ($teacher->teacher_password ?? ''))) {
-                return $this->renderLoginPage($request, 'Kode guru atau password salah!');
-            }
-
-            DB::table('teacher')
-                ->where('id', (int) $teacher->id)
+            DB::table('student')
+                ->where('id', (int) $student->id)
                 ->update(['created_login' => now()]);
 
             $this->syncSession([
-                'teacher_id' => (int) $teacher->id,
-                'teacher_code' => (string) ($teacher->teacher_code ?? ''),
-                'teacher_name' => (string) ($teacher->teacher_name ?? ''),
-                'role' => 'guru',
-                'level' => 2,
+                'student_id' => (int) $student->id,
+                'student_nisn' => (string) ($student->student_nisn ?? ''),
+                'student_code' => (string) ($student->student_code ?? ''),
+                'student_name' => (string) ($student->student_name ?? ''),
+                'class_id' => (int) ($student->class_id ?? 0),
+                'role' => 'siswa',
+                'photo_reference' => $studentPhotoReference !== '' ? $studentPhotoReference : null,
+                'has_face' => $hasFace,
+                'has_pose_capture' => $this->hasPoseCaptureDataset((string) ($student->student_nisn ?? '')),
                 'logged_in' => true,
             ]);
 
-            $this->applyRememberCookie($remember, 'guru', (int) $teacher->id);
+            $this->applyRememberCookie($remember, 'student', (int) $student->id);
             $this->touchActivityTimestamp($request, true);
 
-            return redirect($this->freshDashboardPath('dashboard/guru.php'));
+            if ($hasFace) {
+                return redirect($this->freshDashboardPath('dashboard/siswa.php'));
+            }
+
+            if (session('face_reference_missing') === true) {
+                $this->syncSession([
+                    'face_reference_notice' => 'Sistem tidak menemukan photo referensi. Mohon photo ulang.',
+                    'face_reference_missing' => null,
+                ]);
+            }
+
+            return redirect($this->appPath('register.php?upload_face=1&first_login=1'));
+        } catch (\Throwable $e) {
+            report($e);
+
+            return redirect($this->appPath('login.php?db_error=1'));
         }
-
-        $studentNisn = preg_replace('/\s+/', '', $username);
-        $student = DB::table('student')
-            ->where('student_nisn', $studentNisn)
-            ->first();
-
-        if (!$student || !$this->verifyPassword($password, (string) ($student->student_password ?? ''))) {
-            return $this->renderLoginPage($request, 'NISN atau password salah');
-        }
-
-        $studentPhotoReference = normalize_face_reference_path((string) ($student->photo_reference ?? ''));
-        $hasFace = $this->ensureStudentFaceReference(
-            (int) $student->id,
-            (string) ($student->photo_reference ?? ''),
-            (string) ($student->student_nisn ?? '')
-        );
-
-        DB::table('student')
-            ->where('id', (int) $student->id)
-            ->update(['created_login' => now()]);
-
-        $this->syncSession([
-            'student_id' => (int) $student->id,
-            'student_nisn' => (string) ($student->student_nisn ?? ''),
-            'student_code' => (string) ($student->student_code ?? ''),
-            'student_name' => (string) ($student->student_name ?? ''),
-            'class_id' => (int) ($student->class_id ?? 0),
-            'role' => 'siswa',
-            'photo_reference' => $studentPhotoReference !== '' ? $studentPhotoReference : null,
-            'has_face' => $hasFace,
-            'has_pose_capture' => $this->hasPoseCaptureDataset((string) ($student->student_nisn ?? '')),
-            'logged_in' => true,
-        ]);
-
-        $this->applyRememberCookie($remember, 'student', (int) $student->id);
-        $this->touchActivityTimestamp($request, true);
-
-        if ($hasFace) {
-            return redirect($this->freshDashboardPath('dashboard/siswa.php'));
-        }
-
-        if (session('face_reference_missing') === true) {
-            $this->syncSession([
-                'face_reference_notice' => 'Sistem tidak menemukan photo referensi. Mohon photo ulang.',
-                'face_reference_missing' => null,
-            ]);
-        }
-
-        return redirect($this->appPath('register.php?upload_face=1&first_login=1'));
     }
 
     public function logout(Request $request, bool $withMessage = true): RedirectResponse
@@ -179,6 +185,8 @@ class LoginController extends Controller
                 $success = 'Registrasi berhasil! Silakan login dengan akun Anda.';
             } elseif ($request->query->has('logout_success')) {
                 $success = 'Anda telah berhasil logout.';
+            } elseif ($request->query->has('db_error')) {
+                $error = 'Koneksi database bermasalah. Periksa konfigurasi .env dan layanan MySQL.';
             }
         }
 
@@ -281,25 +289,12 @@ class LoginController extends Controller
             return $scriptPrefix;
         }
 
-        $configPrefix = $this->normalizePathPrefix((string) parse_url((string) config('app.url'), PHP_URL_PATH));
-        if ($configPrefix === '') {
-            return '';
-        }
-
-        $requestPath = '/' . trim((string) parse_url((string) $request->server('REQUEST_URI', ''), PHP_URL_PATH), '/');
-        if ($requestPath === '/') {
-            return '';
-        }
-
-        if (preg_match('~^/' . preg_quote($configPrefix, '~') . '(?:/|$)~i', $requestPath) === 1) {
-            return $configPrefix;
-        }
-
         return '';
     }
 
     private function normalizePathPrefix(string $prefix): string
     {
+        $prefix = str_replace('\\', '/', $prefix);
         $prefix = trim($prefix, '/');
         if ($prefix === '') {
             return '';

@@ -103,6 +103,46 @@ Contoh VirtualHost:
 
 Template siap pakai juga tersedia di: `scripts/apache-vhost-linux.conf`.
 
+### Linux VPS HTTPS (Let's Encrypt, produksi)
+Gunakan installer otomatis berikut agar Apache langsung aktif HTTPS + redirect HTTP:
+
+```bash
+sudo bash scripts/setup_https_letsencrypt_linux.sh \
+  --domain presenova.my.id \
+  --email admin@presenova.my.id \
+  --app-dir /var/www/presenova \
+  --aliases www.presenova.my.id
+```
+
+Script akan:
+- Mengaktifkan module Apache (`rewrite`, `ssl`, `headers`).
+- Membuat/aktifkan vhost HTTPS dengan redirect `:80 -> :443`.
+- Request sertifikat Let's Encrypt + aktifkan auto-renew.
+- Update `.env` agar URL/cookie konsisten HTTPS.
+
+Template final vhost HTTPS tersedia di: `scripts/apache-vhost-linux-https-letsencrypt.conf`.
+Script installer tersedia di: `scripts/setup_https_letsencrypt_linux.sh`.
+
+Setelah script selesai, jalankan:
+
+```bash
+cd /var/www/presenova
+php artisan optimize:clear
+php artisan config:cache
+```
+
+Pastikan nilai `.env` produksi:
+- `APP_URL=https://presenova.my.id`
+- `SITE_URL=https://presenova.my.id`
+- `SESSION_SECURE_COOKIE=true`
+- `FORCE_HTTPS=true`
+
+Checklist anti warning `Not Secure`:
+- `curl -I http://presenova.my.id` harus 301/302 ke `https://`.
+- `curl -I https://presenova.my.id` harus 200/302 tanpa error sertifikat.
+- Tidak ada aset `http://` (mixed content) pada source HTML/CSS/JS.
+- `sudo systemctl status certbot.timer` aktif untuk auto-renew.
+
 ### Windows XAMPP (`C:/xampp/htdocs/presenova`)
 Jika memakai host `localhost/presenova`, pastikan root `.htaccess` aktif (`AllowOverride All`) atau gunakan VirtualHost:
 
@@ -369,7 +409,9 @@ Agar alur tidak looping ke halaman awal:
 Dokumen dan template:
 - `README.md`
 - `scripts/apache-vhost-linux.conf`
+- `scripts/apache-vhost-linux-https-letsencrypt.conf`
 - `scripts/apache-vhost-windows.conf`
+- `scripts/setup_https_letsencrypt_linux.sh`
 
 ## 11. Pro dan Cons Terkini
 

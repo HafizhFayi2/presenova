@@ -1573,6 +1573,16 @@
             box-shadow: 0 10px 24px rgba(0, 91, 142, 0.25);
         }
 
+        .hero-desc .ai-typewriter {
+            min-width: clamp(176px, 28vw, 320px);
+            text-align: center;
+            color: inherit;
+        }
+
+        .hero-desc .ai-typewriter::after {
+            color: #b8f6ff;
+        }
+
         .hero-actions {
             display: flex;
             gap: 14px;
@@ -1806,6 +1816,10 @@
                 filter: blur(12px);
             }
 
+            .hero-desc .ai-typewriter {
+                min-width: 172px;
+            }
+
             .pillar-aura {
                 display: block;
             }
@@ -2031,7 +2045,13 @@
                             <span class="hero-title-main">Presenova</span>
                             <span class="hero-title-tagline">Bringing Back, Learning Time</span>
                         </h1>
-                        <p class="hero-desc">LET'S GET TO KNOW MORE ABOUT US</p>
+                        <p class="hero-desc">
+                            <span
+                                class="ai-typewriter"
+                                data-words="AI Engine|Face Recognition|Location Guard|Push Notification|Attendance Analytics"
+                                data-words-mobile="AI Engine|Face Scan|GPS Guard|Push Alert"
+                            >AI Engine</span>
+                        </p>
                         <div class="hero-actions">
                             <a class="hero-btn hero-btn-get" href="<?php echo htmlspecialchars($loginUrl, ENT_QUOTES, 'UTF-8'); ?>">
                                 <span class="button__icon-wrapper">
@@ -2063,7 +2083,7 @@
                                 <span>Get Started</span>
                             </a>
                             <a class="hero-btn hero-btn-know" href="<?php echo htmlspecialchars($indexUrl, ENT_QUOTES, 'UTF-8'); ?>">
-                                <span>More To Know About Us</span>
+                                <span>Let's Get To Know About Us</span>
                                 <i class="fa-solid fa-arrow-right"></i>
                             </a>
                         </div>
