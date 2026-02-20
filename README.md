@@ -60,6 +60,49 @@ php artisan migrate
 6. Akses aplikasi:
 - `http://localhost/presenova`
 
+## Konfigurasi Apache (Windows + Linux)
+Konfigurasi `DocumentRoot` wajib ke folder `public`, bukan ke `resources/views/pages`.
+
+Jika salah (mis. ke `resources/views/pages`), route Laravel tidak aktif dan tombol bisa loop / URL duplikat.
+
+### Linux VPS (`/var/www/presenova`)
+Contoh VirtualHost:
+
+```apache
+<VirtualHost *:80>
+    ServerName presenova.my.id
+    ServerAdmin admin@presenova.my.id
+    DocumentRoot /var/www/presenova/public
+
+    <Directory /var/www/presenova/public>
+        AllowOverride All
+        Require all granted
+    </Directory>
+
+    ErrorLog ${APACHE_LOG_DIR}/presenova-error.log
+    CustomLog ${APACHE_LOG_DIR}/presenova-access.log combined
+</VirtualHost>
+```
+
+Template siap pakai juga tersedia di: `scripts/apache-vhost-linux.conf`.
+
+### Windows XAMPP (`C:/xampp/htdocs/presenova`)
+Jika memakai host `localhost/presenova`, pastikan root `.htaccess` aktif (`AllowOverride All`) atau gunakan VirtualHost:
+
+```apache
+<VirtualHost *:80>
+    ServerName presenova.local
+    DocumentRoot "C:/xampp/htdocs/presenova/public"
+
+    <Directory "C:/xampp/htdocs/presenova/public">
+        AllowOverride All
+        Require all granted
+    </Directory>
+</VirtualHost>
+```
+
+Template siap pakai juga tersedia di: `scripts/apache-vhost-windows.conf`.
+
 ## Setup DeepFace
 ```bash
 bash scripts/setup_deepface.sh --write-env

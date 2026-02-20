@@ -17,9 +17,6 @@ DirectoryIndex index.php
     RewriteCond %{REQUEST_URI} (.+)/$
     RewriteRule ^ %1 [L,R=301]
 
-    # Allow dedicated getstarted compatibility file.
-    RewriteRule ^getstarted/index\.php$ - [L,NC]
-
     # Serve static runtime assets directly
     RewriteRule ^(assets|uploads|face|scripts)(/.*)?$ - [L,NC]
 

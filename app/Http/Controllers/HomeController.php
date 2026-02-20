@@ -102,7 +102,7 @@ class HomeController extends Controller
 
         $indexUrl = ($basePath === '' ? '/index.php' : $basePath . '/index.php');
         $loginUrl = ($basePath === '' ? '/login.php' : $basePath . '/login.php');
-        $getStartedUrl = ($basePath === '' ? '/public/getstarted/index.php' : $basePath . '/public/getstarted/index.php');
+        $getStartedUrl = ($basePath === '' ? '/getstarted/index.php' : $basePath . '/getstarted/index.php');
         $rootUrl = ($basePath === '' ? '/' : $basePath . '/');
 
         return [
@@ -120,12 +120,31 @@ class HomeController extends Controller
 
     private function resolveAppPrefix(Request $request): string
     {
+        $basePath = $this->normalizePathPrefix((string) $request->getBasePath());
+        if ($basePath !== '') {
+            return $basePath;
+        }
+
+        $scriptPrefix = $this->prefixFromScriptName((string) $request->server('SCRIPT_NAME', ''));
+        if ($scriptPrefix !== '') {
+            return $scriptPrefix;
+        }
+
         $configPath = $this->normalizePathPrefix((string) parse_url((string) config('app.url'), PHP_URL_PATH));
-        if ($configPath !== '') {
+        if ($configPath === '') {
+            return '';
+        }
+
+        $requestPath = '/' . trim((string) parse_url((string) $request->server('REQUEST_URI', ''), PHP_URL_PATH), '/');
+        if ($requestPath === '/') {
+            return '';
+        }
+
+        if (preg_match('~^/' . preg_quote($configPath, '~') . '(?:/|$)~i', $requestPath) === 1) {
             return $configPath;
         }
 
-        return $this->normalizePathPrefix((string) $request->getBasePath());
+        return '';
     }
 
     private function normalizePathPrefix(string $prefix): string
@@ -161,5 +180,29 @@ class HomeController extends Controller
         }
 
         return implode('/', $segments);
+    }
+
+    private function prefixFromScriptName(string $scriptName): string
+    {
+        $scriptName = str_replace('\\', '/', $scriptName);
+        if ($scriptName === '') {
+            return '';
+        }
+
+        $scriptDir = trim(dirname($scriptName), '/.');
+        if ($scriptDir === '') {
+            return '';
+        }
+
+        $segments = array_values(array_filter(
+            explode('/', $scriptDir),
+            static fn (string $segment): bool => $segment !== ''
+        ));
+
+        if ($segments !== [] && strcasecmp((string) end($segments), 'public') === 0) {
+            array_pop($segments);
+        }
+
+        return $this->normalizePathPrefix(implode('/', $segments));
     }
 }
