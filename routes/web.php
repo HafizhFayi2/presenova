@@ -43,9 +43,15 @@ foreach ($prefixes as $prefix) {
         $loginShow = Route::get('/login.php', [LoginController::class, 'show']);
         $loginAuth = Route::post('/login.php', [LoginController::class, 'authenticate']);
         $logout = Route::get('/logout.php', [LoginController::class, 'logout']);
+        Route::get('/login', [LoginController::class, 'show']);
+        Route::post('/login', [LoginController::class, 'authenticate']);
+        Route::get('/logout', [LoginController::class, 'logout']);
         Route::get('/dashboard/login.php', [LoginController::class, 'show']);
         Route::post('/dashboard/login.php', [LoginController::class, 'authenticate']);
         Route::get('/dashboard/logout.php', [LoginController::class, 'logout']);
+        Route::get('/dashboard/login', [LoginController::class, 'show']);
+        Route::post('/dashboard/login', [LoginController::class, 'authenticate']);
+        Route::get('/dashboard/logout', [LoginController::class, 'logout']);
         if ($isBaseRoutes) {
             $loginShow->name('auth.login.show');
             $loginAuth->name('auth.login.authenticate');

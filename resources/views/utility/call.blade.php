@@ -3,29 +3,29 @@
 $fullurl = ($_SERVER['PHP_SELF']);
 $trimmed = trim($fullurl, ".php");
 $canonical = rtrim($trimmed, '/' . '/?');
+$siteUrl = rtrim((string) url('/'), '/') . '/';
+$loginUrl = rtrim((string) url('login.php'), '/');
+$logoutUrl = rtrim((string) url('logout.php'), '/');
+$registerUrl = rtrim((string) url('register.php'), '/');
+$adminDashboardUrl = rtrim((string) url('dashboard/admin.php'), '/');
+$guruDashboardUrl = rtrim((string) url('dashboard/guru.php'), '/');
+$siswaDashboardUrl = rtrim((string) url('dashboard/siswa.php'), '/');
 
 // Set title halaman
 $pageTitle = "call - presenova";
-
-// Cek apakah ada aksi logout
-if (isset($_GET['action']) && $_GET['action'] == 'logout') {
-    // Delegate logout ke controller Laravel agar cookie/session bridge ikut dibersihkan.
-    header('Location: logout.php');
-    exit();
-}
 
 $sessionRole = (string) ($_SESSION['role'] ?? '');
 $isAdminLoggedIn = isset($_SESSION['user_id']) && !empty($_SESSION['user_id']) && $sessionRole === 'admin';
 $isTeacherLoggedIn = isset($_SESSION['teacher_id']) && !empty($_SESSION['teacher_id']) && $sessionRole === 'guru';
 $isStudentLoggedIn = isset($_SESSION['student_id']) && !empty($_SESSION['student_id']) && $sessionRole === 'siswa';
 $isLoggedIn = $isAdminLoggedIn || $isTeacherLoggedIn || $isStudentLoggedIn;
-$dashboardUrl = 'login.php';
+$dashboardUrl = $loginUrl;
 if ($isAdminLoggedIn) {
-    $dashboardUrl = 'dashboard/admin.php';
+    $dashboardUrl = $adminDashboardUrl;
 } elseif ($isTeacherLoggedIn) {
-    $dashboardUrl = 'dashboard/guru.php';
+    $dashboardUrl = $guruDashboardUrl;
 } elseif ($isStudentLoggedIn) {
-    $dashboardUrl = 'dashboard/siswa.php';
+    $dashboardUrl = $siswaDashboardUrl;
 }
 ?>
 <!DOCTYPE html>
@@ -39,8 +39,8 @@ if ($isAdminLoggedIn) {
     
     <!-- Canonical -->
     <meta content="index, follow" name="robots"/>
-    <link href="<?php echo SITE_URL; ?>" rel="home"/>
-    <link href="<?php echo SITE_URL . $fullurl; ?>" rel="canonical"/>
+    <link href="<?php echo $siteUrl; ?>" rel="home"/>
+    <link href="<?php echo $siteUrl . $fullurl; ?>" rel="canonical"/>
     
     <!-- Title -->
     <title><?php echo $pageTitle; ?></title>
@@ -49,9 +49,9 @@ if ($isAdminLoggedIn) {
     <meta property="og:type" content="website"/>
     <meta property="og:title" content="call - presenova"/>
     <meta property="og:description" content="Halaman registrasi akun peserta Presenova melalui administrator"/>
-    <meta property="og:url" content="<?php echo SITE_URL . $fullurl; ?>"/>
+    <meta property="og:url" content="<?php echo $siteUrl . $fullurl; ?>"/>
     <meta property="og:site_name" content="Presenova"/>
-    <meta property="og:image" content="<?php echo SITE_URL; ?>assets/images/presenova.png"/>
+    <meta property="og:image" content="<?php echo $siteUrl; ?>assets/images/presenova.png"/>
     <meta property="og:image:width" content="1200"/>
     <meta property="og:image:height" content="630"/>
     
@@ -59,7 +59,7 @@ if ($isAdminLoggedIn) {
     <meta name="twitter:card" content="summary_large_image"/>
     <meta name="twitter:title" content="call - presenova"/>
     <meta name="twitter:description" content="Halaman registrasi akun peserta Presenova melalui administrator"/>
-    <meta name="twitter:image" content="<?php echo SITE_URL; ?>assets/images/presenova.png"/>
+    <meta name="twitter:image" content="<?php echo $siteUrl; ?>assets/images/presenova.png"/>
     
     <!-- PWA -->
     <link rel="manifest" href="manifest.json">
@@ -1008,21 +1008,21 @@ if ($isAdminLoggedIn) {
         <div class="container">
             <div class="navbar-container">
                 <!-- Logo -->
-                <a href="<?php echo SITE_URL; ?>" class="logo-container">
-                    <img src="<?php echo SITE_URL; ?>assets/images/presenova.png" alt="Presenova Logo" class="logo-img">
+                <a href="<?php echo $siteUrl; ?>" class="logo-container">
+                    <img src="<?php echo $siteUrl; ?>assets/images/presenova.png" alt="Presenova Logo" class="logo-img">
                     <span class="logo-text">PRESENOVA</span>
                 </a>
                 
                 <!-- Navigation Menu -->
                 <ul class="nav-menu d-none d-lg-flex">
                     <li class="nav-item">
-                        <a href="<?php echo SITE_URL; ?>" class="nav-link">Beranda</a>
+                        <a href="<?php echo $siteUrl; ?>" class="nav-link">Beranda</a>
                     </li>
                     <li class="nav-item">
-                        <a href="login.php" class="nav-link">Login</a>
+                        <a href="<?php echo $loginUrl; ?>" class="nav-link">Login</a>
                     </li>
                     <li class="nav-item">
-                        <a href="register.php" class="nav-link">Registrasi</a>
+                        <a href="<?php echo $registerUrl; ?>" class="nav-link">Registrasi</a>
                     </li>
                     <li class="nav-item">
                         <a href="#features" class="nav-link">Fitur</a>
@@ -1039,11 +1039,11 @@ if ($isAdminLoggedIn) {
                             <i class="fas fa-user-circle"></i>
                             <span><?php echo isset($_SESSION['user_name']) ? htmlspecialchars($_SESSION['user_name']) : 'User'; ?></span>
                         </div>
-                        <a href="?action=logout" class="btn-logout">
+                        <a href="<?php echo $logoutUrl; ?>" class="btn-logout">
                             <i class="fas fa-sign-out-alt"></i> Logout
                         </a>
                     <?php else: ?>
-                        <a href="login.php" class="btn-login">
+                        <a href="<?php echo $loginUrl; ?>" class="btn-login">
                             <i class="fas fa-sign-in-alt"></i> Login
                         </a>
                     <?php endif; ?>
@@ -1075,7 +1075,7 @@ if ($isAdminLoggedIn) {
                         <div class="header-section">
                             <div class="logo-large">
                                 <!-- Logo Presenova -->
-                                <img src="<?php echo SITE_URL; ?>assets/images/presenova.png" alt="Presenova Logo">
+                                <img src="<?php echo $siteUrl; ?>assets/images/presenova.png" alt="Presenova Logo">
                             </div>
                             <h1 class="brand-title">PRESENOVA</h1>
                             <p class="tagline">Bringing back, learning time</p>
@@ -1124,7 +1124,7 @@ if ($isAdminLoggedIn) {
                         <!-- Quick Action Buttons -->
                         <div class="row mt-5">
                             <div class="col-md-6 mb-3">
-                                <a href="<?php echo $isLoggedIn ? $dashboardUrl : 'login.php'; ?>" 
+                                <a href="<?php echo $isLoggedIn ? $dashboardUrl : $loginUrl; ?>" 
                                    class="btn btn-outline-neon w-100 py-3" 
                                    style="border-color: var(--neon-green); color: var(--neon-green);">
                                     <i class="fas fa-tachometer-alt me-2"></i>
@@ -1132,7 +1132,7 @@ if ($isAdminLoggedIn) {
                                 </a>
                             </div>
                             <div class="col-md-6 mb-3">
-                                <a href="<?php echo SITE_URL; ?>" 
+                                <a href="<?php echo $siteUrl; ?>" 
                                    class="btn btn-outline-neon w-100 py-3" 
                                    style="border-color: var(--neon-blue); color: var(--neon-blue);">
                                     <i class="fas fa-home me-2"></i>
@@ -1150,7 +1150,7 @@ if ($isAdminLoggedIn) {
     <footer class="footer-section">
         <div class="container">
             <div class="footer-logo">
-                <img src="<?php echo SITE_URL; ?>assets/images/presenova.png" alt="Presenova">
+                <img src="<?php echo $siteUrl; ?>assets/images/presenova.png" alt="Presenova">
                 <span>PRESENOVA</span>
             </div>
             <p class="footer-text">
@@ -1158,7 +1158,7 @@ if ($isAdminLoggedIn) {
             </p>
             <p class="footer-text mt-2" style="font-size: 0.8rem;">
                 <?php echo $isLoggedIn ? 'Status: Login aktif' : 'Status: Belum login'; ?> | 
-                <a href="<?php echo $isLoggedIn ? '?action=logout' : 'login.php'; ?>" 
+                <a href="<?php echo $isLoggedIn ? $logoutUrl : $loginUrl; ?>" 
                    style="color: var(--neon-green); text-decoration: none;">
                     <?php echo $isLoggedIn ? 'Logout' : 'Login'; ?>
                 </a>

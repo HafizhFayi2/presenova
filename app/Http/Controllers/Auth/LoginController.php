@@ -352,6 +352,14 @@ class LoginController extends Controller
 
     private function resolveAppRootUrl(): string
     {
+        $request = request();
+        $hostUrl = rtrim((string) $request->getSchemeAndHttpHost(), '/');
+        if ($hostUrl !== '') {
+            $prefix = $this->resolveAppPrefix();
+
+            return $hostUrl . ($prefix !== '' ? '/' . $prefix : '');
+        }
+
         $configuredUrl = trim((string) config('app.url'));
         if ($configuredUrl !== '') {
             $parsed = parse_url($configuredUrl);
@@ -363,10 +371,7 @@ class LoginController extends Controller
             }
         }
 
-        $hostUrl = rtrim((string) request()->getSchemeAndHttpHost(), '/');
-        $prefix = $this->resolveAppPrefix();
-
-        return $hostUrl . ($prefix !== '' ? '/' . $prefix : '');
+        return '';
     }
 
     private function verifyPassword(string $plainPassword, string $storedHash): bool

@@ -10,7 +10,8 @@ DELIMITER $$
 --
 -- Procedures
 --
-CREATE DEFINER=`root`@`localhost` PROCEDURE `GenerateWeeklyStudentSchedules` ()   BEGIN
+DROP PROCEDURE IF EXISTS `GenerateWeeklyStudentSchedules`$$
+CREATE PROCEDURE `GenerateWeeklyStudentSchedules` ()   BEGIN
     -- Generate jadwal untuk 1 minggu ke depan (menyesuaikan konfigurasi jam per hari)
     INSERT INTO student_schedule (student_id, teacher_schedule_id, schedule_date, time_in, time_out, status)
     SELECT 
@@ -228,7 +229,7 @@ INSERT INTO `day_schedule_config` (`day_id`, `school_start_time`, `activity1_lab
 (2, '06:30:00', 'Apel Pagi', 45, '', 0),
 (3, '06:30:00', 'Senam Pagi', 45, '', 0),
 (4, '06:30:00', 'Apel Jurusan', 45, '', 0),
-(5, '06:30:00', 'Tilawah', 60, '', 0),
+(5, '06:30:00', 'Tilawah', 60, '', 0);
 
 -- --------------------------------------------------------
 
@@ -573,37 +574,12 @@ INSERT INTO `user_level` (`level_id`, `level_name`) VALUES
 (1, 'Administrator'),
 (2, 'Operator');
 
--- --------------------------------------------------------
-
---
--- Stand-in structure for view `v_student_schedule_integration`
--- (See below for the actual view)
---
-CREATE TABLE `v_student_schedule_integration` (
-`teacher_schedule_id` int(11)
-,`teacher_id` int(11)
-,`teacher_name` varchar(150)
-,`class_id` int(11)
-,`class_name` varchar(30)
-,`subject` varchar(100)
-,`day_name` varchar(15)
-,`shift_name` varchar(50)
-,`time_in` time
-,`time_out` time
-,`total_students` bigint(21)
-,`active_students` bigint(21)
-,`earliest_date` date
-,`latest_date` date
-);
-
--- --------------------------------------------------------
-
 --
 -- Structure for view `v_student_schedule_integration`
 --
-DROP TABLE IF EXISTS `v_student_schedule_integration`;
+DROP VIEW IF EXISTS `v_student_schedule_integration`;
 
-CREATE ALGORITHM=UNDEFINED DEFINER=`root`@`localhost` SQL SECURITY DEFINER VIEW `v_student_schedule_integration`  AS SELECT `ts`.`schedule_id` AS `teacher_schedule_id`, `ts`.`teacher_id` AS `teacher_id`, `t`.`teacher_name` AS `teacher_name`, `ts`.`class_id` AS `class_id`, `c`.`class_name` AS `class_name`, `ts`.`subject` AS `subject`, `d`.`day_name` AS `day_name`, `s`.`shift_name` AS `shift_name`, `s`.`time_in` AS `time_in`, `s`.`time_out` AS `time_out`, count(distinct `ss`.`student_id`) AS `total_students`, count(distinct case when `ss`.`status` = 'ACTIVE' then `ss`.`student_id` end) AS `active_students`, min(`ss`.`schedule_date`) AS `earliest_date`, max(`ss`.`schedule_date`) AS `latest_date` FROM (((((`teacher_schedule` `ts` left join `teacher` `t` on(`ts`.`teacher_id` = `t`.`id`)) left join `class` `c` on(`ts`.`class_id` = `c`.`class_id`)) left join `day` `d` on(`ts`.`day_id` = `d`.`day_id`)) left join `shift` `s` on(`ts`.`shift_id` = `s`.`shift_id`)) left join `student_schedule` `ss` on(`ts`.`schedule_id` = `ss`.`teacher_schedule_id`)) GROUP BY `ts`.`schedule_id` ;
+CREATE ALGORITHM=UNDEFINED SQL SECURITY DEFINER VIEW `v_student_schedule_integration`  AS SELECT `ts`.`schedule_id` AS `teacher_schedule_id`, `ts`.`teacher_id` AS `teacher_id`, `t`.`teacher_name` AS `teacher_name`, `ts`.`class_id` AS `class_id`, `c`.`class_name` AS `class_name`, `ts`.`subject` AS `subject`, `d`.`day_name` AS `day_name`, `s`.`shift_name` AS `shift_name`, `s`.`time_in` AS `time_in`, `s`.`time_out` AS `time_out`, count(distinct `ss`.`student_id`) AS `total_students`, count(distinct case when `ss`.`status` = 'ACTIVE' then `ss`.`student_id` end) AS `active_students`, min(`ss`.`schedule_date`) AS `earliest_date`, max(`ss`.`schedule_date`) AS `latest_date` FROM (((((`teacher_schedule` `ts` left join `teacher` `t` on(`ts`.`teacher_id` = `t`.`id`)) left join `class` `c` on(`ts`.`class_id` = `c`.`class_id`)) left join `day` `d` on(`ts`.`day_id` = `d`.`day_id`)) left join `shift` `s` on(`ts`.`shift_id` = `s`.`shift_id`)) left join `student_schedule` `ss` on(`ts`.`schedule_id` = `ss`.`teacher_schedule_id`)) GROUP BY `ts`.`schedule_id` ;
 
 --
 -- Indexes for dumped tables

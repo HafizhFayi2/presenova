@@ -8,6 +8,8 @@ $error = '';
 $success = '';
 $siteInfo = null;
 $db = new Database();
+$loginUrl = rtrim((string) url('login.php'), '/');
+$loginSiswaUrl = (string) url('login.php?role=siswa');
 
 // Security tuning
 $rateWindowMinutes = 15;
@@ -147,7 +149,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                 'password_changed',
                                 'Password Akun Direset',
                                 'Password akun siswa Anda direset melalui fitur lupa password. Segera ganti kembali setelah login.',
-                                '/login.php?role=siswa'
+                                $loginSiswaUrl
                             );
                         }
                     } else {
@@ -475,7 +477,7 @@ if (!empty($siteInfo['site_email'])) {
             </form>
 
             <div class="login-footer">
-                <a href="login.php">Kembali ke Login</a>
+                <a href="<?php echo htmlspecialchars($loginUrl, ENT_QUOTES, 'UTF-8'); ?>">Kembali ke Login</a>
             </div>
         </div>
     </div>

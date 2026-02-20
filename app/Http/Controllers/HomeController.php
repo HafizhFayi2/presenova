@@ -111,7 +111,7 @@ class HomeController extends Controller
             'indexUrl' => $indexUrl,
             'loginUrl' => $loginUrl,
             'loginAdminUrl' => $loginUrl . '?role=admin',
-            'loginGuruUrl' => $loginUrl . '?role=teacher',
+            'loginGuruUrl' => $loginUrl . '?role=guru',
             'registerUrl' => ($basePath === '' ? '/register.php' : $basePath . '/register.php'),
             'getStartedUrl' => $getStartedUrl,
             'assetBaseUrl' => $assetBaseUrl,
