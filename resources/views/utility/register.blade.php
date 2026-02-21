@@ -899,8 +899,6 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['face_data'])) {
             const poseOnlyMode = registerCard.dataset.poseOnly === '1';
             const hasPoseFromServer = registerCard.dataset.hasPose === '1';
             const modelBase = '<?php echo htmlspecialchars($faceModelBaseUrl, ENT_QUOTES, 'UTF-8'); ?>';
-            const secureDeviceContext = window.isSecureContext === true
-                || ['localhost', '127.0.0.1', '::1'].includes(window.location.hostname);
             const poseRequiredPerSide = 5;
             const poseRequiredFront = 1;
             const poseYawSideThreshold = 0.12;
@@ -925,14 +923,10 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['face_data'])) {
 
             function getSecureContextMessage(featureName) {
                 const feature = featureName || 'fitur ini';
-                return `Akses ${feature} membutuhkan HTTPS. Buka aplikasi lewat https:// atau gunakan localhost.`;
+                return `Akses ${feature} bisa dibatasi browser pada HTTP non-localhost. Jika gagal, gunakan https://.`;
             }
 
             function buildCameraErrorMessage(error) {
-                if (!secureDeviceContext) {
-                    return getSecureContextMessage('kamera');
-                }
-
                 const name = (error && error.name) ? String(error.name) : '';
                 if (name === 'NotAllowedError' || name === 'PermissionDeniedError') {
                     return 'Izin kamera ditolak. Aktifkan izin kamera di browser lalu coba lagi.';
@@ -948,6 +942,9 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['face_data'])) {
                 }
 
                 const rawMessage = error && error.message ? String(error.message) : '';
+                if (/secure context|only secure origins|insecure/i.test(rawMessage)) {
+                    return getSecureContextMessage('kamera');
+                }
                 if (rawMessage !== '') {
                     return `Tidak dapat mengakses kamera: ${rawMessage}`;
                 }
@@ -1126,13 +1123,6 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['face_data'])) {
             
             // Initialize camera
             async function initCamera() {
-                if (!secureDeviceContext) {
-                    cameraReady = false;
-                    setRegisterStatus(getSecureContextMessage('kamera'));
-                    updateActionButtons();
-                    return;
-                }
-
                 if (!navigator.mediaDevices || typeof navigator.mediaDevices.getUserMedia !== 'function') {
                     cameraReady = false;
                     setRegisterStatus('Browser ini tidak mendukung akses kamera (getUserMedia).');

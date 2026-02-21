@@ -202,8 +202,6 @@ $(document).ready(function() {
     const hasReference = String($('#captureAttendanceBtn').data('has-reference')) === '1';
     const studentLabel = @json($studentLabel);
     const MODEL_URL = '../face/faces_logics/models';
-    const secureDeviceContext = window.isSecureContext === true
-        || ['localhost', '127.0.0.1', '::1'].includes(window.location.hostname);
     let currentDeviceId = null;
     let lastWorkingDeviceId = null;
     const attendanceContentEl = document.getElementById('attendanceContent');
@@ -231,14 +229,10 @@ $(document).ready(function() {
 
     function secureContextMessage(featureName) {
         const feature = featureName || 'fitur ini';
-        return `Akses ${feature} membutuhkan HTTPS. Buka halaman menggunakan https:// atau localhost.`;
+        return `Akses ${feature} bisa dibatasi browser pada HTTP non-localhost. Jika gagal, gunakan https://.`;
     }
 
     function cameraErrorMessage(error) {
-        if (!secureDeviceContext) {
-            return secureContextMessage('kamera');
-        }
-
         const name = error && error.name ? String(error.name) : '';
         if (name === 'NotAllowedError' || name === 'PermissionDeniedError') {
             return 'Izin kamera ditolak. Aktifkan izin kamera di browser lalu coba lagi.';
@@ -254,20 +248,13 @@ $(document).ready(function() {
         }
 
         const rawMessage = error && error.message ? String(error.message) : '';
+        if (/secure context|only secure origins|insecure/i.test(rawMessage)) {
+            return secureContextMessage('kamera');
+        }
         return rawMessage !== '' ? `Tidak dapat mengakses kamera: ${rawMessage}` : 'Tidak dapat mengakses kamera.';
     }
     
     function getGPSLocation() {
-        if (!secureDeviceContext) {
-            $('#gpsStatus').html(`
-                <div class="alert alert-danger">
-                    <i class="fas fa-lock"></i>
-                    ${secureContextMessage('lokasi GPS')}
-                </div>
-            `);
-            return;
-        }
-
         if (navigator.geolocation) {
             navigator.geolocation.getCurrentPosition(
                 function(position) {
@@ -289,10 +276,14 @@ $(document).ready(function() {
                     checkLocationValidity(currentLocation);
                 },
                 function(error) {
+                    const rawMessage = error && error.message ? String(error.message) : '';
+                    const locationMessage = /secure context|only secure origins|insecure/i.test(rawMessage)
+                        ? secureContextMessage('lokasi GPS')
+                        : 'Gagal mendapatkan lokasi GPS. Pastikan GPS aktif dan izinkan akses lokasi.';
                     $('#gpsStatus').html(`
                         <div class="alert alert-danger">
                             <i class="fas fa-exclamation-triangle"></i>
-                            Gagal mendapatkan lokasi GPS. Pastikan GPS aktif dan izinkan akses lokasi.
+                            ${locationMessage}
                             <button onclick="getGPSLocation()" class="btn btn-sm btn-warning mt-2">
                                 <i class="fas fa-redo"></i> Coba Lagi
                             </button>
@@ -465,15 +456,6 @@ $(document).ready(function() {
     }
     
     function startCamera(deviceId = null) {
-        if (!secureDeviceContext) {
-            $('#cameraSection').html(`
-                <div class="alert alert-danger">
-                    <i class="fas fa-lock"></i>
-                    ${secureContextMessage('kamera')}
-                </div>
-            `);
-            return;
-        }
         if (!navigator.mediaDevices || typeof navigator.mediaDevices.getUserMedia !== 'function') {
             $('#cameraSection').html(`
                 <div class="alert alert-danger">

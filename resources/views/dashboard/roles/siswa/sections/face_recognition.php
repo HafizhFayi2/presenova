@@ -487,8 +487,6 @@ document.addEventListener('DOMContentLoaded', function() {
     const studentScheduleId = scheduleIdFromQuery || scheduleIdFromPage;
     const locationStateKey = `face_location_state_${studentKey}`;
     const lastDistanceMaxAgeMs = 10 * 60 * 1000;
-    const secureDeviceContext = window.isSecureContext === true
-        || ['localhost', '127.0.0.1', '::1'].includes(window.location.hostname);
 
     const video = document.getElementById('faceVideo');
     const canvas = document.getElementById('faceCanvas');
@@ -719,14 +717,10 @@ document.addEventListener('DOMContentLoaded', function() {
 
     function getSecureContextRequirementMessage(featureName) {
         const feature = featureName || 'fitur ini';
-        return `Akses ${feature} membutuhkan HTTPS. Buka halaman menggunakan https:// atau localhost.`;
+        return `Akses ${feature} bisa dibatasi browser pada HTTP non-localhost. Jika gagal, gunakan https://.`;
     }
 
     function buildCameraErrorMessage(error) {
-        if (!secureDeviceContext) {
-            return getSecureContextRequirementMessage('kamera');
-        }
-
         const name = error && error.name ? String(error.name) : '';
         if (name === 'NotAllowedError' || name === 'PermissionDeniedError') {
             return 'Izin kamera ditolak. Aktifkan izin kamera pada browser.';
@@ -742,6 +736,9 @@ document.addEventListener('DOMContentLoaded', function() {
         }
 
         const rawMessage = error && error.message ? String(error.message) : '';
+        if (/secure context|only secure origins|insecure/i.test(rawMessage)) {
+            return getSecureContextRequirementMessage('kamera');
+        }
         if (rawMessage !== '') {
             return `Tidak dapat mengakses kamera: ${rawMessage}`;
         }
@@ -2490,20 +2487,6 @@ document.addEventListener('DOMContentLoaded', function() {
             return;
         }
 
-        if (!secureDeviceContext) {
-            const secureMessage = getSecureContextRequirementMessage('lokasi GPS');
-            locationAllowed = false;
-            locationReady = false;
-            locationVerified = false;
-            setLocationLock(true, secureMessage);
-            storeLocationState(true, lastDistance);
-            setCameraStatus('Butuh HTTPS');
-            setStatus(secureMessage);
-            updateStartButtonState();
-            finishRetryLoading();
-            return;
-        }
-
         if (hasValidLocation && locationAllowed) {
             setCameraStatus('Lokasi tidak stabil');
             setStatus('Lokasi sempat tidak terbaca. Memperbarui...');
@@ -2523,6 +2506,9 @@ document.addEventListener('DOMContentLoaded', function() {
         } else if (error && error.code === 3) {
             message = 'Permintaan lokasi timeout. Coba lagi.';
         }
+        if (error && /secure context|only secure origins|insecure/i.test(String(error.message || ''))) {
+            message = getSecureContextRequirementMessage('lokasi GPS');
+        }
 
         setLocationLock(true, message);
         storeLocationState(true, lastDistance);
@@ -2533,16 +2519,6 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     function startLocationWatch() {
-        if (!secureDeviceContext) {
-            const secureMessage = getSecureContextRequirementMessage('lokasi GPS dan kamera');
-            setLocationLock(true, secureMessage);
-            setCameraStatus('Butuh HTTPS');
-            setStatus(secureMessage);
-            updateStartButtonState();
-            finishRetryLoading();
-            return;
-        }
-
         if (!gpsEnabled) {
             locationAllowed = true;
             locationReady = true;
@@ -2811,9 +2787,6 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     async function startCamera(deviceId = null) {
-        if (!secureDeviceContext) {
-            throw new Error(getSecureContextRequirementMessage('kamera'));
-        }
         if (!navigator.mediaDevices || typeof navigator.mediaDevices.getUserMedia !== 'function') {
             throw new Error('Browser tidak mendukung akses kamera (getUserMedia).');
         }
@@ -3223,12 +3196,6 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     startBtn.addEventListener('click', async function() {
-        if (!secureDeviceContext) {
-            setBadge('error', 'Butuh HTTPS');
-            setCameraStatus('Butuh HTTPS');
-            setStatus(getSecureContextRequirementMessage('kamera dan lokasi'));
-            return;
-        }
         if (!navigator.mediaDevices || typeof navigator.mediaDevices.getUserMedia !== 'function') {
             setBadge('error', 'Tidak Didukung');
             setCameraStatus('Tidak Didukung');
@@ -3292,8 +3259,7 @@ document.addEventListener('DOMContentLoaded', function() {
         } catch (error) {
             setBadge('error', 'Gagal');
             const rawMessage = error && error.message ? String(error.message) : '';
-            const cameraLikeError = !secureDeviceContext
-                || /getUserMedia|camera|kamera|NotAllowedError|NotFoundError|NotReadableError|OverconstrainedError/i.test(rawMessage);
+            const cameraLikeError = /getUserMedia|camera|kamera|NotAllowedError|NotFoundError|NotReadableError|OverconstrainedError|secure context|only secure origins|insecure/i.test(rawMessage);
             setStatus(cameraLikeError ? buildCameraErrorMessage(error) : (rawMessage || 'Gagal memuat model wajah.'));
             startBtn.disabled = false;
             setCameraStatus('Error');

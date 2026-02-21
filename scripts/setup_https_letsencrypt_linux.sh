@@ -35,6 +35,28 @@ require_cmd() {
   command -v "${cmd}" >/dev/null 2>&1 || fail "Perintah '${cmd}' tidak ditemukan."
 }
 
+render_vhost_template() {
+  local content
+  content="$(cat "${TEMPLATE_FILE}")"
+  content="${content//__DOMAIN__/${DOMAIN}}"
+  content="${content//__APP_DIR__/${APP_DIR}}"
+  content="${content//__SERVER_ALIAS_DIRECTIVE__/${SERVER_ALIAS_TEMPLATE_LINE}}"
+  printf '%s\n' "${content}"
+}
+
+write_bootstrap_http_conf() {
+  local rendered
+  rendered="$(render_vhost_template)"
+  printf '%s\n' "${rendered}" | awk '
+    /^[[:space:]]*<IfModule[[:space:]]+mod_ssl\.c>/ { exit }
+    { print }
+  ' > "${SITE_CONF}"
+}
+
+write_full_https_conf() {
+  render_vhost_template > "${SITE_CONF}"
+}
+
 DOMAIN=""
 EMAIL=""
 ALIASES_RAW=""
@@ -140,12 +162,8 @@ a2enmod rewrite ssl headers >/dev/null
 log "Mempersiapkan webroot ACME challenge..."
 mkdir -p "${APP_DIR}/public/.well-known/acme-challenge"
 
-log "Menulis konfigurasi vhost HTTPS..."
-template_content="$(cat "${TEMPLATE_FILE}")"
-template_content="${template_content//__DOMAIN__/${DOMAIN}}"
-template_content="${template_content//__APP_DIR__/${APP_DIR}}"
-template_content="${template_content//__SERVER_ALIAS_DIRECTIVE__/${SERVER_ALIAS_TEMPLATE_LINE}}"
-printf '%s\n' "${template_content}" > "${SITE_CONF}"
+log "Menulis konfigurasi bootstrap HTTP (untuk challenge awal)..."
+write_bootstrap_http_conf
 
 log "Mengaktifkan site Apache: ${SITE_NAME}.conf"
 a2ensite "${SITE_NAME}.conf" >/dev/null
@@ -154,7 +172,7 @@ if [[ -f /etc/apache2/sites-enabled/000-default.conf ]]; then
   a2dissite 000-default >/dev/null || true
 fi
 
-log "Validasi konfigurasi Apache..."
+log "Validasi konfigurasi Apache (bootstrap)..."
 "${APACHECTL_BIN}" -t
 systemctl reload apache2
 
@@ -164,6 +182,9 @@ for d in "${DOMAINS[@]}"; do
   CERTBOT_CMD+=(-d "${d}")
 done
 certbot "${CERTBOT_CMD[@]}"
+
+log "Menulis konfigurasi final HTTPS..."
+write_full_https_conf
 
 log "Reload Apache dengan sertifikat aktif..."
 "${APACHECTL_BIN}" -t

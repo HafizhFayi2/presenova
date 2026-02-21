@@ -41,7 +41,17 @@ if (!defined('SITE_NAME')) {
     define('SITE_NAME', (string) runtime_env('SITE_NAME', 'Absensi Online SMK'));
 }
 if (!defined('SITE_URL')) {
-    define('SITE_URL', rtrim((string) runtime_env('SITE_URL', config('app.url')), '/') . '/');
+    $siteUrl = trim((string) runtime_env('SITE_URL', ''));
+    $siteUrlHost = strtolower((string) parse_url($siteUrl, PHP_URL_HOST));
+    $siteUrlIsLoopback = in_array($siteUrlHost, ['localhost', '127.0.0.1', '::1'], true);
+    if ($siteUrl === '' || $siteUrlIsLoopback) {
+        try {
+            $siteUrl = (string) url('/');
+        } catch (\Throwable) {
+            $siteUrl = (string) config('app.url');
+        }
+    }
+    define('SITE_URL', rtrim($siteUrl, '/') . '/');
 }
 if (!defined('ATTENDANCE_RADIUS')) {
     define('ATTENDANCE_RADIUS', (int) runtime_env('ATTENDANCE_RADIUS', 100));
