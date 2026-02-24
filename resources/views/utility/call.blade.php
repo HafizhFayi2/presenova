@@ -27,6 +27,17 @@ if ($isAdminLoggedIn) {
 } elseif ($isStudentLoggedIn) {
     $dashboardUrl = $siswaDashboardUrl;
 }
+
+$registrationEmail = 'adm@presenova.my.id';
+$registrationMailto = 'mailto:' . $registrationEmail;
+$registrationSubject = rawurlencode('Permohonan Registrasi Siswa Baru - Presenova');
+$registrationBody = rawurlencode(
+    "Halo Admin Presenova,\n\n"
+    . "Saya ingin mengajukan registrasi siswa baru.\n\n"
+    . "Nama Lengkap:\nNISN:\nKelas:\nNo. HP:\n\n"
+    . "Terima kasih."
+);
+$registrationMailtoDraft = $registrationMailto . '?subject=' . $registrationSubject . '&body=' . $registrationBody;
 ?>
 <!DOCTYPE html>
 <html lang="id-ID" xml:lang="id-ID">
@@ -697,106 +708,228 @@ if ($isAdminLoggedIn) {
 
         /* ==================== REDIRECT SECTION ==================== */
         .redirect-section {
-            background: rgba(0, 212, 255, 0.1);
-            border: 1px solid rgba(0, 212, 255, 0.3);
-            border-radius: 16px;
-            padding: 2.5rem;
+            background:
+                radial-gradient(circle at top right, rgba(0, 212, 255, 0.12), transparent 50%),
+                linear-gradient(150deg, rgba(10, 28, 45, 0.96) 0%, rgba(9, 24, 42, 0.92) 100%);
+            border: 1px solid rgba(0, 212, 255, 0.32);
+            border-radius: 18px;
+            padding: 2rem;
             text-align: center;
             position: relative;
             overflow: hidden;
-            margin-bottom: 2.5rem;
+            margin-bottom: 2rem;
             transition: all 0.3s ease;
         }
 
-        .redirect-section:hover {
-            border-color: var(--neon-blue);
-            box-shadow: 0 10px 30px rgba(0, 212, 255, 0.1);
-            transform: translateY(-5px);
+        .redirect-section::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            border-radius: inherit;
+            pointer-events: none;
+            border: 1px solid rgba(0, 212, 255, 0.12);
         }
 
-        .redirect-icon {
-            position: absolute;
-            top: 20px;
-            left: 20px;
-            color: var(--neon-blue);
-            font-size: 2rem;
-            opacity: 0.3;
+        .redirect-section:hover {
+            border-color: rgba(0, 212, 255, 0.5);
+            box-shadow: 0 18px 40px rgba(0, 212, 255, 0.15);
+            transform: translateY(-3px);
+        }
+
+        .redirect-head {
+            margin-bottom: 1.2rem;
+            position: relative;
+            z-index: 1;
         }
 
         .redirect-title {
             color: var(--neon-blue);
-            font-size: 1.3rem;
+            font-size: 1.25rem;
             font-weight: 700;
-            margin-bottom: 1.5rem;
+            margin-bottom: 0.45rem;
             display: flex;
             align-items: center;
             justify-content: center;
             gap: 10px;
         }
 
-        .email-container {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            background: rgba(0, 0, 0, 0.3);
-            border: 2px solid var(--neon-blue);
-            border-radius: 12px;
-            padding: 1rem 2rem;
-            margin: 1.5rem 0;
-            transition: all 0.3s ease;
+        .redirect-subtitle {
+            margin: 0;
+            color: #9fc3d8;
+            font-size: 0.95rem;
+            line-height: 1.55;
+        }
+
+        .email-panel {
+            display: grid;
+            grid-template-columns: 1fr auto;
+            gap: 0.8rem;
+            align-items: stretch;
+            margin: 1rem 0 1.1rem;
             position: relative;
-            overflow: hidden;
+            z-index: 1;
+        }
+
+        .email-container {
+            display: flex;
+            align-items: center;
+            justify-content: flex-start;
+            gap: 0.8rem;
+            background: rgba(2, 12, 24, 0.55);
+            border: 1px solid rgba(0, 212, 255, 0.55);
+            border-radius: 12px;
+            padding: 0.9rem 1rem;
+            transition: all 0.25s ease;
+            min-width: 0;
         }
 
         .email-container:hover {
-            background: rgba(0, 212, 255, 0.1);
-            transform: translateY(-5px);
-            box-shadow: 0 10px 30px rgba(0, 212, 255, 0.2);
+            background: rgba(0, 212, 255, 0.12);
+            box-shadow: 0 10px 25px rgba(0, 212, 255, 0.2);
         }
 
         .email-icon {
             color: var(--neon-blue);
-            font-size: 1.5rem;
-            margin-right: 1rem;
+            font-size: 1.1rem;
+            flex-shrink: 0;
         }
 
         .email-address {
             font-family: 'Orbitron', sans-serif;
-            font-size: 1.8rem;
+            font-size: clamp(1rem, 2.4vw, 1.45rem);
             font-weight: 700;
-            color: var(--neon-blue);
+            color: #c8f4ff;
             text-decoration: none;
-            letter-spacing: 1px;
-            transition: all 0.3s ease;
+            letter-spacing: 0.4px;
+            transition: all 0.2s ease;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            min-width: 0;
+            max-width: 100%;
         }
 
         .email-address:hover {
-            color: var(--text-primary);
-            text-shadow: 0 0 10px var(--neon-blue);
+            color: #ffffff;
+            text-shadow: 0 0 10px rgba(0, 212, 255, 0.8);
+        }
+
+        .btn-copy-email {
+            border: 1px solid rgba(0, 212, 255, 0.5);
+            background: rgba(0, 212, 255, 0.14);
+            color: #a2ecff;
+            border-radius: 12px;
+            padding: 0.78rem 1rem;
+            font-weight: 700;
+            font-size: 0.82rem;
+            text-transform: uppercase;
+            letter-spacing: 0.6px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.45rem;
+            transition: all 0.25s ease;
+            white-space: nowrap;
+        }
+
+        .btn-copy-email:hover {
+            color: #001a2b;
+            background: var(--neon-blue);
+            border-color: var(--neon-blue);
+            transform: translateY(-2px);
+        }
+
+        .redirect-meta {
+            position: relative;
+            z-index: 1;
         }
 
         .redirect-note {
             color: var(--text-secondary);
-            font-size: 1rem;
-            margin-top: 1.5rem;
+            font-size: 0.96rem;
+            margin: 0;
             font-style: italic;
+            line-height: 1.5;
+        }
+
+        .redirect-note.is-cancelled {
+            color: #ffd27c;
+        }
+
+        .redirect-note.is-complete {
+            color: #8ee6ff;
         }
 
         .countdown {
-            display: inline-block;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 46px;
             background: var(--gradient-neon);
             color: var(--dark-bg);
             font-weight: 800;
-            padding: 0.5rem 1rem;
+            padding: 0.36rem 0.62rem;
             border-radius: 8px;
-            margin-left: 0.5rem;
+            margin: 0 0.35rem;
             font-family: 'Orbitron', sans-serif;
             animation: pulse-countdown 1s infinite;
         }
 
+        .countdown-track {
+            width: 100%;
+            height: 8px;
+            margin-top: 0.8rem;
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.08);
+            overflow: hidden;
+        }
+
+        .countdown-fill {
+            width: 100%;
+            height: 100%;
+            border-radius: inherit;
+            background: linear-gradient(90deg, #00ff88 0%, #00d4ff 100%);
+            transition: width 0.25s ease;
+        }
+
         @keyframes pulse-countdown {
             0%, 100% { opacity: 1; }
-            50% { opacity: 0.7; }
+            50% { opacity: 0.72; }
+        }
+
+        .redirect-actions {
+            display: flex;
+            gap: 0.8rem;
+            flex-wrap: wrap;
+            justify-content: center;
+            margin-top: 1.1rem;
+            position: relative;
+            z-index: 1;
+        }
+
+        .btn-secondary-action {
+            border: 1px solid rgba(148, 163, 184, 0.42);
+            background: rgba(148, 163, 184, 0.12);
+            color: #cbd5e1;
+            border-radius: 12px;
+            padding: 0.9rem 1.2rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            font-size: 0.79rem;
+            transition: all 0.25s ease;
+        }
+
+        .btn-secondary-action:hover {
+            background: rgba(148, 163, 184, 0.24);
+            border-color: rgba(148, 163, 184, 0.7);
+            transform: translateY(-2px);
+        }
+
+        .btn-secondary-action:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
         }
 
         /* ==================== BUTTONS ==================== */
@@ -948,6 +1081,9 @@ if ($isAdminLoggedIn) {
             .brand-title { font-size: 2.8rem; }
             .registration-container { padding: 2rem; }
             .email-address { font-size: 1.5rem; }
+            .redirect-section { padding: 1.7rem; }
+            .email-panel { grid-template-columns: 1fr; }
+            .btn-copy-email { width: 100%; }
             .action-buttons { gap: 0.5rem; }
             .btn-logout, .btn-login { padding: 0.5rem 1rem; font-size: 0.8rem; }
             .nav-menu { display: none; }
@@ -958,8 +1094,10 @@ if ($isAdminLoggedIn) {
             .brand-title { font-size: 2.2rem; }
             .logo-large { width: 120px; height: 120px; }
             .email-address { font-size: 1.2rem; }
-            .email-container { flex-direction: column; padding: 1rem; }
-            .email-icon { margin-right: 0; margin-bottom: 0.5rem; }
+            .email-container { justify-content: center; flex-wrap: wrap; padding: 0.9rem; }
+            .email-address { white-space: normal; overflow-wrap: anywhere; text-align: center; }
+            .email-icon { margin-right: 0; }
+            .redirect-actions { flex-direction: column; }
             .registration-container { padding: 1.5rem; }
             .message-content, .redirect-title { font-size: 1rem; }
             .action-buttons { flex-direction: row; justify-content: center; }
@@ -970,7 +1108,8 @@ if ($isAdminLoggedIn) {
         @media (max-width: 575px) {
             .brand-title { font-size: 1.8rem; }
             .logo-large { width: 100px; height: 100px; border-radius: 20px; }
-            .btn-neon { width: 100%; justify-content: center; }
+            .redirect-section { padding: 1.2rem; }
+            .btn-neon, .btn-secondary-action, .btn-copy-email { width: 100%; justify-content: center; }
             .email-address { font-size: 1rem; }
             .action-buttons { flex-wrap: wrap; justify-content: center; }
             .user-info { display: none; }
@@ -1012,25 +1151,6 @@ if ($isAdminLoggedIn) {
                     <img src="<?php echo $siteUrl; ?>assets/images/presenova.png" alt="Presenova Logo" class="logo-img">
                     <span class="logo-text">PRESENOVA</span>
                 </a>
-                
-                <!-- Navigation Menu -->
-                <ul class="nav-menu d-none d-lg-flex">
-                    <li class="nav-item">
-                        <a href="<?php echo $siteUrl; ?>" class="nav-link">Beranda</a>
-                    </li>
-                    <li class="nav-item">
-                        <a href="<?php echo $loginUrl; ?>" class="nav-link">Login</a>
-                    </li>
-                    <li class="nav-item">
-                        <a href="<?php echo $registerUrl; ?>" class="nav-link">Registrasi</a>
-                    </li>
-                    <li class="nav-item">
-                        <a href="#features" class="nav-link">Fitur</a>
-                    </li>
-                    <li class="nav-item">
-                        <a href="#contact" class="nav-link">Kontak</a>
-                    </li>
-                </ul>
                 
                 <!-- Action Buttons & User Info -->
                 <div class="action-buttons">
@@ -1092,26 +1212,45 @@ if ($isAdminLoggedIn) {
                         </div>
 
                         <div class="redirect-section">
-                            <i class="fas fa-paper-plane redirect-icon"></i>
-                            <h3 class="redirect-title">
-                                <i class="fas fa-redo-alt"></i> Redirecting untuk mengarah ke pengiriman email
-                            </h3>
-                            
-                            <div class="email-container">
-                                <i class="fas fa-envelope email-icon"></i>
-                                <a href="mailto:adm290805@presenova.my.id" class="email-address">
-                                    adm290805@presenova.my.id
-                                </a>
+                            <div class="redirect-head">
+                                <h3 class="redirect-title">
+                                    <i class="fas fa-paper-plane"></i> Hubungi Administrator untuk Registrasi
+                                </h3>
+                                <p class="redirect-subtitle">
+                                    Klik email admin di bawah ini. Sistem akan bantu membuka aplikasi email otomatis.
+                                </p>
                             </div>
-                            
-                            <p class="redirect-note">
-                                Anda akan diarahkan ke aplikasi email dalam 
-                                <span class="countdown" id="countdown">10</span> detik
-                            </p>
-                            
-                            <a href="mailto:adm290805@presenova.my.id" class="btn-neon">
-                                <i class="fas fa-paper-plane"></i> Kirim Email Sekarang
-                            </a>
+
+                            <div class="email-panel">
+                                <div class="email-container">
+                                    <i class="fas fa-envelope email-icon"></i>
+                                    <a href="<?php echo htmlspecialchars($registrationMailtoDraft, ENT_QUOTES, 'UTF-8'); ?>" class="email-address" id="registrationEmailLink">
+                                        <?php echo htmlspecialchars($registrationEmail, ENT_QUOTES, 'UTF-8'); ?>
+                                    </a>
+                                </div>
+                                <button type="button" class="btn-copy-email" id="copyEmailBtn">
+                                    <i class="fas fa-copy"></i> Salin
+                                </button>
+                            </div>
+
+                            <div class="redirect-meta">
+                                <p class="redirect-note" id="redirectNote">
+                                    Anda akan diarahkan ke aplikasi email dalam
+                                    <span class="countdown" id="countdown">10</span> detik
+                                </p>
+                                <div class="countdown-track">
+                                    <div class="countdown-fill" id="countdownFill"></div>
+                                </div>
+                            </div>
+
+                            <div class="redirect-actions">
+                                <a href="<?php echo htmlspecialchars($registrationMailtoDraft, ENT_QUOTES, 'UTF-8'); ?>" class="btn-neon" id="sendEmailBtn">
+                                    <i class="fas fa-paper-plane"></i> Kirim Email Sekarang
+                                </a>
+                                <button type="button" class="btn-secondary-action" id="cancelRedirectBtn">
+                                    <i class="fas fa-pause-circle"></i> Batalkan Auto Redirect
+                                </button>
+                            </div>
                         </div>
                         
                         <div class="text-center mt-4">
@@ -1200,57 +1339,131 @@ if ($isAdminLoggedIn) {
         });
         
         // Countdown and redirect
-        let countdown = 10;
-        const countdownElement = document.getElementById('countdown');
+        const registrationEmail = <?php echo json_encode($registrationEmail, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES); ?>;
+        const defaultMailtoLink = <?php echo json_encode($registrationMailtoDraft, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES); ?>;
+        const countdownStart = 10;
+        let countdown = countdownStart;
         let redirectCancelled = false;
-        
-        const countdownInterval = setInterval(function() {
-            if (!redirectCancelled) {
-                countdown--;
-                countdownElement.textContent = countdown;
-                
-                if (countdown <= 0) {
-                    clearInterval(countdownInterval);
-                    // Redirect to email client
-                    window.location.href = "mailto:adm290805@presenova.my.id";
+        let countdownInterval = null;
+
+        const countdownElement = document.getElementById('countdown');
+        const countdownFill = document.getElementById('countdownFill');
+        const redirectNote = document.getElementById('redirectNote');
+        const cancelRedirectBtn = document.getElementById('cancelRedirectBtn');
+        const sendEmailBtn = document.getElementById('sendEmailBtn');
+        const emailLink = document.getElementById('registrationEmailLink');
+        const copyEmailBtn = document.getElementById('copyEmailBtn');
+
+        function updateCountdownUI() {
+            if (countdownElement) {
+                countdownElement.textContent = String(Math.max(0, countdown));
+            }
+
+            if (countdownFill) {
+                const percentage = Math.max(0, (countdown / countdownStart) * 100);
+                countdownFill.style.width = percentage + '%';
+            }
+        }
+
+        function stopAutoRedirect(status = 'cancelled') {
+            if (countdownInterval) {
+                clearInterval(countdownInterval);
+                countdownInterval = null;
+            }
+
+            if (redirectNote) {
+                redirectNote.classList.remove('is-cancelled', 'is-complete');
+                if (status === 'cancelled') {
+                    redirectNote.classList.add('is-cancelled');
+                    redirectNote.textContent = 'Auto redirect dibatalkan. Klik tombol "Kirim Email Sekarang" untuk lanjut.';
+                } else if (status === 'complete') {
+                    redirectNote.classList.add('is-complete');
+                    redirectNote.textContent = 'Membuka aplikasi email... Jika gagal, klik alamat email atau tombol kirim.';
+                } else if (status === 'copied') {
+                    redirectNote.classList.add('is-complete');
+                    redirectNote.textContent = 'Alamat email berhasil disalin. Tempelkan pada aplikasi email Anda.';
                 }
             }
-        }, 1000);
-        
-        // Cancel auto-redirect if user interacts
-        document.addEventListener('click', function() {
-            if (!redirectCancelled) {
-                redirectCancelled = true;
-                clearInterval(countdownInterval);
-                countdownElement.textContent = "0";
-                countdownElement.parentElement.innerHTML = "Redirect dibatalkan. Silakan klik tombol di atas untuk mengirim email.";
+
+            if (cancelRedirectBtn) {
+                cancelRedirectBtn.disabled = true;
             }
-        });
-        
-        // Email link enhancement
-        document.querySelector('.email-address').addEventListener('click', function(e) {
-            e.preventDefault();
-            redirectCancelled = true;
-            clearInterval(countdownInterval);
-            
-            // Animation effect
-            this.style.transform = "scale(1.1)";
-            this.style.textShadow = "0 0 15px var(--neon-blue)";
-            
-            setTimeout(() => {
-                window.location.href = "mailto:adm290805@presenova.my.id";
-            }, 300);
-        });
-        
-        // Button enhancement
-        const neonButton = document.querySelector('.btn-neon');
-        if (neonButton) {
-            neonButton.addEventListener('mouseenter', function() {
-                this.innerHTML = '<i class="fas fa-rocket"></i> Kirim Email Sekarang';
+        }
+
+        function resolveMailtoTarget() {
+            if (sendEmailBtn && sendEmailBtn.href) {
+                return sendEmailBtn.href;
+            }
+
+            return defaultMailtoLink;
+        }
+
+        function startAutoRedirect() {
+            updateCountdownUI();
+            countdownInterval = setInterval(function() {
+                if (redirectCancelled) {
+                    return;
+                }
+
+                countdown -= 1;
+                updateCountdownUI();
+
+                if (countdown <= 0) {
+                    redirectCancelled = true;
+                    stopAutoRedirect('complete');
+                    window.location.href = resolveMailtoTarget();
+                }
+            }, 1000);
+        }
+
+        startAutoRedirect();
+
+        if (cancelRedirectBtn) {
+            cancelRedirectBtn.addEventListener('click', function() {
+                if (redirectCancelled) {
+                    return;
+                }
+
+                redirectCancelled = true;
+                countdown = 0;
+                updateCountdownUI();
+                stopAutoRedirect('cancelled');
             });
-            
-            neonButton.addEventListener('mouseleave', function() {
-                this.innerHTML = '<i class="fas fa-paper-plane"></i> Kirim Email Sekarang';
+        }
+
+        if (emailLink) {
+            emailLink.addEventListener('click', function() {
+                redirectCancelled = true;
+                stopAutoRedirect('complete');
+            });
+        }
+
+        if (sendEmailBtn) {
+            sendEmailBtn.addEventListener('click', function() {
+                redirectCancelled = true;
+                stopAutoRedirect('complete');
+            });
+        }
+
+        if (copyEmailBtn) {
+            copyEmailBtn.addEventListener('click', async function() {
+                try {
+                    if (!navigator.clipboard || typeof navigator.clipboard.writeText !== 'function') {
+                        throw new Error('Clipboard API unavailable');
+                    }
+
+                    await navigator.clipboard.writeText(registrationEmail);
+                    copyEmailBtn.innerHTML = '<i class="fas fa-check"></i> Tersalin';
+                    stopAutoRedirect('copied');
+                    setTimeout(() => {
+                        copyEmailBtn.innerHTML = '<i class="fas fa-copy"></i> Salin';
+                    }, 2200);
+                } catch (error) {
+                    copyEmailBtn.innerHTML = '<i class="fas fa-times"></i> Gagal';
+                    setTimeout(() => {
+                        copyEmailBtn.innerHTML = '<i class="fas fa-copy"></i> Salin';
+                    }, 2200);
+                }
             });
         }
         
