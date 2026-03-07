@@ -1,460 +1,412 @@
 <?php
-// Get filter parameters
-$filter_date = $_GET['date'] ?? date('Y-m-d');
-$filter_class = $_GET['class'] ?? '';
-$filter_status = $_GET['status'] ?? '';
+$tz = new DateTimeZone('Asia/Jakarta');
+$nowWib = new DateTime('now', $tz);
 
-// Get classes taught by this teacher
-$classes = $db->query("
+$parseDate = static function ($raw, DateTimeZone $timezone, string $fallback): string {
+    $value = trim((string) $raw);
+    if ($value === '') {
+        return $fallback;
+    }
+
+    $dt = DateTime::createFromFormat('Y-m-d', $value, $timezone);
+    if ($dt instanceof DateTime) {
+        return $dt->format('Y-m-d');
+    }
+
+    try {
+        return (new DateTime($value, $timezone))->format('Y-m-d');
+    } catch (Throwable) {
+        return $fallback;
+    }
+};
+
+$defaultFrom = date('Y-m-01');
+$defaultTo = date('Y-m-d');
+$filterDateFrom = $parseDate($_GET['date_from'] ?? '', $tz, $defaultFrom);
+$filterDateTo = $parseDate($_GET['date_to'] ?? '', $tz, $defaultTo);
+if ($filterDateFrom > $filterDateTo) {
+    $tmp = $filterDateFrom;
+    $filterDateFrom = $filterDateTo;
+    $filterDateTo = $tmp;
+}
+$filterClass = trim((string) ($_GET['class'] ?? ''));
+
+// Kelas yang diajar guru.
+$classStmt = $db->query(
+    "
     SELECT DISTINCT c.class_id, c.class_name
     FROM teacher_schedule ts
     JOIN class c ON ts.class_id = c.class_id
     WHERE ts.teacher_id = ?
     ORDER BY c.class_name
-", [$teacher_id])->fetchAll();
+",
+    [$teacher_id]
+);
+$classes = $classStmt ? $classStmt->fetchAll() : [];
 
-// Build query for attendance
-$sql = "SELECT p.*, s.student_name, s.student_nisn, c.class_name, 
-               ps.present_name, ts.subject, DATE_FORMAT(p.presence_date, '%d/%m/%Y') as formatted_date
-        FROM presence p
-        JOIN student s ON p.student_id = s.id
-        JOIN class c ON s.class_id = c.class_id
-        JOIN present_status ps ON p.present_id = ps.present_id
-        JOIN student_schedule ss ON p.student_schedule_id = ss.student_schedule_id
-        JOIN teacher_schedule ts ON ss.teacher_schedule_id = ts.schedule_id
-        WHERE ts.teacher_id = ?
-        AND DATE(p.presence_date) = ?";
-        
-$params = [$teacher_id, $filter_date];
-
-// Add class filter
-if ($filter_class) {
-    $sql .= " AND c.class_id = ?";
-    $params[] = $filter_class;
+// Mapping status.
+$statusStmt = $db->query("SELECT present_id, present_name FROM present_status");
+$statusRows = $statusStmt ? $statusStmt->fetchAll() : [];
+$statusMap = [];
+foreach ($statusRows as $statusRow) {
+    $statusId = (string) ($statusRow['present_id'] ?? '');
+    if ($statusId === '') {
+        continue;
+    }
+    $statusMap[$statusId] = strtolower(trim((string) ($statusRow['present_name'] ?? '')));
 }
 
-// Add status filter
-if ($filter_status) {
-    $sql .= " AND p.present_id = ?";
-    $params[] = $filter_status;
+// Daftar siswa yang diajar guru (berbasis kelas yang diampu).
+$studentsSql = "
+    SELECT DISTINCT s.id, s.student_nisn, s.student_name, c.class_id, c.class_name
+    FROM teacher_schedule ts
+    JOIN class c ON ts.class_id = c.class_id
+    JOIN student s ON s.class_id = c.class_id
+    WHERE ts.teacher_id = ?
+";
+$studentsParams = [$teacher_id];
+if ($filterClass !== '') {
+    $studentsSql .= " AND c.class_id = ?";
+    $studentsParams[] = $filterClass;
+}
+$studentsSql .= " ORDER BY c.class_name ASC, s.student_name ASC";
+$studentsStmt = $db->query($studentsSql, $studentsParams);
+$students = $studentsStmt ? $studentsStmt->fetchAll() : [];
+
+$studentStats = [];
+foreach ($students as $student) {
+    $studentId = (int) ($student['id'] ?? 0);
+    if ($studentId <= 0) {
+        continue;
+    }
+    $studentStats[$studentId] = [
+        'id' => $studentId,
+        'student_nisn' => (string) ($student['student_nisn'] ?? '-'),
+        'student_name' => (string) ($student['student_name'] ?? '-'),
+        'class_name' => (string) ($student['class_name'] ?? '-'),
+        'total_sesi' => 0,
+        'hadir' => 0,
+        'terlambat' => 0,
+        'sakit' => 0,
+        'izin' => 0,
+        'alpa' => 0,
+    ];
 }
 
-$sql .= " ORDER BY c.class_name, s.student_name";
+// Rekap jadwal+presence untuk rentang tanggal filter.
+$scheduleSql = "
+    SELECT
+        ss.student_schedule_id,
+        ss.student_id,
+        ss.schedule_date,
+        COALESCE(ss.time_in, sh.time_in, '00:00:00') as schedule_time_in,
+        COALESCE(ss.time_out, sh.time_out, '00:00:00') as schedule_time_out,
+        p.present_id,
+        p.is_late
+    FROM student_schedule ss
+    JOIN teacher_schedule ts ON ss.teacher_schedule_id = ts.schedule_id
+    LEFT JOIN shift sh ON ts.shift_id = sh.shift_id
+    LEFT JOIN presence p ON p.student_schedule_id = ss.student_schedule_id
+    WHERE ts.teacher_id = ?
+      AND ss.schedule_date BETWEEN ? AND ?
+";
+$scheduleParams = [$teacher_id, $filterDateFrom, $filterDateTo];
+if ($filterClass !== '') {
+    $scheduleSql .= " AND ts.class_id = ?";
+    $scheduleParams[] = $filterClass;
+}
+$scheduleSql .= " ORDER BY ss.schedule_date DESC";
+$scheduleStmt = $db->query($scheduleSql, $scheduleParams);
+$scheduleRows = $scheduleStmt ? $scheduleStmt->fetchAll() : [];
 
-$stmt = $db->query($sql, $params);
-$attendances = $stmt->fetchAll();
+foreach ($scheduleRows as $row) {
+    $studentId = (int) ($row['student_id'] ?? 0);
+    if (!isset($studentStats[$studentId])) {
+        continue;
+    }
 
-// Get attendance statistics
-$stats_sql = "SELECT 
-                COUNT(*) as total,
-                SUM(CASE WHEN p.present_id = 1 THEN 1 ELSE 0 END) as hadir,
-                SUM(CASE WHEN p.present_id = 2 THEN 1 ELSE 0 END) as sakit,
-                SUM(CASE WHEN p.present_id = 3 THEN 1 ELSE 0 END) as izin,
-                SUM(CASE WHEN p.present_id = 4 THEN 1 ELSE 0 END) as alpa,
-                SUM(CASE WHEN p.is_late = 'Y' THEN 1 ELSE 0 END) as terlambat
-              FROM presence p
-              JOIN student_schedule ss ON p.student_schedule_id = ss.student_schedule_id
-              JOIN teacher_schedule ts ON ss.teacher_schedule_id = ts.schedule_id
-              WHERE ts.teacher_id = ?
-              AND DATE(p.presence_date) = ?";
-              
-if ($filter_class) {
-    $stats_sql .= " AND p.student_id IN (SELECT id FROM student WHERE class_id = ?)";
-    $stats_params = [$teacher_id, $filter_date, $filter_class];
-} else {
-    $stats_params = [$teacher_id, $filter_date];
+    $scheduleDate = (string) ($row['schedule_date'] ?? '');
+    if ($scheduleDate === '') {
+        continue;
+    }
+
+    $scheduleTimeIn = (string) ($row['schedule_time_in'] ?? '00:00:00');
+    $scheduleTimeOut = (string) ($row['schedule_time_out'] ?? '00:00:00');
+    [, $scheduleEnd] = buildScheduleWindow($scheduleDate, $scheduleTimeIn, $scheduleTimeOut, $tz, 0);
+
+    $presentId = isset($row['present_id']) ? (int) $row['present_id'] : 0;
+    if ($presentId <= 0 && $nowWib <= $scheduleEnd) {
+        continue;
+    }
+
+    $studentStats[$studentId]['total_sesi']++;
+    if ($presentId <= 0) {
+        $studentStats[$studentId]['alpa']++;
+        continue;
+    }
+
+    $statusName = $statusMap[(string) $presentId] ?? '';
+    if ($statusName === 'hadir' || $presentId === 1) {
+        $studentStats[$studentId]['hadir']++;
+        if (($row['is_late'] ?? 'N') === 'Y') {
+            $studentStats[$studentId]['terlambat']++;
+        }
+        continue;
+    }
+
+    if ($statusName === 'sakit' || $presentId === 2) {
+        $studentStats[$studentId]['sakit']++;
+        continue;
+    }
+
+    if ($statusName === 'izin' || $presentId === 3) {
+        $studentStats[$studentId]['izin']++;
+        continue;
+    }
+
+    if ($statusName === 'alpa' || $statusName === 'tidak hadir' || $presentId === 4) {
+        $studentStats[$studentId]['alpa']++;
+    }
 }
 
-$stats_stmt = $db->query($stats_sql, $stats_params);
-$stats = $stats_stmt->fetch();
+$studentRows = array_values($studentStats);
+usort($studentRows, static function (array $a, array $b): int {
+    $classCompare = strcmp((string) ($a['class_name'] ?? ''), (string) ($b['class_name'] ?? ''));
+    if ($classCompare !== 0) {
+        return $classCompare;
+    }
+    return strcmp((string) ($a['student_name'] ?? ''), (string) ($b['student_name'] ?? ''));
+});
+
+$summary = [
+    'total_students' => count($studentRows),
+    'students_with_record' => 0,
+    'total_sesi' => 0,
+    'hadir' => 0,
+    'terlambat' => 0,
+    'sakit' => 0,
+    'izin' => 0,
+    'alpa' => 0,
+    'need_attention' => 0,
+];
+
+foreach ($studentRows as $row) {
+    $totalSesi = (int) ($row['total_sesi'] ?? 0);
+    $hadir = (int) ($row['hadir'] ?? 0);
+    $alpa = (int) ($row['alpa'] ?? 0);
+
+    if ($totalSesi > 0) {
+        $summary['students_with_record']++;
+    }
+
+    $summary['total_sesi'] += $totalSesi;
+    $summary['hadir'] += $hadir;
+    $summary['terlambat'] += (int) ($row['terlambat'] ?? 0);
+    $summary['sakit'] += (int) ($row['sakit'] ?? 0);
+    $summary['izin'] += (int) ($row['izin'] ?? 0);
+    $summary['alpa'] += $alpa;
+
+    $rate = $totalSesi > 0 ? (($hadir / $totalSesi) * 100) : 0;
+    if ($totalSesi > 0 && ($alpa > 0 || $rate < 75)) {
+        $summary['need_attention']++;
+    }
+}
 ?>
 
 <div class="data-table-container">
     <div class="table-header">
-        <h5 class="table-title"><i class="fas fa-clipboard-check text-primary me-2"></i>Rekap Absensi</h5>
+        <h5 class="table-title"><i class="fas fa-users text-primary me-2"></i>Daftar Siswa Yang Diajar</h5>
         <div class="d-flex gap-2">
-            <button class="btn btn-success-custom" onclick="exportToExcel('attendanceTable', 'Absensi_<?php echo date('Y-m-d'); ?>')">
-                <i class="fas fa-file-excel me-2"></i>Export Excel
-            </button>
-            <button class="btn btn-primary-custom" onclick="window.print()">
-                <i class="fas fa-print me-2"></i>Print
-            </button>
+            <a class="btn btn-outline-secondary" href="?page=absensi">
+                <i class="fas fa-rotate me-1"></i>Reset
+            </a>
         </div>
     </div>
-    
-    <!-- Filter Section -->
-    <div class="filter-section">
-        <form method="GET" action="" id="filterForm">
+
+    <div class="filter-section mb-4">
+        <form method="GET" action="" id="guruStudentFilterForm">
             <input type="hidden" name="page" value="absensi">
             <div class="row g-3">
                 <div class="col-md-3">
-                    <label class="form-label">Tanggal</label>
-                    <input type="date" class="form-control datepicker" name="date" 
-                           value="<?php echo $filter_date; ?>">
+                    <label class="form-label">Tanggal Mulai</label>
+                    <input type="date" class="form-control datepicker" name="date_from" id="guruDateFrom" value="<?php echo htmlspecialchars($filterDateFrom, ENT_QUOTES, 'UTF-8'); ?>">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Tanggal Akhir</label>
+                    <input type="date" class="form-control datepicker" name="date_to" id="guruDateTo" value="<?php echo htmlspecialchars($filterDateTo, ENT_QUOTES, 'UTF-8'); ?>">
                 </div>
                 <div class="col-md-3">
                     <label class="form-label">Kelas</label>
                     <select class="form-select" name="class">
                         <option value="">Semua Kelas</option>
-                        <?php foreach($classes as $class): ?>
-                        <option value="<?php echo $class['class_id']; ?>" 
-                            <?php echo $filter_class == $class['class_id'] ? 'selected' : ''; ?>>
-                            <?php echo $class['class_name']; ?>
-                        </option>
+                        <?php foreach ($classes as $class): ?>
+                            <?php $classId = (string) ($class['class_id'] ?? ''); ?>
+                            <option value="<?php echo htmlspecialchars($classId, ENT_QUOTES, 'UTF-8'); ?>" <?php echo $filterClass === $classId ? 'selected' : ''; ?>>
+                                <?php echo htmlspecialchars((string) ($class['class_name'] ?? '-'), ENT_QUOTES, 'UTF-8'); ?>
+                            </option>
                         <?php endforeach; ?>
-                    </select>
-                </div>
-                <div class="col-md-3">
-                    <label class="form-label">Status</label>
-                    <select class="form-select" name="status">
-                        <option value="">Semua Status</option>
-                        <option value="1" <?php echo $filter_status == '1' ? 'selected' : ''; ?>>Hadir</option>
-                        <option value="2" <?php echo $filter_status == '2' ? 'selected' : ''; ?>>Sakit</option>
-                        <option value="3" <?php echo $filter_status == '3' ? 'selected' : ''; ?>>Izin</option>
-                        <option value="4" <?php echo $filter_status == '4' ? 'selected' : ''; ?>>Alpa</option>
                     </select>
                 </div>
                 <div class="col-md-3 d-flex align-items-end">
                     <button type="submit" class="btn btn-primary w-100">
-                        <i class="fas fa-filter me-2"></i>Filter
+                        <i class="fas fa-filter me-1"></i>Terapkan
                     </button>
                 </div>
             </div>
         </form>
     </div>
-    
-    <!-- Statistics Summary -->
+
     <div class="attendance-summary mb-4">
         <div class="summary-card">
-            <div class="summary-value text-primary"><?php echo $stats['total'] ?? 0; ?></div>
-            <div class="summary-label">Total</div>
+            <div class="summary-value text-primary"><?php echo (int) $summary['total_students']; ?></div>
+            <div class="summary-label">Total Siswa</div>
         </div>
         <div class="summary-card">
-            <div class="summary-value text-success"><?php echo $stats['hadir'] ?? 0; ?></div>
+            <div class="summary-value text-info"><?php echo (int) $summary['students_with_record']; ?></div>
+            <div class="summary-label">Siswa Terekap</div>
+        </div>
+        <div class="summary-card">
+            <div class="summary-value text-success"><?php echo (int) $summary['hadir']; ?></div>
             <div class="summary-label">Hadir</div>
         </div>
         <div class="summary-card">
-            <div class="summary-value text-warning"><?php echo $stats['terlambat'] ?? 0; ?></div>
+            <div class="summary-value text-warning"><?php echo (int) $summary['terlambat']; ?></div>
             <div class="summary-label">Terlambat</div>
         </div>
         <div class="summary-card">
-            <div class="summary-value text-info"><?php echo $stats['sakit'] ?? 0; ?></div>
-            <div class="summary-label">Sakit</div>
-        </div>
-        <div class="summary-card">
-            <div class="summary-value text-purple"><?php echo $stats['izin'] ?? 0; ?></div>
-            <div class="summary-label">Izin</div>
-        </div>
-        <div class="summary-card">
-            <div class="summary-value text-danger"><?php echo $stats['alpa'] ?? 0; ?></div>
+            <div class="summary-value text-danger"><?php echo (int) $summary['alpa']; ?></div>
             <div class="summary-label">Alpa</div>
         </div>
+        <div class="summary-card">
+            <div class="summary-value text-secondary"><?php echo (int) $summary['need_attention']; ?></div>
+            <div class="summary-label">Perlu Perhatian</div>
+        </div>
     </div>
-    
-    <!-- Attendance Table -->
+
+    <div class="guru-export-hub mb-4">
+        <div class="guru-export-card">
+            <div class="guru-export-icon">
+                <i class="fas fa-file-excel"></i>
+            </div>
+            <div class="guru-export-body">
+                <h6>Download Excel</h6>
+                <p>Unduh rekap siswa per kelas untuk analisis lanjutan.</p>
+            </div>
+            <button type="button" class="guru-export-btn is-excel" data-export-table="guruStudentMonitorTable" data-export-action="excel">
+                Unduh Excel
+            </button>
+        </div>
+        <div class="guru-export-card">
+            <div class="guru-export-icon">
+                <i class="fas fa-file-pdf"></i>
+            </div>
+            <div class="guru-export-body">
+                <h6>Download PDF</h6>
+                <p>Simpan laporan rapi siap kirim ke wali kelas atau manajemen.</p>
+            </div>
+            <button type="button" class="guru-export-btn is-pdf" data-export-table="guruStudentMonitorTable" data-export-action="pdf">
+                Unduh PDF
+            </button>
+        </div>
+        <div class="guru-export-card">
+            <div class="guru-export-icon">
+                <i class="fas fa-print"></i>
+            </div>
+            <div class="guru-export-body">
+                <h6>Cetak Laporan</h6>
+                <p>Buka mode print untuk cetak cepat tanpa edit manual.</p>
+            </div>
+            <button type="button" class="guru-export-btn is-print" data-export-table="guruStudentMonitorTable" data-export-action="print">
+                Print
+            </button>
+        </div>
+    </div>
+
     <div class="table-responsive">
-        <table class="table table-hover data-table-export" id="attendanceTable">
+        <table class="table table-hover align-middle data-table-export" id="guruStudentMonitorTable">
             <thead>
                 <tr>
                     <th>No</th>
                     <th>NISN</th>
                     <th>Nama Siswa</th>
                     <th>Kelas</th>
-                    <th>Tanggal</th>
-                    <th>Jam Masuk</th>
-                    <th>Mata Pelajaran</th>
+                    <th>Sesi Final</th>
+                    <th>Hadir</th>
+                    <th>Terlambat</th>
+                    <th>Sakit</th>
+                    <th>Izin</th>
+                    <th>Alpa</th>
+                    <th>% Kehadiran</th>
                     <th>Status</th>
-                    <th>Keterlambatan</th>
-                    <th>Keterangan</th>
-                    <th>Aksi</th>
                 </tr>
             </thead>
             <tbody>
-                <?php foreach($attendances as $index => $attendance): ?>
-                <tr>
-                    <td><?php echo $index + 1; ?></td>
-                    <td><?php echo $attendance['student_nisn']; ?></td>
-                    <td><strong><?php echo $attendance['student_name']; ?></strong></td>
-                    <td><?php echo $attendance['class_name']; ?></td>
-                    <td><?php echo $attendance['formatted_date']; ?></td>
-                    <td><?php echo date('H:i', strtotime($attendance['time_in'])); ?></td>
-                    <td><?php echo $attendance['subject']; ?></td>
-                    <td>
-                        <?php 
-                        $badge_class = '';
-                        switch($attendance['present_id']) {
-                            case 1: $badge_class = $attendance['is_late'] == 'Y' ? 'status-late' : 'status-present'; break;
-                            case 2: $badge_class = 'status-sick'; break;
-                            case 3: $badge_class = 'status-permission'; break;
-                            case 4: $badge_class = 'status-absent'; break;
+                <?php if (!empty($studentRows)): ?>
+                    <?php foreach ($studentRows as $index => $row): ?>
+                        <?php
+                        $totalSesi = (int) ($row['total_sesi'] ?? 0);
+                        $hadir = (int) ($row['hadir'] ?? 0);
+                        $alpa = (int) ($row['alpa'] ?? 0);
+                        $rate = $totalSesi > 0 ? round(($hadir / $totalSesi) * 100, 1) : 0;
+                        $statusLabel = 'Belum Ada Rekap';
+                        $statusClass = 'secondary';
+                        if ($totalSesi > 0) {
+                            if ($alpa > 0 || $rate < 75) {
+                                $statusLabel = 'Perlu Perhatian';
+                                $statusClass = 'danger';
+                            } else {
+                                $statusLabel = 'Baik';
+                                $statusClass = 'success';
+                            }
                         }
                         ?>
-                        <span class="status-badge <?php echo $badge_class; ?>">
-                            <?php echo $attendance['present_name']; ?>
-                        </span>
-                    </td>
-                    <td>
-                        <?php if($attendance['is_late'] == 'Y'): ?>
-                            <span class="text-warning">
-                                <i class="fas fa-clock"></i> <?php echo $attendance['late_time']; ?> menit
-                            </span>
-                        <?php else: ?>
-                            <span class="text-muted">Tepat waktu</span>
-                        <?php endif; ?>
-                    </td>
-                    <td><?php echo $attendance['information'] ?: '-'; ?></td>
-                    <td>
-                        <button class="btn btn-sm btn-outline-info" 
-                                onclick="viewAttendanceDetails(<?php echo $attendance['presence_id']; ?>)"
-                                title="Lihat Detail">
-                            <i class="fas fa-eye"></i>
-                        </button>
-                        <?php if($attendance['picture_in']): ?>
-                        <button class="btn btn-sm btn-outline-success" 
-                                onclick="viewPhoto('<?php echo $attendance['picture_in']; ?>')"
-                                title="Lihat Foto">
-                            <i class="fas fa-camera"></i>
-                        </button>
-                        <?php endif; ?>
-                    </td>
-                </tr>
-                <?php endforeach; ?>
+                        <tr>
+                            <td><?php echo $index + 1; ?></td>
+                            <td><?php echo htmlspecialchars((string) ($row['student_nisn'] ?? '-'), ENT_QUOTES, 'UTF-8'); ?></td>
+                            <td><strong><?php echo htmlspecialchars((string) ($row['student_name'] ?? '-'), ENT_QUOTES, 'UTF-8'); ?></strong></td>
+                            <td><?php echo htmlspecialchars((string) ($row['class_name'] ?? '-'), ENT_QUOTES, 'UTF-8'); ?></td>
+                            <td><?php echo $totalSesi; ?></td>
+                            <td><?php echo $hadir; ?></td>
+                            <td><?php echo (int) ($row['terlambat'] ?? 0); ?></td>
+                            <td><?php echo (int) ($row['sakit'] ?? 0); ?></td>
+                            <td><?php echo (int) ($row['izin'] ?? 0); ?></td>
+                            <td><?php echo $alpa; ?></td>
+                            <td><?php echo number_format((float) $rate, 1); ?>%</td>
+                            <td><span class="badge bg-<?php echo $statusClass; ?>"><?php echo $statusLabel; ?></span></td>
+                        </tr>
+                    <?php endforeach; ?>
+                <?php endif; ?>
             </tbody>
         </table>
     </div>
-    
-    <?php if(empty($attendances)): ?>
-    <div class="text-center py-5">
-        <i class="fas fa-clipboard-list fa-3x text-muted mb-3"></i>
-        <p class="text-muted">Tidak ada data absensi untuk filter yang dipilih</p>
-    </div>
+
+    <?php if (empty($studentRows)): ?>
+        <div class="text-center py-5">
+            <i class="fas fa-users-slash fa-3x text-muted mb-3"></i>
+            <p class="text-muted mb-0">Tidak ada siswa pada filter yang dipilih.</p>
+        </div>
     <?php endif; ?>
 </div>
 
-<!-- Chart Section -->
-<div class="data-table-container mt-4">
-    <h5 class="table-title mb-3"><i class="fas fa-chart-bar text-info me-2"></i>Statistik Absensi</h5>
-    <div class="row">
-        <div class="col-md-6">
-            <div class="chart-container">
-                <canvas id="attendanceChart"></canvas>
-            </div>
-        </div>
-        <div class="col-md-6">
-            <div class="chart-container">
-                <canvas id="classAttendanceChart"></canvas>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- Photo Modal -->
-<div class="modal fade" id="photoModal" tabindex="-1">
-    <div class="modal-dialog modal-lg">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">Foto Absensi</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
-            <div class="modal-body text-center">
-                <img id="attendancePhoto" src="" class="img-fluid rounded" style="max-height: 500px;">
-            </div>
-        </div>
-    </div>
-</div>
-
 <script>
-function exportToExcel(tableId, filename) {
-    const table = document.getElementById(tableId);
-    const wb = XLSX.utils.table_to_book(table, {sheet: "Absensi"});
-    XLSX.writeFile(wb, filename + '.xlsx');
-}
-
-function viewAttendanceDetails(presenceId) {
-    // Implement modal for attendance details
-    $.ajax({
-        url: 'ajax/get_attendance_details.php',
-        method: 'POST',
-        data: { id: presenceId },
-        success: function(response) {
-            // Show details in modal
-            $('#detailsModal .modal-body').html(response);
-            $('#detailsModal').modal('show');
-        }
-    });
-}
-
-function viewPhoto(photoPath) {
-    $('#attendancePhoto').attr('src', '../uploads/attendance/' + photoPath);
-    $('#photoModal').modal('show');
-}
-
-$(document).ready(function() {
-    // Initialize table
-    const table = $('#attendanceTable').DataTable({
-        "language": {
-            "url": "//cdn.datatables.net/plug-ins/1.13.6/i18n/id.json"
-        },
-        "pageLength": 10,
-        "responsive": false,
-        "scrollX": true,
-        "scrollCollapse": true,
-        "dom": 'Bfrtip',
-        "buttons": [
-            {
-                extend: 'excel',
-                text: '<i class="fas fa-file-excel"></i> Excel',
-                className: 'btn btn-success',
-                title: 'Absensi Guru - <?php echo date('d-m-Y'); ?>',
-                filename: 'Absensi_<?php echo date('Y-m-d'); ?>',
-                exportOptions: {
-                    columns: ':visible'
-                }
-            },
-            {
-                extend: 'pdf',
-                text: '<i class="fas fa-file-pdf"></i> PDF',
-                className: 'btn btn-danger',
-                title: 'Absensi Guru - <?php echo date('d-m-Y'); ?>',
-                exportOptions: {
-                    columns: ':visible'
-                }
-            },
-            {
-                extend: 'print',
-                text: '<i class="fas fa-print"></i> Print',
-                className: 'btn btn-primary',
-                title: 'Absensi Guru - <?php echo date('d-m-Y'); ?>',
-                exportOptions: {
-                    columns: ':visible'
-                }
-            }
-        ]
-    });
-    
-    // Initialize charts
-    const ctx = document.getElementById('attendanceChart').getContext('2d');
-    const attendanceChart = new Chart(ctx, {
-        type: 'doughnut',
-        data: {
-            labels: ['Hadir', 'Sakit', 'Izin', 'Alpa'],
-            datasets: [{
-                data: [
-                    <?php echo $stats['hadir'] ?? 0; ?>,
-                    <?php echo $stats['sakit'] ?? 0; ?>,
-                    <?php echo $stats['izin'] ?? 0; ?>,
-                    <?php echo $stats['alpa'] ?? 0; ?>
-                ],
-                backgroundColor: [
-                    '#10b981',
-                    '#3b82f6',
-                    '#8b5cf6',
-                    '#ef4444'
-                ],
-                borderWidth: 2,
-                borderColor: 'var(--card-color)'
-            }]
-        },
-        options: {
-            responsive: false,
-            scrollX: true,
-            scrollCollapse: true,
-            plugins: {
-                legend: {
-                    position: 'bottom',
-                    labels: {
-                        color: 'var(--text-color)'
-                    }
-                }
-            }
-        }
-    });
-    
-    // Class attendance chart
-    <?php
-    $classStats = $db->query("
-        SELECT c.class_name, 
-               COUNT(p.presence_id) as total,
-               SUM(CASE WHEN p.present_id = 1 THEN 1 ELSE 0 END) as hadir
-        FROM presence p
-        JOIN student s ON p.student_id = s.id
-        JOIN class c ON s.class_id = c.class_id
-        JOIN student_schedule ss ON p.student_schedule_id = ss.student_schedule_id
-        JOIN teacher_schedule ts ON ss.teacher_schedule_id = ts.schedule_id
-        WHERE ts.teacher_id = ? 
-        AND DATE(p.presence_date) = ?
-        GROUP BY c.class_id
-    ", [$teacher_id, $filter_date])->fetchAll();
-    
-    $classLabels = [];
-    $classData = [];
-    foreach($classStats as $stat) {
-        $percentage = $stat['total'] > 0 ? round(($stat['hadir'] / $stat['total']) * 100) : 0;
-        $classLabels[] = $stat['class_name'];
-        $classData[] = $percentage;
+document.addEventListener('DOMContentLoaded', function() {
+    const fromEl = document.getElementById('guruDateFrom');
+    const toEl = document.getElementById('guruDateTo');
+    if (!fromEl || !toEl) {
+        return;
     }
-    ?>
-    
-    const classCtx = document.getElementById('classAttendanceChart').getContext('2d');
-    const classAttendanceChart = new Chart(classCtx, {
-        type: 'bar',
-        data: {
-            labels: <?php echo json_encode($classLabels); ?>,
-            datasets: [{
-                label: 'Persentase Kehadiran (%)',
-                data: <?php echo json_encode($classData); ?>,
-                backgroundColor: 'rgba(26, 86, 219, 0.7)',
-                borderColor: 'rgba(26, 86, 219, 1)',
-                borderWidth: 1
-            }]
-        },
-        options: {
-            responsive: false,
-            scrollX: true,
-            scrollCollapse: true,
-            scales: {
-                y: {
-                    beginAtZero: true,
-                    max: 100,
-                    ticks: {
-                        color: 'var(--text-color)'
-                    },
-                    grid: {
-                        color: 'var(--border)'
-                    }
-                },
-                x: {
-                    ticks: {
-                        color: 'var(--text-color)'
-                    },
-                    grid: {
-                        color: 'var(--border)'
-                    }
-                }
-            },
-            plugins: {
-                legend: {
-                    labels: {
-                        color: 'var(--text-color)'
-                    }
-                }
-            }
+
+    const syncRange = function() {
+        const from = fromEl.value || '';
+        const to = toEl.value || '';
+        toEl.min = from;
+        if (from && to && to < from) {
+            toEl.value = from;
         }
-    });
+    };
+
+    syncRange();
+    fromEl.addEventListener('change', syncRange);
+    toEl.addEventListener('change', syncRange);
 });
 </script>
-
-<!-- Details Modal -->
-<div class="modal fade" id="detailsModal" tabindex="-1">
-    <div class="modal-dialog modal-lg">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">Detail Absensi</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
-            <div class="modal-body" id="detailsContent">
-                Loading...
-            </div>
-        </div>
-    </div>
-</div>
