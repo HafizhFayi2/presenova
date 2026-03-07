@@ -170,8 +170,17 @@
             box-shadow: 0 20px 60px rgba(15, 23, 42, 0.12);
             backdrop-filter: blur(16px);
             -webkit-backdrop-filter: blur(16px);
-            z-index: 1100;
+            z-index: 1030;
             transition: transform 0.35s ease, opacity 0.3s ease;
+        }
+
+        /* Keep Bootstrap modal above floating nav */
+        .modal-backdrop {
+            z-index: 1045;
+        }
+
+        .modal {
+            z-index: 1060;
         }
 
         [data-theme="dark"] .top-nav {
@@ -942,7 +951,116 @@
             backdrop-filter: blur(8px);
             -webkit-backdrop-filter: blur(8px);
         }
-        
+
+        /* Export Hub */
+        .guru-export-hub {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 14px;
+        }
+
+        .guru-export-card {
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            min-height: 190px;
+            padding: 18px;
+            border-radius: 16px;
+            border: 1px solid rgba(14, 165, 233, 0.2);
+            background: linear-gradient(165deg, rgba(255, 255, 255, 0.9) 0%, rgba(240, 249, 255, 0.85) 100%);
+            box-shadow: 0 14px 30px rgba(15, 23, 42, 0.1);
+            overflow: hidden;
+        }
+
+        .guru-export-card::after {
+            content: "";
+            position: absolute;
+            inset: 0 auto auto 0;
+            width: 100%;
+            height: 3px;
+            background: var(--gradient-primary);
+            opacity: 0.8;
+        }
+
+        .guru-export-icon {
+            width: 44px;
+            height: 44px;
+            border-radius: 12px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1rem;
+            color: #082f49;
+            background: var(--gradient-primary);
+            box-shadow: 0 12px 28px rgba(14, 165, 233, 0.28);
+        }
+
+        .guru-export-body h6 {
+            margin: 0;
+            font-size: 1rem;
+            font-weight: 700;
+            color: var(--text-color);
+        }
+
+        .guru-export-body p {
+            margin: 6px 0 0;
+            font-size: 0.86rem;
+            color: var(--text-secondary-color);
+            line-height: 1.45;
+        }
+
+        .guru-export-btn {
+            margin-top: auto;
+            border: 0;
+            border-radius: 11px;
+            padding: 10px 14px;
+            font-size: 0.88rem;
+            font-weight: 700;
+            letter-spacing: 0.01em;
+            transition: transform 0.2s ease, box-shadow 0.2s ease, filter 0.2s ease;
+        }
+
+        .guru-export-btn:hover {
+            transform: translateY(-1px);
+            filter: brightness(1.02);
+        }
+
+        .guru-export-btn.is-excel {
+            color: #062533;
+            background: var(--gradient-primary);
+            box-shadow: 0 10px 20px rgba(14, 165, 233, 0.28);
+        }
+
+        .guru-export-btn.is-pdf {
+            color: #e2e8f0;
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+            box-shadow: 0 10px 20px rgba(15, 23, 42, 0.26);
+        }
+
+        .guru-export-btn.is-print {
+            color: var(--text-color);
+            background: rgba(15, 23, 42, 0.06);
+            border: 1px solid rgba(15, 23, 42, 0.18);
+        }
+
+        [data-theme="dark"] .guru-export-card {
+            border-color: rgba(148, 163, 184, 0.22);
+            background: linear-gradient(165deg, rgba(15, 23, 42, 0.72) 0%, rgba(30, 41, 59, 0.72) 100%);
+            box-shadow: var(--dark-shadow);
+        }
+
+        [data-theme="dark"] .guru-export-btn.is-print {
+            color: #cbd5e1;
+            background: rgba(148, 163, 184, 0.08);
+            border-color: rgba(148, 163, 184, 0.28);
+        }
+
+        .dt-export-hidden,
+        .dt-export-hidden .dt-buttons {
+            display: none !important;
+        }
+         
         /* Dark Mode untuk Tabel dan Form */
         [data-theme="dark"] .table {
             color: var(--dark-text);
@@ -1081,6 +1199,10 @@
                 align-items: flex-start;
                 gap: 15px;
             }
+
+            .guru-export-hub {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
         }
         
         @media (max-width: 768px) {
@@ -1097,6 +1219,10 @@
             
             .attendance-summary {
                 grid-template-columns: repeat(2, 1fr);
+            }
+
+            .guru-export-hub {
+                grid-template-columns: 1fr;
             }
         }
         
@@ -1565,6 +1691,604 @@
 
     .teacher-password-confirm-btn,
     .teacher-password-download-btn {
+        width: 100%;
+    }
+}
+
+/* Elegant guru refinements */
+.guru-page {
+    --teacher-accent: #24455d;
+    --teacher-accent-soft: #dde5ec;
+    --teacher-accent-strong: #172f40;
+    --teacher-border: rgba(36, 69, 93, 0.18);
+    --teacher-text-muted: #5f6f7d;
+    --teacher-surface: rgba(255, 255, 255, 0.84);
+    --teacher-surface-strong: rgba(255, 255, 255, 0.95);
+}
+
+.guru-page .bg-ornaments .blob {
+    background: linear-gradient(135deg, rgba(36, 69, 93, 0.45) 0%, rgba(111, 139, 160, 0.4) 100%);
+    opacity: 0.44;
+}
+
+.guru-page .bg-ornaments .blob-2 {
+    background: linear-gradient(135deg, rgba(23, 47, 64, 0.42) 0%, rgba(140, 155, 167, 0.38) 100%);
+}
+
+.guru-page .bg-ornaments .grid {
+    border-color: rgba(36, 69, 93, 0.1);
+    background:
+        linear-gradient(90deg, rgba(36, 69, 93, 0.05) 1px, transparent 1px),
+        linear-gradient(180deg, rgba(36, 69, 93, 0.05) 1px, transparent 1px);
+}
+
+.guru-page .top-nav {
+    border-color: rgba(36, 69, 93, 0.14);
+    background: rgba(249, 251, 253, 0.88);
+    box-shadow: 0 18px 40px rgba(10, 20, 30, 0.12);
+}
+
+.guru-page .nav-brand .logo-icon,
+.guru-page .nav-avatar {
+    background: linear-gradient(140deg, #2d4f68 0%, #3d6786 100%);
+    color: #f5f8fb;
+    box-shadow: 0 12px 28px rgba(36, 69, 93, 0.28);
+}
+
+.guru-page .nav-pill {
+    border-color: rgba(36, 69, 93, 0.2);
+    background: rgba(255, 255, 255, 0.72);
+    box-shadow: none;
+}
+
+.guru-page .nav-pill.active {
+    background: linear-gradient(140deg, #2d4f68 0%, #3d6786 100%);
+    color: #f8fafc;
+}
+
+.guru-page .nav-pill.logout {
+    background: #eef3f7;
+    border-color: rgba(36, 69, 93, 0.22);
+    color: #1f3342;
+}
+
+.guru-page .theme-toggle,
+.guru-page .nav-toggle {
+    border-color: rgba(36, 69, 93, 0.22);
+    background: rgba(255, 255, 255, 0.78);
+    box-shadow: none;
+}
+
+.guru-page .top-bar {
+    border-color: var(--teacher-border);
+    background: var(--teacher-surface-strong);
+    box-shadow: 0 16px 34px rgba(15, 23, 42, 0.08);
+}
+
+.guru-page .date-time-display {
+    background: rgba(36, 69, 93, 0.1);
+    border: 1px solid rgba(36, 69, 93, 0.22);
+    box-shadow: none;
+    color: #1f3342;
+    font-weight: 700;
+    letter-spacing: 0.015em;
+}
+
+.guru-page .teacher-dashboard {
+    display: grid;
+    gap: 20px;
+}
+
+.guru-page .teacher-hero {
+    background: linear-gradient(140deg, rgba(255, 255, 255, 0.92) 0%, rgba(243, 247, 251, 0.96) 100%);
+    border: 1px solid var(--teacher-border);
+    border-radius: 24px;
+    padding: 26px;
+    display: grid;
+    grid-template-columns: minmax(0, 1.45fr) minmax(0, 1fr);
+    gap: 18px;
+    box-shadow: 0 20px 40px rgba(15, 23, 42, 0.08);
+    animation: teacherFadeUp 0.45s ease both;
+}
+
+.guru-page .teacher-eyebrow {
+    margin: 0 0 8px;
+    font-size: 0.82rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--teacher-accent);
+    font-weight: 700;
+}
+
+.guru-page .teacher-hero-copy h3 {
+    margin-bottom: 6px;
+}
+
+.guru-page .teacher-hero-copy p {
+    margin-bottom: 14px;
+    color: var(--teacher-text-muted);
+}
+
+.guru-page .teacher-hero-copy strong {
+    color: #1f3342;
+}
+
+.guru-page .teacher-chip-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.guru-page .teacher-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.84rem;
+    font-weight: 600;
+    color: #243746;
+    background: rgba(255, 255, 255, 0.74);
+    border: 1px solid rgba(36, 69, 93, 0.2);
+    border-radius: 999px;
+    padding: 8px 12px;
+}
+
+.guru-page .teacher-hero-side {
+    display: grid;
+    gap: 10px;
+}
+
+.guru-page .teacher-hero-metric {
+    border: 1px solid rgba(36, 69, 93, 0.18);
+    background: rgba(255, 255, 255, 0.84);
+    border-radius: 16px;
+    padding: 12px 14px;
+}
+
+.guru-page .teacher-hero-metric span {
+    display: block;
+    font-size: 0.82rem;
+    color: var(--teacher-text-muted);
+}
+
+.guru-page .teacher-hero-metric strong {
+    display: block;
+    margin-top: 4px;
+    font-size: 1.45rem;
+    color: #1b2f3d;
+}
+
+.guru-page .teacher-kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 14px;
+}
+
+.guru-page .teacher-kpi-card {
+    background: var(--teacher-surface);
+    border: 1px solid var(--teacher-border);
+    border-radius: 18px;
+    padding: 16px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    animation: teacherFadeUp 0.45s ease both;
+}
+
+.guru-page .teacher-kpi-card:nth-child(2) {
+    animation-delay: 0.05s;
+}
+
+.guru-page .teacher-kpi-card:nth-child(3) {
+    animation-delay: 0.1s;
+}
+
+.guru-page .teacher-kpi-card:nth-child(4) {
+    animation-delay: 0.14s;
+}
+
+.guru-page .teacher-kpi-icon {
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: #ffffff;
+    background: linear-gradient(140deg, #2d4f68 0%, #3d6786 100%);
+    box-shadow: 0 10px 20px rgba(36, 69, 93, 0.24);
+    flex-shrink: 0;
+}
+
+.guru-page .teacher-kpi-body h4 {
+    margin: 0;
+    font-size: 1.34rem;
+    color: #1a2f3f;
+}
+
+.guru-page .teacher-kpi-body p {
+    margin: 3px 0 0;
+    color: var(--teacher-text-muted);
+    font-size: 0.86rem;
+}
+
+.guru-page .teacher-panel {
+    background: var(--teacher-surface-strong);
+    border: 1px solid var(--teacher-border);
+    border-radius: 20px;
+    padding: 18px;
+    box-shadow: 0 18px 36px rgba(15, 23, 42, 0.07);
+    animation: teacherFadeUp 0.48s ease both;
+}
+
+.guru-page .teacher-panel--compact {
+    margin-bottom: 16px;
+}
+
+.guru-page .teacher-panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 14px;
+}
+
+.guru-page .teacher-panel-title {
+    margin: 0;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 1rem;
+    color: #1e3343;
+}
+
+.guru-page .teacher-quiet-btn {
+    border: 1px solid rgba(36, 69, 93, 0.25);
+    background: linear-gradient(140deg, #2d4f68 0%, #3d6786 100%);
+    color: #f8fafc;
+    text-decoration: none;
+    border-radius: 10px;
+    padding: 8px 12px;
+    font-size: 0.82rem;
+    font-weight: 600;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform 0.2s ease, opacity 0.2s ease;
+}
+
+.guru-page .teacher-quiet-btn:hover {
+    color: #f8fafc;
+    transform: translateY(-1px);
+}
+
+.guru-page .teacher-quiet-btn--soft {
+    background: rgba(36, 69, 93, 0.08);
+    color: #1f3443;
+    border-color: rgba(36, 69, 93, 0.2);
+}
+
+.guru-page .teacher-quiet-btn--soft:hover {
+    color: #1f3443;
+}
+
+.guru-page .teacher-quiet-btn--ghost {
+    margin-top: 12px;
+    width: 100%;
+    background: rgba(36, 69, 93, 0.06);
+    color: #1f3443;
+}
+
+.guru-page .teacher-quiet-btn--ghost:hover {
+    color: #1f3443;
+}
+
+.guru-page .teacher-schedule-grid {
+    display: grid;
+    gap: 12px;
+}
+
+.guru-page .teacher-schedule-card {
+    border: 1px solid rgba(36, 69, 93, 0.16);
+    background: rgba(255, 255, 255, 0.82);
+    border-radius: 16px;
+    padding: 14px;
+}
+
+.guru-page .teacher-schedule-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 12px;
+}
+
+.guru-page .teacher-schedule-top h6 {
+    margin-bottom: 4px;
+    font-size: 1rem;
+}
+
+.guru-page .teacher-schedule-top p {
+    margin: 0;
+    font-size: 0.86rem;
+    color: var(--teacher-text-muted);
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+}
+
+.guru-page .teacher-status-pill {
+    display: inline-flex;
+    align-items: center;
+    border-radius: 999px;
+    font-size: 0.74rem;
+    font-weight: 700;
+    padding: 6px 11px;
+    white-space: nowrap;
+}
+
+.guru-page .teacher-status-pill.is-done {
+    background: rgba(52, 108, 83, 0.13);
+    color: #215842;
+    border: 1px solid rgba(52, 108, 83, 0.3);
+}
+
+.guru-page .teacher-status-pill.is-pending {
+    background: rgba(127, 93, 38, 0.13);
+    color: #6d5122;
+    border: 1px solid rgba(127, 93, 38, 0.3);
+}
+
+.guru-page .teacher-schedule-bottom {
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px dashed rgba(36, 69, 93, 0.2);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+}
+
+.guru-page .teacher-schedule-meta {
+    display: grid;
+    gap: 5px;
+}
+
+.guru-page .teacher-schedule-meta span {
+    font-size: 0.84rem;
+    color: #415464;
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+}
+
+.guru-page .teacher-empty {
+    border: 1px dashed rgba(36, 69, 93, 0.24);
+    border-radius: 14px;
+    padding: 22px;
+    text-align: center;
+    color: #506474;
+}
+
+.guru-page .teacher-empty i {
+    font-size: 1.15rem;
+    margin-bottom: 8px;
+}
+
+.guru-page .teacher-empty p {
+    margin: 0;
+}
+
+.guru-page .teacher-empty--small {
+    padding: 16px;
+}
+
+.guru-page .teacher-compact-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 9px;
+}
+
+.guru-page .teacher-compact-item {
+    border: 1px solid rgba(36, 69, 93, 0.15);
+    background: rgba(255, 255, 255, 0.78);
+    border-radius: 13px;
+    padding: 11px 12px;
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+}
+
+.guru-page .teacher-compact-item strong {
+    display: block;
+    font-size: 0.9rem;
+    color: #1d3242;
+}
+
+.guru-page .teacher-compact-item span {
+    display: block;
+    font-size: 0.78rem;
+    color: #5f6f7d;
+}
+
+.guru-page .teacher-compact-time {
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: #2b465b;
+    white-space: nowrap;
+}
+
+.guru-page .teacher-stat-list {
+    display: grid;
+    gap: 10px;
+}
+
+.guru-page .teacher-stat-row {
+    display: grid;
+    gap: 6px;
+}
+
+.guru-page .teacher-stat-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.guru-page .teacher-stat-head span {
+    font-size: 0.84rem;
+    color: #4b5f6f;
+}
+
+.guru-page .teacher-stat-head strong {
+    font-size: 0.9rem;
+    color: #1f3443;
+}
+
+.guru-page .teacher-progress {
+    height: 7px;
+    border-radius: 99px;
+    background: rgba(36, 69, 93, 0.1);
+    overflow: hidden;
+}
+
+.guru-page .teacher-progress span {
+    display: block;
+    height: 100%;
+    border-radius: inherit;
+    background: linear-gradient(140deg, #2d4f68 0%, #3d6786 100%);
+}
+
+@keyframes teacherFadeUp {
+    from {
+        opacity: 0;
+        transform: translateY(12px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+[data-theme="dark"] .guru-page {
+    --teacher-border: rgba(148, 163, 184, 0.24);
+    --teacher-text-muted: #9fb0bf;
+    --teacher-surface: rgba(15, 23, 42, 0.82);
+    --teacher-surface-strong: rgba(15, 23, 42, 0.94);
+}
+
+[data-theme="dark"] .guru-page .top-nav {
+    background: rgba(15, 23, 42, 0.9);
+    border-color: rgba(148, 163, 184, 0.2);
+}
+
+[data-theme="dark"] .guru-page .nav-pill {
+    background: rgba(30, 41, 59, 0.7);
+    border-color: rgba(148, 163, 184, 0.22);
+}
+
+[data-theme="dark"] .guru-page .nav-pill.logout {
+    background: rgba(51, 65, 85, 0.62);
+    color: #dbe5ed;
+}
+
+[data-theme="dark"] .guru-page .theme-toggle,
+[data-theme="dark"] .guru-page .nav-toggle {
+    background: rgba(30, 41, 59, 0.74);
+    border-color: rgba(148, 163, 184, 0.28);
+    color: #e2e8f0;
+}
+
+[data-theme="dark"] .guru-page .top-bar {
+    background: rgba(15, 23, 42, 0.88);
+}
+
+[data-theme="dark"] .guru-page .date-time-display {
+    background: rgba(71, 85, 105, 0.22);
+    border-color: rgba(148, 163, 184, 0.24);
+    color: #dbe5ed;
+}
+
+[data-theme="dark"] .guru-page .teacher-hero {
+    background: linear-gradient(145deg, rgba(15, 23, 42, 0.92) 0%, rgba(30, 41, 59, 0.88) 100%);
+}
+
+[data-theme="dark"] .guru-page .teacher-hero-copy strong,
+[data-theme="dark"] .guru-page .teacher-hero-metric strong,
+[data-theme="dark"] .guru-page .teacher-kpi-body h4,
+[data-theme="dark"] .guru-page .teacher-panel-title,
+[data-theme="dark"] .guru-page .teacher-schedule-top h6,
+[data-theme="dark"] .guru-page .teacher-compact-item strong,
+[data-theme="dark"] .guru-page .teacher-stat-head strong {
+    color: #e2e8f0;
+}
+
+[data-theme="dark"] .guru-page .teacher-chip,
+[data-theme="dark"] .guru-page .teacher-hero-metric,
+[data-theme="dark"] .guru-page .teacher-schedule-card,
+[data-theme="dark"] .guru-page .teacher-compact-item {
+    background: rgba(15, 23, 42, 0.8);
+}
+
+[data-theme="dark"] .guru-page .teacher-quiet-btn--soft,
+[data-theme="dark"] .guru-page .teacher-quiet-btn--ghost {
+    color: #d7e2ea;
+    background: rgba(51, 65, 85, 0.45);
+}
+
+[data-theme="dark"] .guru-page .teacher-quiet-btn--soft:hover,
+[data-theme="dark"] .guru-page .teacher-quiet-btn--ghost:hover {
+    color: #d7e2ea;
+}
+
+[data-theme="dark"] .guru-page .teacher-status-pill.is-done {
+    background: rgba(74, 222, 128, 0.12);
+    color: #86efac;
+    border-color: rgba(74, 222, 128, 0.24);
+}
+
+[data-theme="dark"] .guru-page .teacher-status-pill.is-pending {
+    background: rgba(251, 191, 36, 0.12);
+    color: #fde68a;
+    border-color: rgba(251, 191, 36, 0.24);
+}
+
+[data-theme="dark"] .guru-page .teacher-progress {
+    background: rgba(148, 163, 184, 0.2);
+}
+
+@media (max-width: 1200px) {
+    .guru-page .teacher-kpi-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 992px) {
+    .guru-page .teacher-hero {
+        grid-template-columns: 1fr;
+        padding: 20px;
+    }
+}
+
+@media (max-width: 768px) {
+    .guru-page .teacher-kpi-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .guru-page .teacher-panel {
+        padding: 16px;
+    }
+
+    .guru-page .teacher-panel-header {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .guru-page .teacher-schedule-bottom {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .guru-page .teacher-quiet-btn--soft {
         width: 100%;
     }
 }

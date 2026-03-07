@@ -3,23 +3,25 @@
 $filter_day = trim((string)($_GET['day_id'] ?? ''));
 $filter_class = trim((string)($_GET['class_id'] ?? ''));
 
-$availableDays = $db->query(
+$availableDaysStmt = $db->query(
     "SELECT DISTINCT d.day_id, d.day_name
      FROM teacher_schedule ts
      JOIN day d ON ts.day_id = d.day_id
      WHERE ts.teacher_id = ?
      ORDER BY d.day_id",
     [$teacher_id]
-)->fetchAll();
+);
+$availableDays = $availableDaysStmt ? $availableDaysStmt->fetchAll() : [];
 
-$availableClasses = $db->query(
+$availableClassesStmt = $db->query(
     "SELECT DISTINCT c.class_id, c.class_name
      FROM teacher_schedule ts
      JOIN class c ON ts.class_id = c.class_id
      WHERE ts.teacher_id = ?
      ORDER BY c.class_name",
     [$teacher_id]
-)->fetchAll();
+);
+$availableClasses = $availableClassesStmt ? $availableClassesStmt->fetchAll() : [];
 
 $sql = "
     SELECT
@@ -51,7 +53,8 @@ if ($filter_class !== '') {
 
 $sql .= " ORDER BY ts.day_id ASC, sh.time_in ASC, c.class_name ASC";
 
-$schedules = $db->query($sql, $params)->fetchAll();
+$schedulesStmt = $db->query($sql, $params);
+$schedules = $schedulesStmt ? $schedulesStmt->fetchAll() : [];
 
 foreach ($schedules as &$schedule) {
     $computed = calculateJpTimeRangeFromShiftForDay($db, $schedule['shift_name'] ?? '', (int)($schedule['day_id'] ?? 0));

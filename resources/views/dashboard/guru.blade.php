@@ -83,6 +83,10 @@ if (isset($_SESSION['teacher_password_rotation_notice']) && is_string($_SESSION[
 
 // Get page parameter for navigation
 $page = isset($_GET['page']) ? $_GET['page'] : 'dashboard';
+$page_class = preg_replace('/[^a-z0-9_-]/', '', strtolower((string) $page));
+if ($page_class === '') {
+    $page_class = 'dashboard';
+}
 
 // Get today's schedule for dashboard
 $today = date('Y-m-d');
@@ -176,7 +180,7 @@ $guru_core_css_version = @filemtime(public_path('assets/css/guru.css')) ?: time(
     <?php endif; ?>
 
 </head>
-<body>
+<body class="guru-page guru-page-<?php echo htmlspecialchars($page_class, ENT_QUOTES, 'UTF-8'); ?>">
     <div class="bg-ornaments" aria-hidden="true">
         <span class="blob blob-1"></span>
         <span class="blob blob-2"></span>
@@ -205,7 +209,7 @@ $guru_core_css_version = @filemtime(public_path('assets/css/guru.css')) ?: time(
                     <nav class="nav-links" id="navLinks">
                         <a href="?page=dashboard" class="nav-pill <?php echo $page == 'dashboard' ? 'active' : ''; ?>">Dashboard</a>
                         <a href="?page=jadwal" class="nav-pill <?php echo $page == 'jadwal' ? 'active' : ''; ?>">Jadwal</a>
-                        <a href="?page=absensi" class="nav-pill <?php echo $page == 'absensi' ? 'active' : ''; ?>">Absensi</a>
+                        <a href="?page=absensi" class="nav-pill <?php echo $page == 'absensi' ? 'active' : ''; ?>">Siswa</a>
                         <a href="?page=laporan" class="nav-pill <?php echo $page == 'laporan' ? 'active' : ''; ?>">Laporan</a>
                         <a href="?page=profil" class="nav-pill <?php echo $page == 'profil' ? 'active' : ''; ?>">Profil</a>
                         <a href="../logout.php" class="nav-pill logout">Logout</a>
@@ -240,7 +244,7 @@ $guru_core_css_version = @filemtime(public_path('assets/css/guru.css')) ?: time(
                         $pageTitles = [
                             'dashboard' => 'Dashboard Guru',
                             'jadwal' => 'Jadwal Mengajar',
-                            'absensi' => 'Rekap Absensi',
+                            'absensi' => 'Siswa Yang Diajar',
                             'laporan' => 'Laporan & Statistik',
                             'profil' => 'Profil Guru'
                         ];
@@ -353,6 +357,8 @@ $guru_core_css_version = @filemtime(public_path('assets/css/guru.css')) ?: time(
     <script src="https://cdn.datatables.net/buttons/2.4.1/js/dataTables.buttons.min.js"></script>
     <script src="https://cdn.datatables.net/buttons/2.4.1/js/buttons.bootstrap5.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/pdfmake.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/vfs_fonts.js"></script>
     <script src="https://cdn.datatables.net/buttons/2.4.1/js/buttons.html5.min.js"></script>
     <script src="https://cdn.datatables.net/buttons/2.4.1/js/buttons.print.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
@@ -501,6 +507,37 @@ $guru_core_css_version = @filemtime(public_path('assets/css/guru.css')) ?: time(
         }
         setTimeout(prime, 650);
     }
+
+    function triggerGuruTableExport(tableId, action) {
+        if (!tableId || !action || !$.fn.dataTable) {
+            return false;
+        }
+
+        const tableSelector = `#${tableId}`;
+        if (!$(tableSelector).length || !$.fn.dataTable.isDataTable(tableSelector)) {
+            return false;
+        }
+
+        const dt = $(tableSelector).DataTable();
+        const buttonSelector = action === 'excel'
+            ? '.buttons-excel'
+            : action === 'pdf'
+                ? '.buttons-pdf'
+                : action === 'print'
+                    ? '.buttons-print'
+                    : '';
+        if (!buttonSelector) {
+            return false;
+        }
+
+        const buttonApi = dt.button(buttonSelector);
+        if (!buttonApi || !buttonApi.length) {
+            return false;
+        }
+
+        buttonApi.trigger();
+        return true;
+    }
     
 $(document).ready(function() {
         initGuruSectionPrefetch();
@@ -520,44 +557,52 @@ $(document).ready(function() {
         });
         // Initialize DataTables with export buttons
         if ($('.data-table-export').length) {
-            $('.data-table-export').DataTable({
-                "language": {
-                    "url": "//cdn.datatables.net/plug-ins/1.13.6/i18n/id.json"
-                },
-                "pageLength": 10,
-                "responsive": false,
-                "scrollX": false,
-                "scrollCollapse": false,
-                "dom": 'Bfrtip',
-                "buttons": [
-                    {
-                        extend: 'excel',
-                        text: '<i class="fas fa-file-excel"></i> Excel',
-                        className: 'btn btn-success',
-                        title: 'Laporan Absensi Guru',
-                        exportOptions: {
-                            columns: ':visible'
-                        }
+            const exportTitles = {
+                guruStudentMonitorTable: 'Monitoring Siswa Guru',
+                guruStudentReportTable: 'Laporan Rekap Siswa Guru'
+            };
+            $('.data-table-export').each(function() {
+                const tableElement = this;
+                if ($.fn.dataTable.isDataTable(tableElement)) {
+                    return;
+                }
+
+                const tableId = tableElement.getAttribute('id') || '';
+                const exportTitle = exportTitles[tableId] || 'Laporan Guru';
+
+                $(tableElement).DataTable({
+                    "language": {
+                        "url": "//cdn.datatables.net/plug-ins/1.13.6/i18n/id.json"
                     },
-                    {
-                        extend: 'pdf',
-                        text: '<i class="fas fa-file-pdf"></i> PDF',
-                        className: 'btn btn-danger',
-                        title: 'Laporan Absensi Guru',
-                        exportOptions: {
-                            columns: ':visible'
+                    "pageLength": 10,
+                    "responsive": false,
+                    "scrollX": false,
+                    "scrollCollapse": false,
+                    "dom": "<'dt-export-hidden'B>frtip",
+                    "buttons": [
+                        {
+                            extend: 'excel',
+                            title: exportTitle,
+                            exportOptions: {
+                                columns: ':visible'
+                            }
+                        },
+                        {
+                            extend: 'pdf',
+                            title: exportTitle,
+                            exportOptions: {
+                                columns: ':visible'
+                            }
+                        },
+                        {
+                            extend: 'print',
+                            title: exportTitle,
+                            exportOptions: {
+                                columns: ':visible'
+                            }
                         }
-                    },
-                    {
-                        extend: 'print',
-                        text: '<i class="fas fa-print"></i> Print',
-                        className: 'btn btn-primary',
-                        title: 'Laporan Absensi Guru',
-                        exportOptions: {
-                            columns: ':visible'
-                        }
-                    }
-                ]
+                    ]
+                });
             });
         }
         
@@ -573,6 +618,15 @@ $(document).ready(function() {
                 "scrollCollapse": false
             });
         }
+
+        $(document).on('click', '.guru-export-btn', function() {
+            const tableId = String($(this).data('export-table') || '');
+            const action = String($(this).data('export-action') || '').toLowerCase();
+            const ok = triggerGuruTableExport(tableId, action);
+            if (!ok) {
+                console.warn('Ekspor gagal: tabel atau tombol DataTables tidak ditemukan.', tableId, action);
+            }
+        });
 
         $(window).off('resize.guruDtAdjust').on('resize.guruDtAdjust', function() {
             if ($.fn.dataTable && $.fn.dataTable.tables) {
@@ -783,13 +837,6 @@ $(document).ready(function() {
             lastScroll = currentScroll;
         }, { passive: true });
     })();
-    
-    // Function to export table to Excel
-    function exportToExcel(tableId, filename) {
-        const table = document.getElementById(tableId);
-        const wb = XLSX.utils.table_to_book(table, {sheet: "Sheet 1"});
-        XLSX.writeFile(wb, filename + '.xlsx');
-    }
     </script>
 </body>
 </html>

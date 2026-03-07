@@ -1,6 +1,6 @@
 <?php
 // Get teacher schedule summary
-$scheduleSummary = $db->query("
+$scheduleSummaryStmt = $db->query("
     SELECT 
         COUNT(DISTINCT ts.schedule_id) as total_schedule,
         COUNT(DISTINCT c.class_id) as total_classes,
@@ -10,10 +10,36 @@ $scheduleSummary = $db->query("
     JOIN class c ON ts.class_id = c.class_id
     LEFT JOIN student s ON c.class_id = s.class_id
     WHERE ts.teacher_id = ?
-", [$teacher_id])->fetch();
+", [$teacher_id]);
+$scheduleSummary = $scheduleSummaryStmt ? $scheduleSummaryStmt->fetch() : [];
+$scheduleSummary = is_array($scheduleSummary) ? $scheduleSummary : [];
+$scheduleSummary = array_merge([
+    'total_schedule' => 0,
+    'total_classes' => 0,
+    'total_students' => 0,
+    'classes' => '',
+], $scheduleSummary);
+$teacher = is_array($teacher ?? null) ? $teacher : [];
+$teacherName = trim((string) ($teacher['teacher_name'] ?? '-'));
+if ($teacherName === '') {
+    $teacherName = '-';
+}
+$teacherSubject = trim((string) ($teacher['subject'] ?? '-'));
+if ($teacherSubject === '') {
+    $teacherSubject = '-';
+}
+$teacherType = trim((string) ($teacher['teacher_type'] ?? '-'));
+if ($teacherType === '') {
+    $teacherType = '-';
+}
+$teacherCode = trim((string) ($teacher['teacher_code'] ?? '-'));
+if ($teacherCode === '') {
+    $teacherCode = '-';
+}
+$teacherInitial = strtoupper(substr($teacherName !== '-' ? $teacherName : 'G', 0, 1));
 
 // Get recent activities
-$recentActivities = $db->query("
+$recentActivitiesStmt = $db->query("
     SELECT 
         'Absensi' as type,
         CONCAT('Mengambil absensi untuk ', c.class_name) as description,
@@ -33,7 +59,8 @@ $recentActivities = $db->query("
     WHERE ts.teacher_id = ?
     ORDER BY date DESC
     LIMIT 5
-", [$teacher_id, $teacher_id])->fetchAll();
+", [$teacher_id, $teacher_id]);
+$recentActivities = $recentActivitiesStmt ? $recentActivitiesStmt->fetchAll() : [];
 ?>
 
 <div class="row">
@@ -42,21 +69,21 @@ $recentActivities = $db->query("
         <div class="dashboard-card">
             <div class="text-center mb-4">
                 <div class="user-avatar mx-auto" style="width: 100px; height: 100px; font-size: 2.5rem;">
-                    <?php echo strtoupper(substr($teacher['teacher_name'], 0, 1)); ?>
+                    <?php echo htmlspecialchars($teacherInitial, ENT_QUOTES, 'UTF-8'); ?>
                 </div>
-                <h4 class="mt-3 mb-1"><?php echo $teacher['teacher_name']; ?></h4>
-                <p class="text-muted mb-3"><?php echo $teacher['subject']; ?></p>
-                <span class="badge bg-primary"><?php echo $teacher['teacher_type']; ?></span>
+                <h4 class="mt-3 mb-1"><?php echo htmlspecialchars($teacherName, ENT_QUOTES, 'UTF-8'); ?></h4>
+                <p class="text-muted mb-3"><?php echo htmlspecialchars($teacherSubject, ENT_QUOTES, 'UTF-8'); ?></p>
+                <span class="badge bg-primary"><?php echo htmlspecialchars($teacherType, ENT_QUOTES, 'UTF-8'); ?></span>
             </div>
             
             <div class="profile-info">
                 <div class="d-flex justify-content-between align-items-center mb-3">
                     <span class="text-muted">Kode Guru</span>
-                    <strong><?php echo $teacher['teacher_code']; ?></strong>
+                    <strong><?php echo htmlspecialchars($teacherCode, ENT_QUOTES, 'UTF-8'); ?></strong>
                 </div>
                 <div class="d-flex justify-content-between align-items-center mb-3">
                     <span class="text-muted">Tipe Guru</span>
-                    <strong><?php echo $teacher['teacher_type']; ?></strong>
+                    <strong><?php echo htmlspecialchars($teacherType, ENT_QUOTES, 'UTF-8'); ?></strong>
                 </div>
                 <div class="d-flex justify-content-between align-items-center mb-3">
                     <span class="text-muted">Total Kelas</span>
@@ -113,7 +140,7 @@ $recentActivities = $db->query("
                 ?>
                 <div class="d-flex flex-wrap gap-2">
                     <?php foreach($classes as $class): ?>
-                    <span class="badge bg-primary p-2"><?php echo $class; ?></span>
+                    <span class="badge bg-primary p-2"><?php echo htmlspecialchars((string) $class, ENT_QUOTES, 'UTF-8'); ?></span>
                     <?php endforeach; ?>
                 </div>
                 <?php else: ?>
@@ -135,10 +162,10 @@ $recentActivities = $db->query("
                             <i class="fas fa-circle text-<?php echo $activity['type'] == 'Absensi' ? 'success' : 'primary'; ?>"></i>
                         </div>
                         <div class="timeline-content">
-                            <h6 class="mb-1"><?php echo $activity['description']; ?></h6>
+                            <h6 class="mb-1"><?php echo htmlspecialchars((string) ($activity['description'] ?? '-'), ENT_QUOTES, 'UTF-8'); ?></h6>
                             <p class="text-muted mb-0 small">
                                 <i class="fas fa-clock me-1"></i>
-                                <?php echo date('d M Y', strtotime($activity['date'])); ?>
+                                <?php echo date('d M Y', strtotime((string) ($activity['date'] ?? 'now'))); ?>
                             </p>
                         </div>
                     </div>
