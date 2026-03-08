@@ -326,7 +326,7 @@ if ($filterClass !== '' && isset($classNameById[$filterClass])) {
                     <th>Terlambat</th>
                     <th>Sakit</th>
                     <th>Izin</th>
-                    <th>Alpa</th>
+                    <th>Tidak Hadir (Alpa)</th>
                     <th>% Kehadiran</th>
                 </tr>
             </thead>
@@ -359,7 +359,7 @@ if ($filterClass !== '' && isset($classNameById[$filterClass])) {
                     <th>Terlambat</th>
                     <th>Sakit</th>
                     <th>Izin</th>
-                    <th>Alpa</th>
+                    <th>Tidak Hadir (Alpa)</th>
                     <th>% Kehadiran</th>
                 </tr>
             </thead>
@@ -434,24 +434,43 @@ if ($filterClass !== '' && isset($classNameById[$filterClass])) {
                     <th>Terlambat</th>
                     <th>Sakit</th>
                     <th>Izin</th>
-                    <th>Alpa</th>
+                    <th>Tidak Hadir (Alpa)</th>
                     <th>% Kehadiran</th>
+                    <th>Status Kehadiran</th>
                 </tr>
             </thead>
             <tbody>
                 <?php foreach ($studentRows as $index => $row): ?>
+                    <?php
+                    $total = (int) ($row['total'] ?? 0);
+                    $hadir = (int) ($row['hadir'] ?? 0);
+                    $alpa = (int) ($row['alpa'] ?? 0);
+                    $rate = (float) ($row['attendance_rate'] ?? 0);
+                    $statusLabel = 'Belum Ada Rekap';
+                    $statusClass = 'secondary';
+                    if ($total > 0) {
+                        if ($alpa > 0 || $rate < 75) {
+                            $statusLabel = 'Perlu Perhatian';
+                            $statusClass = 'danger';
+                        } else {
+                            $statusLabel = 'Baik';
+                            $statusClass = 'success';
+                        }
+                    }
+                    ?>
                     <tr>
                         <td><?php echo $index + 1; ?></td>
                         <td><?php echo htmlspecialchars((string) ($row['student_nisn'] ?? '-'), ENT_QUOTES, 'UTF-8'); ?></td>
                         <td><strong><?php echo htmlspecialchars((string) ($row['student_name'] ?? '-'), ENT_QUOTES, 'UTF-8'); ?></strong></td>
                         <td><?php echo htmlspecialchars((string) ($row['class_name'] ?? '-'), ENT_QUOTES, 'UTF-8'); ?></td>
-                        <td><?php echo (int) ($row['total'] ?? 0); ?></td>
-                        <td><?php echo (int) ($row['hadir'] ?? 0); ?></td>
+                        <td><?php echo $total; ?></td>
+                        <td><?php echo $hadir; ?></td>
                         <td><?php echo (int) ($row['terlambat'] ?? 0); ?></td>
                         <td><?php echo (int) ($row['sakit'] ?? 0); ?></td>
                         <td><?php echo (int) ($row['izin'] ?? 0); ?></td>
-                        <td><?php echo (int) ($row['alpa'] ?? 0); ?></td>
-                        <td><?php echo number_format((float) ($row['attendance_rate'] ?? 0), 1); ?>%</td>
+                        <td><?php echo $alpa; ?></td>
+                        <td><?php echo number_format($rate, 1); ?>%</td>
+                        <td><span class="badge bg-<?php echo $statusClass; ?>"><?php echo $statusLabel; ?></span></td>
                     </tr>
                 <?php endforeach; ?>
             </tbody>

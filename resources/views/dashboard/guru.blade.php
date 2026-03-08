@@ -508,6 +508,438 @@ $guru_core_css_version = @filemtime(public_path('assets/css/guru.css')) ?: time(
         setTimeout(prime, 650);
     }
 
+    const guruExportIdentity = Object.freeze({
+        teacherName: <?php echo json_encode((string) ($teacher['teacher_name'] ?? '-'), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES); ?>,
+        teacherCode: <?php echo json_encode((string) (($teacher['teacher_code'] ?? '') ?: ($teacher['teacher_username'] ?? '-')), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES); ?>,
+        subject: <?php echo json_encode((string) ($teacher['subject'] ?? '-'), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES); ?>,
+        schoolName: 'SMKN 1 Cikarang'
+    });
+
+    function escapeHtml(value) {
+        return String(value ?? '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+
+    function stripHtmlToText(value) {
+        if (value === null || value === undefined) {
+            return '';
+        }
+        return $('<div>').html(String(value)).text().replace(/\s+/g, ' ').trim();
+    }
+
+    function parseNumericValue(value) {
+        const clean = stripHtmlToText(value).replace(/[^0-9,.-]/g, '').replace(',', '.');
+        const parsed = parseFloat(clean);
+        return Number.isFinite(parsed) ? parsed : 0;
+    }
+
+    function parseIsoDate(value) {
+        const raw = String(value || '').trim();
+        const match = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+        if (!match) {
+            return null;
+        }
+        const year = Number(match[1]);
+        const month = Number(match[2]);
+        const day = Number(match[3]);
+        if (!year || month < 1 || month > 12 || day < 1 || day > 31) {
+            return null;
+        }
+        return new Date(Date.UTC(year, month - 1, day));
+    }
+
+    function formatDateId(value) {
+        const date = parseIsoDate(value);
+        if (!date) {
+            return '-';
+        }
+        return new Intl.DateTimeFormat('id-ID', {
+            day: '2-digit',
+            month: 'long',
+            year: 'numeric',
+            timeZone: 'UTC'
+        }).format(date);
+    }
+
+    function formatMonthYearId(value) {
+        const date = parseIsoDate(value);
+        if (!date) {
+            return '-';
+        }
+        return new Intl.DateTimeFormat('id-ID', {
+            month: 'long',
+            year: 'numeric',
+            timeZone: 'UTC'
+        }).format(date);
+    }
+
+    function formatDateTimeWib() {
+        return new Intl.DateTimeFormat('id-ID', {
+            day: '2-digit',
+            month: 'long',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+            hour12: false,
+            timeZone: 'Asia/Jakarta'
+        }).format(new Date()) + ' WIB';
+    }
+
+    function slugifyFilename(value) {
+        return String(value || 'laporan-guru')
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, '-')
+            .replace(/^-+|-+$/g, '');
+    }
+
+    function buildGuruExportFilename(prefix) {
+        const stamp = new Intl.DateTimeFormat('sv-SE', {
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+            hour12: false,
+            timeZone: 'Asia/Jakarta'
+        }).format(new Date()).replace(/[:\s]/g, '-');
+        return `${prefix}_${stamp}`;
+    }
+
+    function getSelectedOptionText(selectElement) {
+        if (!selectElement || selectElement.selectedIndex < 0) {
+            return 'Semua Kelas';
+        }
+        const option = selectElement.options[selectElement.selectedIndex];
+        return option ? String(option.text || '').trim() : 'Semua Kelas';
+    }
+
+    function resolveGuruFilterContext(tableId) {
+        let fromInput = null;
+        let toInput = null;
+        let classSelect = null;
+
+        if (tableId === 'guruStudentMonitorTable') {
+            fromInput = document.getElementById('guruDateFrom');
+            toInput = document.getElementById('guruDateTo');
+            classSelect = document.querySelector('#guruStudentFilterForm select[name="class"]');
+        } else if (tableId === 'guruStudentReportTable') {
+            fromInput = document.getElementById('guruReportStartDate');
+            toInput = document.getElementById('guruReportEndDate');
+            classSelect = document.querySelector('#guruReportFilterForm select[name="class"]');
+        }
+
+        if (!fromInput) {
+            fromInput = document.getElementById('guruDateFrom') || document.getElementById('guruReportStartDate');
+        }
+        if (!toInput) {
+            toInput = document.getElementById('guruDateTo') || document.getElementById('guruReportEndDate');
+        }
+        if (!classSelect) {
+            classSelect = document.querySelector('#guruStudentFilterForm select[name="class"], #guruReportFilterForm select[name="class"]');
+        }
+
+        return {
+            fromDate: fromInput ? String(fromInput.value || '').trim() : '',
+            toDate: toInput ? String(toInput.value || '').trim() : '',
+            classLabel: getSelectedOptionText(classSelect)
+        };
+    }
+
+    function buildGuruPeriodLabels(fromDate, toDate) {
+        const fromLabel = fromDate ? formatDateId(fromDate) : '-';
+        const toLabel = toDate ? formatDateId(toDate) : '-';
+        const monthFrom = fromDate ? formatMonthYearId(fromDate) : '-';
+        const monthTo = toDate ? formatMonthYearId(toDate) : '-';
+
+        let monthYearLabel = '-';
+        if (monthFrom !== '-' || monthTo !== '-') {
+            monthYearLabel = monthFrom === monthTo ? monthFrom : `${monthFrom} - ${monthTo}`;
+        }
+
+        return {
+            periodLabel: `${fromLabel} - ${toLabel}`,
+            monthYearLabel
+        };
+    }
+
+    function extractGuruTableSummary(tableId) {
+        const summary = {
+            rowCount: 0,
+            needAttention: 0,
+            alpaTotal: 0
+        };
+        const tableSelector = `#${tableId}`;
+        if (!$.fn.dataTable || !$.fn.dataTable.isDataTable(tableSelector)) {
+            return summary;
+        }
+
+        const dt = $(tableSelector).DataTable();
+        const rows = dt.rows({ search: 'applied' }).data().toArray();
+        summary.rowCount = rows.length;
+
+        rows.forEach((row) => {
+            if (!Array.isArray(row)) {
+                return;
+            }
+            summary.alpaTotal += Math.max(0, Math.round(parseNumericValue(row[9] ?? '0')));
+            const statusText = stripHtmlToText(row[11] ?? '');
+            if (/perlu perhatian/i.test(statusText)) {
+                summary.needAttention++;
+            }
+        });
+
+        return summary;
+    }
+
+    function getGuruExportContext(tableId, exportTitle) {
+        const filter = resolveGuruFilterContext(tableId);
+        const period = buildGuruPeriodLabels(filter.fromDate, filter.toDate);
+        const summary = extractGuruTableSummary(tableId);
+        const pageTitleElement = document.getElementById('pageTitle');
+        const pageTitle = stripHtmlToText(pageTitleElement ? pageTitleElement.textContent : 'Dashboard Guru');
+
+        return {
+            exportTitle,
+            pageTitle,
+            teacherName: guruExportIdentity.teacherName || '-',
+            teacherCode: guruExportIdentity.teacherCode || '-',
+            subject: guruExportIdentity.subject || '-',
+            schoolName: guruExportIdentity.schoolName,
+            classLabel: filter.classLabel || 'Semua Kelas',
+            periodLabel: period.periodLabel,
+            periodMonthYear: period.monthYearLabel,
+            printedAt: formatDateTimeWib(),
+            rowCount: summary.rowCount,
+            needAttention: summary.needAttention,
+            alpaTotal: summary.alpaTotal
+        };
+    }
+
+    function buildGuruExportMetaLines(context) {
+        return [
+            `Dokumen: ${context.exportTitle}`,
+            `Dicetak oleh: ${context.teacherName} (${context.teacherCode})`,
+            `Mapel: ${context.subject}`,
+            `Halaman: ${context.pageTitle}`,
+            `Filter kelas: ${context.classLabel}`,
+            `Periode data: ${context.periodLabel}`,
+            `Bulan/Tahun data: ${context.periodMonthYear}`,
+            `Waktu cetak: ${context.printedAt}`,
+            `Ringkasan: total baris ${context.rowCount}, perlu perhatian ${context.needAttention}, tidak hadir (alpa) ${context.alpaTotal}`
+        ];
+    }
+
+    function buildGuruPrintHeaderHtml(context) {
+        const metaRows = [
+            ['Dokumen', context.exportTitle],
+            ['Dicetak Oleh', `${context.teacherName} (${context.teacherCode})`],
+            ['Mata Pelajaran', context.subject],
+            ['Halaman', context.pageTitle],
+            ['Filter Kelas', context.classLabel],
+            ['Periode Data', context.periodLabel],
+            ['Bulan/Tahun Data', context.periodMonthYear],
+            ['Waktu Cetak', context.printedAt],
+            ['Ringkasan', `Total baris ${context.rowCount} | Perlu perhatian ${context.needAttention} | Tidak hadir (alpa) ${context.alpaTotal}`]
+        ];
+
+        const rowsHtml = metaRows.map((row) => `
+            <tr>
+                <td>${escapeHtml(row[0])}</td>
+                <td>${escapeHtml(row[1])}</td>
+            </tr>
+        `).join('');
+
+        return `
+            <div class="guru-print-header">
+                <h2>${escapeHtml(context.exportTitle)}</h2>
+                <p class="guru-print-school">${escapeHtml(context.schoolName)}</p>
+                <table class="guru-print-meta">${rowsHtml}</table>
+            </div>
+        `;
+    }
+
+    function buildGuruExportOptions() {
+        return {
+            columns: ':visible',
+            format: {
+                header: function(data) {
+                    return stripHtmlToText(data);
+                },
+                body: function(data) {
+                    return stripHtmlToText(data);
+                },
+                footer: function(data) {
+                    return stripHtmlToText(data);
+                }
+            }
+        };
+    }
+
+    function createGuruTableExportButtons(tableId, exportTitle) {
+        const filenamePrefix = slugifyFilename(exportTitle || 'laporan-guru');
+        const exportOptions = buildGuruExportOptions();
+
+        return [
+            {
+                extend: 'excelHtml5',
+                title: exportTitle,
+                filename: function() {
+                    return buildGuruExportFilename(filenamePrefix);
+                },
+                messageTop: function() {
+                    const context = getGuruExportContext(tableId, exportTitle);
+                    return buildGuruExportMetaLines(context).join('\n');
+                },
+                autoFilter: true,
+                exportOptions,
+                customize: function(xlsx) {
+                    const sheet = xlsx && xlsx.xl && xlsx.xl.worksheets ? xlsx.xl.worksheets['sheet1.xml'] : null;
+                    if (!sheet) {
+                        return;
+                    }
+                    const widthByTable = {
+                        guruStudentMonitorTable: [6, 13, 28, 16, 12, 10, 13, 10, 10, 18, 14, 22],
+                        guruStudentReportTable: [6, 13, 28, 16, 12, 10, 13, 10, 10, 18, 14, 22]
+                    };
+                    const widths = widthByTable[tableId] || [];
+                    $('col', sheet).each(function(index) {
+                        const width = widths[index];
+                        if (width) {
+                            $(this).attr('width', String(width));
+                            $(this).attr('customWidth', '1');
+                        }
+                    });
+                }
+            },
+            {
+                extend: 'pdfHtml5',
+                title: exportTitle,
+                filename: function() {
+                    return buildGuruExportFilename(filenamePrefix);
+                },
+                orientation: 'landscape',
+                pageSize: 'A4',
+                exportOptions,
+                customize: function(doc) {
+                    const context = getGuruExportContext(tableId, exportTitle);
+                    const tableNode = Array.isArray(doc.content) ? doc.content.find((node) => node && node.table) : null;
+                    if (!tableNode) {
+                        return;
+                    }
+
+                    let columnCount = 0;
+                    if (tableNode.table && Array.isArray(tableNode.table.body) && Array.isArray(tableNode.table.body[0])) {
+                        columnCount = tableNode.table.body[0].length;
+                    }
+                    if (columnCount === 12) {
+                        tableNode.table.widths = [20, 52, 102, 64, 46, 36, 46, 36, 36, 56, 54, 74];
+                    } else if (columnCount === 11) {
+                        tableNode.table.widths = [22, 54, 110, 66, 48, 40, 46, 40, 40, 62, 58];
+                    }
+                    tableNode.layout = {
+                        hLineWidth: function() { return 0.7; },
+                        vLineWidth: function() { return 0.7; },
+                        hLineColor: function() { return '#475569'; },
+                        vLineColor: function() { return '#475569'; },
+                        paddingLeft: function() { return 4; },
+                        paddingRight: function() { return 4; },
+                        paddingTop: function() { return 3; },
+                        paddingBottom: function() { return 3; }
+                    };
+
+                    doc.pageMargins = [20, 20, 20, 24];
+                    doc.defaultStyle = doc.defaultStyle || {};
+                    doc.defaultStyle.fontSize = 8;
+                    doc.defaultStyle.color = '#0f172a';
+                    doc.styles = doc.styles || {};
+                    doc.styles.title = {
+                        fontSize: 13,
+                        bold: true,
+                        color: '#0f172a',
+                        alignment: 'center',
+                        margin: [0, 0, 0, 8]
+                    };
+                    doc.styles.tableHeader = {
+                        bold: true,
+                        fontSize: 9,
+                        color: '#ffffff',
+                        fillColor: '#1f3b55',
+                        alignment: 'center'
+                    };
+
+                    const metaTable = {
+                        margin: [0, 0, 0, 10],
+                        table: {
+                            widths: [130, '*'],
+                            body: buildGuruExportMetaLines(context).map((line) => {
+                                const splitIndex = line.indexOf(':');
+                                const label = splitIndex >= 0 ? line.slice(0, splitIndex).trim() : line;
+                                const value = splitIndex >= 0 ? line.slice(splitIndex + 1).trim() : '-';
+                                return [
+                                    { text: label, bold: true, fillColor: '#eef2f7' },
+                                    { text: value }
+                                ];
+                            })
+                        },
+                        layout: {
+                            hLineWidth: function() { return 0.5; },
+                            vLineWidth: function() { return 0.5; },
+                            hLineColor: function() { return '#cbd5e1'; },
+                            vLineColor: function() { return '#cbd5e1'; },
+                            paddingLeft: function() { return 5; },
+                            paddingRight: function() { return 5; },
+                            paddingTop: function() { return 3; },
+                            paddingBottom: function() { return 3; }
+                        }
+                    };
+
+                    doc.content = [
+                        { text: context.exportTitle, style: 'title' },
+                        metaTable,
+                        tableNode
+                    ];
+                }
+            },
+            {
+                extend: 'print',
+                title: exportTitle,
+                exportOptions,
+                customize: function(win) {
+                    const context = getGuruExportContext(tableId, exportTitle);
+                    const style = win.document.createElement('style');
+                    style.type = 'text/css';
+                    style.textContent = `
+                        @page { size: A4 landscape; margin: 10mm; }
+                        body { font-family: "Segoe UI", Arial, sans-serif; font-size: 11px; color: #0f172a; }
+                        .guru-print-header { margin-bottom: 12px; }
+                        .guru-print-header h2 { margin: 0 0 4px; font-size: 18px; text-align: center; }
+                        .guru-print-school { margin: 0 0 10px; text-align: center; color: #334155; font-size: 12px; }
+                        .guru-print-meta { width: 100%; border-collapse: collapse; margin-bottom: 10px; }
+                        .guru-print-meta td { border: 1px solid #94a3b8; padding: 5px 7px; vertical-align: top; }
+                        .guru-print-meta td:first-child { width: 190px; font-weight: 700; background: #eef2f7; }
+                        table { width: 100% !important; border-collapse: collapse !important; table-layout: fixed; }
+                        table thead th, table tbody td { border: 1px solid #475569 !important; padding: 6px 6px !important; vertical-align: top !important; word-break: break-word; }
+                        table thead th { background: #1f3b55 !important; color: #ffffff !important; text-align: center !important; }
+                        table tbody tr:nth-child(even) td { background: #f8fafc !important; }
+                    `;
+                    win.document.head.appendChild(style);
+
+                    const currentTitle = win.document.body.querySelector('h1');
+                    if (currentTitle) {
+                        currentTitle.remove();
+                    }
+                    win.document.body.insertAdjacentHTML('afterbegin', buildGuruPrintHeaderHtml(context));
+                }
+            }
+        ];
+    }
+
     function triggerGuruTableExport(tableId, action) {
         if (!tableId || !action || !$.fn.dataTable) {
             return false;
@@ -579,29 +1011,7 @@ $(document).ready(function() {
                     "scrollX": false,
                     "scrollCollapse": false,
                     "dom": "<'dt-export-hidden'B>frtip",
-                    "buttons": [
-                        {
-                            extend: 'excel',
-                            title: exportTitle,
-                            exportOptions: {
-                                columns: ':visible'
-                            }
-                        },
-                        {
-                            extend: 'pdf',
-                            title: exportTitle,
-                            exportOptions: {
-                                columns: ':visible'
-                            }
-                        },
-                        {
-                            extend: 'print',
-                            title: exportTitle,
-                            exportOptions: {
-                                columns: ':visible'
-                            }
-                        }
-                    ]
+                    "buttons": createGuruTableExportButtons(tableId, exportTitle)
                 });
             });
         }
