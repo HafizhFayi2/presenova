@@ -1,0 +1,69 @@
+﻿Konsep Status Kehadiran (Guru)
+
+Tujuan
+- Menjelaskan aturan label status kehadiran siswa pada dashboard guru.
+- Memberi contoh perhitungan sederhana agar mudah dipahami.
+
+Istilah Dasar
+- total_sesi / total: jumlah sesi pembelajaran yang terjadwal untuk siswa.
+- hadir: jumlah sesi siswa hadir.
+- terlambat, sakit, izin, alpa: jumlah sesi dengan status masing-masing.
+- rate (persentase kehadiran): (hadir / total) x 100.
+
+Kategori Status
+1. Belum Ada Rekap
+   Kondisi: total = 0
+   Artinya: belum ada data kehadiran yang bisa dihitung.
+
+2. Perlu Perhatian
+   Kondisi: total > 0 DAN (alpa > 0 ATAU rate < 75)
+   Artinya: ada ketidakhadiran (alpa) atau tingkat hadir di bawah 75%.
+
+3. Baik
+   Kondisi: total > 0 DAN alpa = 0 DAN rate >= 75
+   Artinya: kehadiran dinilai aman.
+
+Langkah Hitung (Sederhana)
+1) Hitung total sesi.
+2) Hitung hadir, alpa, dan status lain.
+3) Hitung rate = (hadir / total) x 100.
+4) Tentukan status sesuai aturan di atas.
+
+Contoh Perhitungan
+Contoh A
+- total = 0
+- hadir = 0
+- alpa = 0
+=> Status: Belum Ada Rekap
+
+Contoh B
+- total = 10
+- hadir = 8
+- alpa = 0
+- rate = (8/10) x 100 = 80%
+=> Status: Baik (rate >= 75, alpa = 0)
+
+Contoh C
+- total = 10
+- hadir = 7
+- alpa = 0
+- rate = (7/10) x 100 = 70%
+=> Status: Perlu Perhatian (rate < 75)
+
+Contoh D
+- total = 10
+- hadir = 9
+- alpa = 1
+- rate = (9/10) x 100 = 90%
+=> Status: Perlu Perhatian (alpa > 0)
+
+Contoh E (Kasus yang ditanyakan)
+- hadir = 30
+- alpa = 5
+- total = 35
+- rate = (30/35) x 100 = 85.7%
+=> Status: Perlu Perhatian (alpa > 0)
+
+Catatan Ringkas
+- Kunci utama: alpa > 0 langsung memicu Perlu Perhatian, walaupun rate tinggi.
+- Jika ingin aturan berbeda (misalnya alpa masih ditoleransi), aturan di atas perlu diubah.
