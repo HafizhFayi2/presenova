@@ -335,9 +335,9 @@ foreach ($studentRows as $row) {
                     <th>Terlambat</th>
                     <th>Sakit</th>
                     <th>Izin</th>
-                    <th>Alpa</th>
+                    <th>Tidak Hadir (Alpa)</th>
                     <th>% Kehadiran</th>
-                    <th>Status</th>
+                    <th>Status Kehadiran</th>
                 </tr>
             </thead>
             <tbody>

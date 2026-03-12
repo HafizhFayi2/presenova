@@ -90,14 +90,26 @@ def scan_references(reference: Path, max_refs: int) -> List[Path]:
 
 
 def compute_similarity(distance: float, threshold: float) -> float:
+    """Convert raw distance to 0-100 similarity using smooth exponential decay.
+
+    distance=0      → 100%
+    distance=thr    → ~90%  (the configured pass boundary)
+    distance=2*thr  → ~55%
+    distance=4*thr  → ~10%
+    """
+    import math
+
     if threshold <= 0:
         threshold = 1.0
-    if distance <= threshold:
-        margin = threshold - distance
-        score = 90.0 + min(10.0, (margin / threshold) * 10.0)
-    else:
-        over = distance - threshold
-        score = 90.0 - min(90.0, (over / threshold) * 90.0)
+
+    if distance <= 0:
+        return 100.0
+
+    # Exponential decay: score = 100 * exp(-k * distance)
+    # Choose k so that score ≈ 90 at distance == threshold.
+    # 90 = 100 * exp(-k * threshold)  →  k = -ln(0.9) / threshold ≈ 0.10536 / threshold
+    k = 0.10536 / threshold
+    score = 100.0 * math.exp(-k * distance)
     return max(0.0, min(100.0, score))
 
 
@@ -146,8 +158,10 @@ def deepface_verify(deepface, kwargs: Dict) -> Dict:
     try:
         return deepface.verify(**kwargs)
     except TypeError:
+        # Older DeepFace versions may not accept 'align' or 'silent' params.
         fallback_kwargs = dict(kwargs)
         fallback_kwargs.pop("align", None)
+        fallback_kwargs.pop("silent", None)
         return deepface.verify(**fallback_kwargs)
 
 
@@ -288,6 +302,7 @@ def main() -> None:
                     "distance_metric": args.metric,
                     "enforce_detection": enforce_detection,
                     "align": True,
+                    "silent": True,
                 }
                 try:
                     result = deepface_verify(DeepFace, kwargs)
@@ -306,7 +321,14 @@ def main() -> None:
                 distance = float(result.get("distance", 0.0))
                 verified = bool(result.get("verified", False))
                 deepface_threshold = float(result.get("threshold", 0.0))
-                similarity = compute_similarity(distance=distance, threshold=deepface_threshold)
+
+                # Use DeepFace native confidence (0-100) when available (v0.0.99+),
+                # otherwise fall back to our compute_similarity formula.
+                native_confidence = result.get("confidence")
+                if native_confidence is not None:
+                    similarity = float(native_confidence)
+                else:
+                    similarity = compute_similarity(distance=distance, threshold=deepface_threshold)
 
                 item = {
                     "stage": stage,
@@ -363,6 +385,24 @@ def main() -> None:
                     "model": primary_model,
                     "detector": primary_detector,
                     "runtime_limited": True,
+                },
+            )
+        # Detect whether failures are all face-detection related.
+        face_not_found_keywords = ("face could not be detected", "no face", "cannot detect")
+        all_face_errors = bool(attempts) and all(
+            any(kw in str(a.get("error", "")).lower() for kw in face_not_found_keywords)
+            for a in attempts
+            if "error" in a
+        )
+        if all_face_errors:
+            fail(
+                "Wajah tidak terdeteksi pada foto selfie. Pastikan wajah terlihat jelas, "
+                "pencahayaan cukup, dan tidak ada halangan.",
+                details={
+                    "attempts": attempts[-6:],
+                    "model": primary_model,
+                    "detector": primary_detector,
+                    "cause": "face_not_detected",
                 },
             )
         fail(

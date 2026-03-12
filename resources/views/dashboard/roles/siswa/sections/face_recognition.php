@@ -465,7 +465,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const descriptorDistanceThreshold = parseFloat(page.dataset.descriptorThreshold || '0.55');
     const descriptorStrongThreshold = Math.max(0.38, descriptorDistanceThreshold - 0.08);
     const descriptorMaxDistance = 0.9;
-    const descriptorHardFailDistance = Math.max(0.85, descriptorMaxDistance - 0.02);
+    const descriptorHardFailDistance = Math.max(1.1, descriptorMaxDistance + 0.1);
     const faceLabel = page.dataset.faceLabel || '';
     const modelBase = '../face/faces_logics/models';
     const faceModelFiles = [
@@ -2938,16 +2938,30 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     async function requestServerMatch(imageData) {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 75000);
+
         const payload = new URLSearchParams();
         payload.append('captured_image', imageData);
 
-        const response = await fetch('../api/face_matching.php', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/x-www-form-urlencoded'
-            },
-            body: payload
-        });
+        let response;
+        try {
+            response = await fetch('../api/face_matching.php', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded'
+                },
+                body: payload,
+                signal: controller.signal
+            });
+        } catch (err) {
+            clearTimeout(timeoutId);
+            if (err && err.name === 'AbortError') {
+                throw new Error('Verifikasi wajah timeout. Server terlalu lama memproses. Coba ulangi.');
+            }
+            throw new Error('Gagal menghubungi server verifikasi. Periksa koneksi internet.');
+        }
+        clearTimeout(timeoutId);
 
         if (!response.ok) {
             throw new Error('Gagal memproses verifikasi di server.');

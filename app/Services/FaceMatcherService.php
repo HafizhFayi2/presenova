@@ -4,7 +4,7 @@ namespace App\Services;
 
 class FaceMatcherService
 {
-    private $threshold = 70; // Minimum similarity percentage
+    private $threshold = 89; // Minimum similarity percentage (must match .env default)
     private $tempDir = '';
     private $facesDir = '';
     private $attendanceDir = '';
@@ -524,7 +524,15 @@ class FaceMatcherService
 
             if ((microtime(true) - $started) >= $timeoutSeconds) {
                 $timedOut = true;
-                @proc_terminate($process);
+                // On Windows, proc_terminate doesn't kill child processes.
+                // Use taskkill /T /F to kill the entire process tree.
+                $procStatus = proc_get_status($process);
+                $pid = $procStatus['pid'] ?? 0;
+                if ($pid > 0 && PHP_OS_FAMILY === 'Windows') {
+                    @exec("taskkill /T /F /PID {$pid} 2>NUL");
+                } else {
+                    @proc_terminate($process, 9); // SIGKILL on Linux
+                }
                 break;
             }
 
