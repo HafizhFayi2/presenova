@@ -453,7 +453,32 @@ if (!function_exists('face_reference_public_url')) {
             return '';
         }
 
-        $url = (string) url('uploads/faces/' . ltrim($relativePath, '/'));
+        // Build base URL robustly for both XAMPP subdirectory and server root setups.
+        $basePath = '';
+        try {
+            // getBaseUrl() returns the prefix before the front controller script name.
+            $raw = rtrim((string) request()->getBaseUrl(), '/');
+            // Strip /public suffix since root .htaccess transparently rewrites to public/.
+            if (str_ends_with(strtolower($raw), '/public')) {
+                $raw = substr($raw, 0, -7);
+            }
+            // Strip /index.php or similar script name if present.
+            if (preg_match('~/[^/]+\.php$~i', $raw)) {
+                $raw = preg_replace('~/[^/]+\.php$~i', '', $raw);
+            }
+            $basePath = rtrim((string) $raw, '/');
+        } catch (\Throwable) {
+            $basePath = '';
+        }
+        if ($basePath === '') {
+            $configUrl = (string) config('app.url', '');
+            $configPath = trim((string) parse_url($configUrl, PHP_URL_PATH), '/');
+            if ($configPath !== '') {
+                $basePath = '/' . $configPath;
+            }
+        }
+
+        $url = $basePath . '/uploads/faces/' . ltrim($relativePath, '/');
         if ($appendVersion) {
             $version = @filemtime($absolutePath);
             if ($version) {

@@ -488,6 +488,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const locationStateKey = `face_location_state_${studentKey}`;
     const lastDistanceMaxAgeMs = 10 * 60 * 1000;
 
+    const isMobileFr = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
     const video = document.getElementById('faceVideo');
     const canvas = document.getElementById('faceCanvas');
     const previewImg = document.getElementById('facePreview');
@@ -586,7 +587,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const locationSampleWindow = 3;
     const stableWithinThreshold = 1;
     const stableOutsideThreshold = 2;
-    const memoryMonitorIntervalMs = 1200;
+    const memoryMonitorIntervalMs = isMobileFr ? 3000 : 1200;
     const memoryBudgetBytes = 4 * 1024 * 1024 * 1024; // Budget runtime tetap 4GB
     const memoryTurboPercent = 70;
     const memoryTurboStartBytes = 10 * 1024 * 1024; // Mode maksimal dipicu sejak 0-10MB
@@ -697,7 +698,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
 
         return new faceapi.TinyFaceDetectorOptions({
-            inputSize: 320,
+            inputSize: isMobileFr ? 224 : 320,
             scoreThreshold: 0.5
         });
     }
@@ -1790,8 +1791,19 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     function initLocationLoader() {
-        if (loaderInitialized || !loadingWrap || !window.THREE) return;
+        if (loaderInitialized || !loadingWrap) return;
         loaderInitialized = true;
+
+        /* On mobile, skip heavy Three.js WebGL and use a lightweight CSS spinner */
+        if (isMobileFr || !window.THREE) {
+            loadingWrap.innerHTML = '<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;gap:18px;">' +
+                '<div style="width:56px;height:56px;border:4px solid rgba(148,163,184,0.2);border-top-color:var(--primary,#3b82f6);border-radius:50%;animation:_frSpin 0.8s linear infinite;"></div>' +
+                '<span style="font-size:0.85rem;color:var(--text-muted,#94a3b8);">Memverifikasi lokasi...</span>' +
+                '</div>' +
+                '<style>@keyframes _frSpin{to{transform:rotate(360deg)}}</style>';
+            return;
+        }
+
         let isLight = document.documentElement.getAttribute('data-theme') === 'light';
         const wrapRect = loadingWrap.getBoundingClientRect();
         const canvassize = Math.max(320, Math.min(460, Math.floor(wrapRect.width || 320)));
@@ -2147,8 +2159,8 @@ document.addEventListener('DOMContentLoaded', function() {
             const registration = await navigator.serviceWorker.ready;
             registration.showNotification(title, {
                 body,
-                icon: @json(asset('assets/images/logo-192.png')),
-                badge: @json(asset('assets/images/logo-192.png')),
+                icon: <?php echo json_encode(asset('assets/images/logo-192.png')); ?>,
+                badge: <?php echo json_encode(asset('assets/images/logo-192.png')); ?>,
                 data: { url: url || '?page=jadwal' }
             });
         } catch (error) {
@@ -2711,12 +2723,23 @@ document.addEventListener('DOMContentLoaded', function() {
 
         modelLoadPromise = (async () => {
             try {
-                try {
-                    await faceapi.nets.ssdMobilenetv1.loadFromUri(modelBase);
-                    detectorType = 'ssd';
-                } catch (error) {
-                    detectorType = 'tiny';
-                    await faceapi.nets.tinyFaceDetector.loadFromUri(modelBase);
+                if (isMobileFr) {
+                    /* Mobile: load lighter TinyFaceDetector first (~200KB vs ~6MB SSD) */
+                    try {
+                        await faceapi.nets.tinyFaceDetector.loadFromUri(modelBase);
+                        detectorType = 'tiny';
+                    } catch (error) {
+                        await faceapi.nets.ssdMobilenetv1.loadFromUri(modelBase);
+                        detectorType = 'ssd';
+                    }
+                } else {
+                    try {
+                        await faceapi.nets.ssdMobilenetv1.loadFromUri(modelBase);
+                        detectorType = 'ssd';
+                    } catch (error) {
+                        detectorType = 'tiny';
+                        await faceapi.nets.tinyFaceDetector.loadFromUri(modelBase);
+                    }
                 }
 
                 await Promise.all([
@@ -2795,7 +2818,9 @@ document.addEventListener('DOMContentLoaded', function() {
             stopCamera();
         }
 
-        const baseVideo = { width: { ideal: 640 }, height: { ideal: 480 } };
+        const baseVideo = isMobileFr
+            ? { width: { ideal: 480 }, height: { ideal: 360 } }
+            : { width: { ideal: 640 }, height: { ideal: 480 } };
         const exactConstraints = deviceId
             ? { video: { ...baseVideo, deviceId: { exact: deviceId } }, audio: false }
             : { video: { ...baseVideo, facingMode: 'user' }, audio: false };

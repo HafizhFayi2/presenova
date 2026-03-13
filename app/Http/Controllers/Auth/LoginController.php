@@ -195,7 +195,7 @@ class LoginController extends Controller
                 'error' => $error,
                 'success' => $success,
                 'assetBaseUrl' => rtrim($this->resolveAppRootUrl(), '/') . '/',
-                'getStartedUrl' => $this->appPath('getstarted/index.php'),
+                'getStartedUrl' => $this->appPath(''),
                 'forgotPasswordUrl' => $this->appPath('forgot-password.php'),
                 'registerCallUrl' => $this->appPath('call.php'),
             ])
@@ -279,14 +279,14 @@ class LoginController extends Controller
     {
         $request = request();
 
-        $basePath = $this->normalizePathPrefix((string) $request->getBasePath());
-        if ($basePath !== '') {
-            return $basePath;
-        }
-
         $scriptPrefix = $this->prefixFromScriptName((string) $request->server('SCRIPT_NAME', ''));
         if ($scriptPrefix !== '') {
             return $scriptPrefix;
+        }
+
+        $basePath = $this->normalizePathPrefix((string) $request->getBasePath());
+        if ($basePath !== '') {
+            return $basePath;
         }
 
         return '';
