@@ -1871,3 +1871,61 @@ body.attendance-modal-open .modal-backdrop {
         grid-template-columns: 1fr;
     }
 }
+
+/* ==================== MOBILE PERFORMANCE ==================== */
+@media (max-width: 768px) {
+    /* Reduce heavy backdrop-filter on mobile — #1 GPU bottleneck */
+    .location-lock-layer {
+        backdrop-filter: blur(6px);
+        -webkit-backdrop-filter: blur(6px);
+    }
+
+    .location-lock-layer.loading {
+        backdrop-filter: blur(4px);
+        -webkit-backdrop-filter: blur(4px);
+    }
+
+    .location-lock-card {
+        backdrop-filter: none;
+        -webkit-backdrop-filter: none;
+    }
+
+    .lock-metrics,
+    .lock-btn {
+        backdrop-filter: none;
+        -webkit-backdrop-filter: none;
+    }
+
+    .attendance-modal {
+        backdrop-filter: none;
+        -webkit-backdrop-filter: none;
+    }
+
+    .attendance-photo-overlay {
+        backdrop-filter: none;
+        -webkit-backdrop-filter: none;
+    }
+
+    /* Promote key layers to GPU without blur recompute */
+    .camera-frame,
+    .face-guide {
+        will-change: transform;
+        transform: translateZ(0);
+    }
+
+    /* Reduce pulse animation intensity on mobile */
+    .pulse-ring {
+        animation-duration: 3s;
+    }
+
+    /* Simplify loading card */
+    .loading-card {
+        backdrop-filter: none;
+        -webkit-backdrop-filter: none;
+    }
+
+    /* Reduce box-shadow complexity */
+    .face-card {
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    }
+}

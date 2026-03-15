@@ -1000,30 +1000,6 @@
             margin-bottom: 1.5rem;
         }
 
-        .social-links {
-            display: flex;
-            gap: 1rem;
-        }
-
-        .social-link {
-            width: 44px;
-            height: 44px;
-            background: rgba(0, 255, 136, 0.1);
-            border: 1px solid var(--neon-green);
-            border-radius: 10px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: var(--neon-green);
-            text-decoration: none;
-            transition: all 0.3s ease;
-        }
-
-        .social-link:hover {
-            background: var(--gradient-neon);
-            color: var(--dark-bg);
-            transform: translateY(-5px);
-        }
 
         .footer-title {
             font-size: 1.3rem;
@@ -1543,12 +1519,7 @@
                             Platform absensi digital dengan teknologi AI dan GPS untuk manajemen kehadiran 
                             siswa yang modern, efisien, dan akurat.
                         </p>
-                        <div class="social-links">
-                            <a href="#" class="social-link"><i class="fab fa-facebook-f"></i></a>
-                            <a href="#" class="social-link"><i class="fab fa-instagram"></i></a>
-                            <a href="#" class="social-link"><i class="fab fa-twitter"></i></a>
-                            <a href="#" class="social-link"><i class="fab fa-youtube"></i></a>
-                        </div>
+
                     </div>
                 </div>
                 
