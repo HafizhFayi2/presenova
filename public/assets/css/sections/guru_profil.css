@@ -34,3 +34,23 @@
 .timeline-item:last-child .timeline-content {
     border-bottom: none;
 }
+
+/* Keep profile text readable in dark mode */
+[data-theme="dark"] .guru-page-profil .text-muted {
+    color: #b8c7d8 !important;
+}
+
+[data-theme="dark"] .guru-page-profil .profile-info strong,
+[data-theme="dark"] .guru-page-profil .profile-info span,
+[data-theme="dark"] .guru-page-profil .dashboard-card h4,
+[data-theme="dark"] .guru-page-profil .dashboard-card h5,
+[data-theme="dark"] .guru-page-profil .dashboard-card h6,
+[data-theme="dark"] .guru-page-profil .data-table-container h5,
+[data-theme="dark"] .guru-page-profil .data-table-container h6,
+[data-theme="dark"] .guru-page-profil .timeline-content h6 {
+    color: #e2e8f0;
+}
+
+[data-theme="dark"] .guru-page-profil .timeline-content {
+    border-bottom-color: rgba(148, 163, 184, 0.26);
+}
