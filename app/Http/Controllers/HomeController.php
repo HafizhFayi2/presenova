@@ -61,6 +61,7 @@ class HomeController extends Controller
 
         $statusText = (string) (SymfonyResponse::$statusTexts[$statusCode] ?? 'Error');
         $message = $this->resolveErrorMessage($statusCode);
+        $urlContext = $this->resolveUrlContext($request);
 
         $studentId = (int) session('student_id', 0);
         if ($studentId > 0 && function_exists('pushNotifyStudent')) {
@@ -77,6 +78,7 @@ class HomeController extends Controller
             'errorCode' => $statusCode,
             'errorTitle' => $statusText,
             'errorMessage' => $message,
+            'loginUrl' => $urlContext['loginUrl'],
         ], $statusCode)
             ->header('X-Presenova-Error-Page', '1')
             ->header('X-Presenova-Error-Code', (string) $statusCode);
