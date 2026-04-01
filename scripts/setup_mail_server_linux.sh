@@ -8,7 +8,7 @@ Usage:
 
 Options:
   --domain <domain>            Domain email (default: presenova.my.id)
-  --admin-email <email>        Akun admin email (default: admin@presenova.my.id)
+  --admin-email <email>        Akun admin email (default: adm@presenova.my.id)
   --mail-password <password>   Password mailbox admin (default: auto-generate)
   --mail-host <host>           Host mail server (default: mail.<domain>)
   --letsencrypt-email <email>  Email untuk registrasi Let's Encrypt (default: admin-email)
@@ -58,7 +58,7 @@ ensure_postfix_master_service() {
 }
 
 DOMAIN="presenova.my.id"
-ADMIN_EMAIL="admin@presenova.my.id"
+ADMIN_EMAIL="adm@presenova.my.id"
 MAIL_PASSWORD=""
 MAIL_HOST=""
 LETSENCRYPT_EMAIL=""

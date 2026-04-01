@@ -62,6 +62,37 @@ if (isset($db)) {
     }
 }
 
+$attendanceModeConfig = [
+    'hadir' => ['id' => 1, 'label' => 'Hadir'],
+    'sakit' => ['id' => 2, 'label' => 'Sakit'],
+    'izin' => ['id' => 3, 'label' => 'Izin'],
+];
+if (isset($db)) {
+    $statusStmt = $db->query("SELECT present_id, present_name FROM present_status");
+    $statusRows = $statusStmt ? $statusStmt->fetchAll() : [];
+    foreach ((array) $statusRows as $statusRow) {
+        if (!is_array($statusRow)) {
+            continue;
+        }
+        $statusId = (int) ($statusRow['present_id'] ?? 0);
+        $statusName = strtolower(trim((string) ($statusRow['present_name'] ?? '')));
+        if ($statusId <= 0 || $statusName === '') {
+            continue;
+        }
+        if ($statusName === 'tidak hadir') {
+            $statusName = 'alpa';
+        }
+        if (!isset($attendanceModeConfig[$statusName])) {
+            continue;
+        }
+        $attendanceModeConfig[$statusName]['id'] = $statusId;
+        $label = trim((string) ($statusRow['present_name'] ?? ''));
+        if ($label !== '') {
+            $attendanceModeConfig[$statusName]['label'] = $label;
+        }
+    }
+}
+
 // GPS validation is required before camera activation
 ?>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
@@ -84,7 +115,13 @@ if (isset($db)) {
      data-schedule-subject="<?php echo $scheduleInfo ? htmlspecialchars($scheduleInfo['subject'] ?? '', ENT_QUOTES) : ''; ?>"
      data-schedule-jp="<?php echo $scheduleInfo ? htmlspecialchars($scheduleInfo['shift_name'] ?? '', ENT_QUOTES) : ''; ?>"
      data-schedule-teacher="<?php echo $scheduleInfo ? htmlspecialchars($scheduleInfo['teacher_name'] ?? '', ENT_QUOTES) : ''; ?>"
-     data-schedule-student="<?php echo $scheduleInfo ? htmlspecialchars($scheduleInfo['student_name'] ?? '', ENT_QUOTES) : ''; ?>">
+     data-schedule-student="<?php echo $scheduleInfo ? htmlspecialchars($scheduleInfo['student_name'] ?? '', ENT_QUOTES) : ''; ?>"
+     data-present-hadir-id="<?php echo (int) ($attendanceModeConfig['hadir']['id'] ?? 1); ?>"
+     data-present-sakit-id="<?php echo (int) ($attendanceModeConfig['sakit']['id'] ?? 2); ?>"
+     data-present-izin-id="<?php echo (int) ($attendanceModeConfig['izin']['id'] ?? 3); ?>"
+     data-present-hadir-label="<?php echo htmlspecialchars((string) ($attendanceModeConfig['hadir']['label'] ?? 'Hadir'), ENT_QUOTES); ?>"
+     data-present-sakit-label="<?php echo htmlspecialchars((string) ($attendanceModeConfig['sakit']['label'] ?? 'Sakit'), ENT_QUOTES); ?>"
+     data-present-izin-label="<?php echo htmlspecialchars((string) ($attendanceModeConfig['izin']['label'] ?? 'Izin'), ENT_QUOTES); ?>">
     <div class="face-hero">
         <div>
             <div class="face-pill">
@@ -345,7 +382,10 @@ if (isset($db)) {
                                     <div class="overlay-title">
                                         <i class="fas fa-location-dot"></i> Geolocation
                                     </div>
-                                    <span class="match-badge ready" id="attendanceGeoBadge">Tervalidasi</span>
+                                    <div class="overlay-badges">
+                                        <span class="match-badge ready" id="attendanceGeoBadge">Tervalidasi</span>
+                                        <span class="match-badge success" id="attendancePresenceBadge"><?php echo htmlspecialchars((string) ($attendanceModeConfig['hadir']['label'] ?? 'Hadir'), ENT_QUOTES); ?></span>
+                                    </div>
                                 </div>
                                 <div class="overlay-body">
                                     <div class="overlay-geo">
@@ -452,7 +492,6 @@ if (isset($db)) {
 </div>
 
 <script src="../face/faces_logics/face-api.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r134/three.min.js"></script>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
 <script>
@@ -543,11 +582,14 @@ document.addEventListener('DOMContentLoaded', function() {
     const attendanceGeoTime = document.getElementById('attendanceGeoTime');
     const attendanceGeoMap = document.getElementById('attendanceGeoMap');
     const attendanceGeoBadge = document.getElementById('attendanceGeoBadge');
+    const attendancePresenceBadge = document.getElementById('attendancePresenceBadge');
     const attendanceMatchBadge = document.getElementById('attendanceMatchBadge');
     const attendanceSubmitBtn = document.getElementById('attendanceSubmitBtn');
     const attendanceModalMessage = document.getElementById('attendanceModalMessage');
     const attendanceCancelBtn = document.getElementById('attendanceCancelBtn');
     const attendanceCloseBtn = attendanceModalEl ? attendanceModalEl.querySelector('.btn-close') : null;
+    const attendancePhotoWrap = attendanceModalEl ? attendanceModalEl.querySelector('.attendance-photo-wrap') : null;
+    const attendancePhotoOverlay = attendanceModalEl ? attendanceModalEl.querySelector('.attendance-photo-overlay') : null;
     const attendanceModeText = document.getElementById('attendanceModeText');
     const attendanceModePill = document.getElementById('attendanceModePill');
     const resetModeBtn = document.getElementById('resetModeBtn');
@@ -574,6 +616,16 @@ document.addEventListener('DOMContentLoaded', function() {
     const scheduleJp = (page.dataset.scheduleJp || '').trim();
     const scheduleTeacher = (page.dataset.scheduleTeacher || '').trim();
     const scheduleStudent = (page.dataset.scheduleStudent || '').trim();
+    const presentIdByMode = {
+        hadir: Math.max(1, parseInt(page.dataset.presentHadirId || '1', 10) || 1),
+        sakit: Math.max(1, parseInt(page.dataset.presentSakitId || '2', 10) || 2),
+        izin: Math.max(1, parseInt(page.dataset.presentIzinId || '3', 10) || 3)
+    };
+    const presentLabelByMode = {
+        hadir: (page.dataset.presentHadirLabel || 'Hadir').trim() || 'Hadir',
+        sakit: (page.dataset.presentSakitLabel || 'Sakit').trim() || 'Sakit',
+        izin: (page.dataset.presentIzinLabel || 'Izin').trim() || 'Izin'
+    };
     const accuracyLimit = Number.isFinite(schoolRadius)
         ? Math.max(35, Math.min(150, schoolRadius * 0.9))
         : 100;
@@ -583,22 +635,22 @@ document.addEventListener('DOMContentLoaded', function() {
     const accuracyExtremeLimit = Number.isFinite(schoolRadius)
         ? Math.max(2000, schoolRadius * 15)
         : 2000;
-    const locationThrottleMs = 350;
-    const locationSampleWindow = 3;
+    const locationThrottleMs = 1000;
+    const locationSampleWindow = 5;
     const stableWithinThreshold = 1;
     const stableOutsideThreshold = 2;
-    const memoryMonitorIntervalMs = isMobileFr ? 3000 : 1200;
+    const memoryMonitorIntervalMs = isMobileFr ? 3200 : 1500;
     const memoryBudgetBytes = 4 * 1024 * 1024 * 1024; // Budget runtime tetap 4GB
     const memoryTurboPercent = 70;
     const memoryTurboStartBytes = 10 * 1024 * 1024; // Mode maksimal dipicu sejak 0-10MB
-    const memoryWarningPercent = 85;
-    const memoryCriticalPercent = 92;
-    const memoryRecoverPercent = 78;
+    const memoryWarningPercent = 93;
+    const memoryCriticalPercent = 97;
+    const memoryRecoverPercent = 90;
     const memoryTurboLagMs = 190;
-    const memoryWarningLagMs = 360;
-    const memoryCriticalLagMs = 850;
-    const memoryRecoverLagMs = 180;
-    const memoryCriticalHoldMs = 2600;
+    const memoryWarningLagMs = 460;
+    const memoryCriticalLagMs = 980;
+    const memoryRecoverLagMs = 240;
+    const memoryCriticalHoldMs = 2400;
     const memoryRecoverRequiredTicks = 2;
 
     let stream = null;
@@ -685,6 +737,13 @@ document.addEventListener('DOMContentLoaded', function() {
     let memoryLastSupportsHeap = false;
     let memoryLastNotifyAt = 0;
     let poseMonitorSkipTick = 0;
+    let locationLockState = false;
+    let warmFacePipelineQueued = false;
+    let warmFacePipelinePromise = null;
+    let warmFacePipelineAggressiveRequested = false;
+    let warmFacePipelineAggressiveDone = false;
+    let locationWarmupTriggered = false;
+    const enableAggressiveWarmup = false;
 
     if (page) {
         page.classList.add('mode-hadir');
@@ -709,11 +768,19 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     function setStatus(text) {
-        statusMessage.textContent = text;
+        const next = String(text || '');
+        if (statusMessage.textContent === next) {
+            return;
+        }
+        statusMessage.textContent = next;
     }
 
     function setCameraStatus(text) {
-        cameraStatus.textContent = text;
+        const next = String(text || '');
+        if (cameraStatus.textContent === next) {
+            return;
+        }
+        cameraStatus.textContent = next;
     }
 
     function getSecureContextRequirementMessage(featureName) {
@@ -879,13 +946,13 @@ document.addEventListener('DOMContentLoaded', function() {
             const info = supportsHeap
                 ? `Heap ${percent.toFixed(1)}% | Lag ${Math.round(lagMs)} ms`
                 : `Lag ${Math.round(lagMs)} ms`;
-            memoryStatusMessage.textContent = `Pemakaian RAM melewati 85% (${info}). Throttling aktif agar aplikasi tidak hang.`;
+            memoryStatusMessage.textContent = `Pemakaian RAM melewati ${memoryWarningPercent}% (${info}). Throttling aktif agar aplikasi tidak hang.`;
         } else {
             if (supportsHeap) {
                 memorySupportBadge.className = 'match-badge ready';
                 if (profile === 'turbo') {
                     memorySupportBadge.textContent = 'Turbo';
-                    memoryStatusMessage.textContent = `Mode cepat aktif (baseline 4GB, Heap awal 0-10MB dipacu maksimal | Lag ${Math.round(lagMs)} ms).`;
+                    memoryStatusMessage.textContent = `Mode cepat aktif (baseline 4GB | Lag ${Math.round(lagMs)} ms).`;
                 } else {
                     memorySupportBadge.textContent = 'Aktif';
                     memoryStatusMessage.textContent = `Penggunaan RAM aman (Heap ${percent.toFixed(1)}% | Lag ${Math.round(lagMs)} ms).`;
@@ -1412,6 +1479,48 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
+    function getModeBadgeClass(mode) {
+        const key = normalizeMode(mode);
+        if (key === 'sakit') return 'warning';
+        if (key === 'izin') return 'ready';
+        return 'success';
+    }
+
+    function updateAttendanceModeUI(mode, customLabel = '') {
+        const modeKey = normalizeMode(mode);
+        const fallbackLabel = presentLabelByMode[modeKey] || 'Hadir';
+        const label = String(customLabel || fallbackLabel).trim() || fallbackLabel;
+        if (attendanceModeText) {
+            attendanceModeText.textContent = label;
+        }
+        if (attendancePresenceBadge) {
+            attendancePresenceBadge.textContent = label;
+            attendancePresenceBadge.className = 'match-badge ' + getModeBadgeClass(modeKey);
+        }
+    }
+
+    async function waitForImageReady(img, timeoutMs = 1200) {
+        if (!img) {
+            return;
+        }
+        if (img.complete && img.naturalWidth > 0) {
+            return;
+        }
+        await new Promise((resolve) => {
+            let done = false;
+            const finish = () => {
+                if (done) return;
+                done = true;
+                img.removeEventListener('load', finish);
+                img.removeEventListener('error', finish);
+                resolve();
+            };
+            img.addEventListener('load', finish, { once: true });
+            img.addEventListener('error', finish, { once: true });
+            setTimeout(finish, Math.max(300, timeoutMs));
+        });
+    }
+
     async function captureAttendanceSnapshot() {
         const canCapture = await waitForMemoryResponsive(5000);
         if (!canCapture) {
@@ -1420,12 +1529,19 @@ document.addEventListener('DOMContentLoaded', function() {
         if (typeof html2canvas !== 'function') {
             return '';
         }
-        const target = attendanceModalEl ? attendanceModalEl.querySelector('.attendance-photo-wrap') : null;
+        const target = attendancePhotoWrap || (attendanceModalEl ? attendanceModalEl.querySelector('.attendance-photo-wrap') : null);
         if (!target) {
             return '';
         }
         const captureConfig = getCapturePipelineConfig();
+        await waitForImageReady(attendanceFacePreview, 1400);
         ensureAttendanceMap(currentLat, currentLng);
+        if (target) {
+            target.classList.add('snapshot-capture');
+        }
+        if (attendancePhotoOverlay) {
+            attendancePhotoOverlay.classList.add('snapshot-capture');
+        }
         await new Promise((resolve) => setTimeout(resolve, captureConfig.snapshotDelayMs));
         try {
             const canvas = await html2canvas(target, {
@@ -1437,10 +1553,17 @@ document.addEventListener('DOMContentLoaded', function() {
             return canvas.toDataURL('image/jpeg', 0.9);
         } catch (err) {
             return '';
+        } finally {
+            if (target) {
+                target.classList.remove('snapshot-capture');
+            }
+            if (attendancePhotoOverlay) {
+                attendancePhotoOverlay.classList.remove('snapshot-capture');
+            }
         }
     }
 
-    function buildAttendanceInfo() {
+    function buildAttendanceInfo(customAbsenceText = '') {
         const now = new Date();
         const timeText = now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) + ' WIB';
         const scheduleDateObj = scheduleDateRaw ? new Date(`${scheduleDateRaw}T00:00:00`) : now;
@@ -1450,7 +1573,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const jpText = scheduleJp || '-';
         const teacherText = scheduleTeacher || '-';
         const studentText = scheduleStudent || faceLabel || '-';
-        const absenceText = getModeLabel(absenceMode);
+        const absenceText = String(customAbsenceText || getModeLabel(absenceMode)).trim() || getModeLabel(absenceMode);
 
         return {
             timeText,
@@ -1464,8 +1587,8 @@ document.addEventListener('DOMContentLoaded', function() {
         };
     }
 
-    function updateAttendanceInfo() {
-        const info = buildAttendanceInfo();
+    function updateAttendanceInfo(customAbsenceText = '') {
+        const info = buildAttendanceInfo(customAbsenceText);
         if (attendanceInfoTime) attendanceInfoTime.textContent = info.timeText;
         if (attendanceInfoSubject) attendanceInfoSubject.textContent = info.subjectText;
         if (attendanceInfoDay) attendanceInfoDay.textContent = info.dayText;
@@ -1474,6 +1597,7 @@ document.addEventListener('DOMContentLoaded', function() {
         if (attendanceInfoTeacher) attendanceInfoTeacher.textContent = info.teacherText;
         if (attendanceInfoStudent) attendanceInfoStudent.textContent = info.studentText;
         if (attendanceInfoStatus) attendanceInfoStatus.textContent = info.absenceText;
+        updateAttendanceModeUI(absenceMode, info.absenceText);
 
         const details = [
             `Waktu absen: ${info.timeText}`,
@@ -1492,13 +1616,21 @@ document.addEventListener('DOMContentLoaded', function() {
         attendanceInfoText = text;
     }
 
+    function getAccuracyLimitValue() {
+        const radius = Number.isFinite(schoolRadius) && schoolRadius > 0 ? schoolRadius : 0;
+        return Math.max(80, Math.min(400, radius > 0 ? (radius * 3) : 180));
+    }
+
     function getAccuracyBufferValue(accuracy) {
         if (!Number.isFinite(accuracy) || accuracy <= 0) return 0;
-        return Math.min(accuracy, Math.max(50, schoolRadius * 1.5));
+        if (accuracy > getAccuracyLimitValue()) return 0;
+        const radius = Number.isFinite(schoolRadius) && schoolRadius > 0 ? schoolRadius : 0;
+        return Math.min(accuracy, Math.max(35, Math.min(140, radius > 0 ? (radius * 1.1) : 90)));
     }
 
     function isWithinRadius(distance, accuracy) {
         if (!Number.isFinite(distance)) return false;
+        if (Number.isFinite(accuracy) && accuracy > getAccuracyLimitValue()) return false;
         const buffer = getAccuracyBufferValue(accuracy);
         return distance <= (schoolRadius + buffer);
     }
@@ -1509,15 +1641,13 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     function getPresentId(mode) {
-        if (mode === 'sakit') return 2;
-        if (mode === 'izin') return 3;
-        return 1;
+        const modeKey = normalizeMode(mode);
+        return presentIdByMode[modeKey] || presentIdByMode.hadir || 1;
     }
 
     function getModeLabel(mode) {
-        if (mode === 'sakit') return 'Sakit';
-        if (mode === 'izin') return 'Izin';
-        return 'Hadir';
+        const modeKey = normalizeMode(mode);
+        return presentLabelByMode[modeKey] || presentLabelByMode.hadir || 'Hadir';
     }
 
     function setAbsenceMode(mode) {
@@ -1525,9 +1655,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const switchingToHadir = nextMode === 'hadir' && absenceMode !== 'hadir';
         absenceMode = nextMode;
         locationOverride = absenceMode !== 'hadir';
-        if (attendanceModeText) {
-            attendanceModeText.textContent = getModeLabel(absenceMode);
-        }
+        updateAttendanceModeUI(absenceMode);
         if (attendanceModePill) {
             attendanceModePill.textContent = `Mode: ${getModeLabel(absenceMode)}`;
             attendanceModePill.className = 'mode-pill mode-' + absenceMode;
@@ -1620,13 +1748,14 @@ document.addEventListener('DOMContentLoaded', function() {
         const lagMs = Math.max(0, elapsed - memoryMonitorIntervalMs);
 
         const perfMemory = (typeof performance !== 'undefined' && performance && performance.memory) ? performance.memory : null;
-        const used = perfMemory?.usedJSHeapSize || 0;
+        const rawUsed = perfMemory?.usedJSHeapSize || 0;
         const limit = perfMemory?.jsHeapSizeLimit || 0;
         const total = perfMemory?.totalJSHeapSize || 0;
         const supportsHeap = Number.isFinite(limit) && limit > 0;
         const effectiveLimit = supportsHeap
             ? Math.max(1, Math.min(limit, memoryBudgetBytes))
             : 0;
+        const used = supportsHeap ? Math.min(rawUsed, memoryBudgetBytes) : 0;
         const percent = supportsHeap ? Math.min(100, (used / effectiveLimit) * 100) : 0;
 
         memoryUsedText.textContent = supportsHeap ? formatMB(used) : '-';
@@ -2099,22 +2228,36 @@ document.addEventListener('DOMContentLoaded', function() {
 
     function setLocationLock(locked, message) {
         if (!gpsEnabled) return;
-        if (locationOverride && locked) {
-            locked = false;
+        let nextLocked = !!locked;
+        if (locationOverride && nextLocked) {
+            nextLocked = false;
         }
-        page.classList.toggle('location-locked', locked);
-        if (locationLockLayer) {
-            locationLockLayer.classList.toggle('show', locked);
+        const hasStateChange = nextLocked !== locationLockState;
+        const shouldUpdateMessage = !!message
+            && locationLockMessage
+            && locationLockMessage.textContent !== String(message);
+
+        if (!hasStateChange && !shouldUpdateMessage) {
+            return;
         }
-        setScrollLock(locked);
-        if (message && locationLockMessage) {
-            locationLockMessage.textContent = message;
+
+        if (hasStateChange) {
+            locationLockState = nextLocked;
+            page.classList.toggle('location-locked', nextLocked);
+            if (locationLockLayer) {
+                locationLockLayer.classList.toggle('show', nextLocked);
+            }
+            setScrollLock(nextLocked);
+            if (nextLocked) {
+                startBtn.disabled = true;
+            } else {
+                updateStartButtonState();
+                setRetryLoading(false);
+            }
         }
-        if (locked) {
-            startBtn.disabled = true;
-        } else {
-            updateStartButtonState();
-            setRetryLoading(false);
+
+        if (shouldUpdateMessage && locationLockMessage) {
+            locationLockMessage.textContent = String(message);
         }
     }
 
@@ -2673,7 +2816,35 @@ document.addEventListener('DOMContentLoaded', function() {
             return;
         }
         referencePrefetchStarted = true;
-        fetch(referenceUrl, { credentials: 'same-origin' }).catch(() => {});
+        fetch(referenceUrl, { credentials: 'same-origin', cache: 'force-cache' }).catch(() => {});
+    }
+
+    function scheduleBackgroundTask(task, delayMs = 0, timeoutMs = 2200) {
+        const safeTask = () => {
+            try {
+                const pending = task();
+                if (pending && typeof pending.then === 'function') {
+                    pending.catch(() => {});
+                }
+            } catch (error) {
+                // Keep background scheduler non-blocking.
+            }
+        };
+
+        const run = () => {
+            if ('requestIdleCallback' in window) {
+                window.requestIdleCallback(() => safeTask(), { timeout: timeoutMs });
+                return;
+            }
+            setTimeout(safeTask, 0);
+        };
+
+        if (delayMs > 0) {
+            setTimeout(run, delayMs);
+            return;
+        }
+
+        run();
     }
 
     function warmFaceAssetsInBackground() {
@@ -2682,34 +2853,91 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         modelWarmupStarted = true;
 
-        const requests = faceModelFiles.map((file) =>
-            fetch(resolveModelUrl(file), { credentials: 'same-origin' }).catch(() => null)
-        );
+        const assetQueue = faceModelFiles.map((file) => resolveModelUrl(file));
         if (referenceUrl) {
-            requests.push(fetch(referenceUrl, { credentials: 'same-origin' }).catch(() => null));
+            assetQueue.push(referenceUrl);
         }
-        Promise.allSettled(requests).catch(() => {});
+
+        const pump = () => {
+            const nextAsset = assetQueue.shift();
+            if (!nextAsset) {
+                return;
+            }
+            fetch(nextAsset, { credentials: 'same-origin', cache: 'force-cache' })
+                .catch(() => null)
+                .finally(() => {
+                    scheduleBackgroundTask(pump, 90, 1800);
+                });
+        };
+
+        scheduleBackgroundTask(pump, 120, 1800);
     }
 
-    function warmFacePipeline() {
+    function triggerPostLocationWarmup(force = false) {
+        if (!enableAggressiveWarmup) {
+            return;
+        }
+        if (!referenceUrl) {
+            return;
+        }
+        if (!force && gpsEnabled && !locationAllowed && !locationOverride) {
+            return;
+        }
+        if (locationWarmupTriggered && warmFacePipelineAggressiveDone) {
+            return;
+        }
+        locationWarmupTriggered = true;
+        warmFacePipeline('aggressive');
+    }
+
+    function warmFacePipeline(mode = 'light') {
+        const warmMode = String(mode || 'light').toLowerCase();
+        const aggressive = warmMode === 'aggressive';
+        if (aggressive) {
+            warmFacePipelineAggressiveRequested = true;
+        }
+
+        if (warmFacePipelineQueued) {
+            return;
+        }
+        warmFacePipelineQueued = true;
+
         const run = async () => {
+            warmFacePipelineQueued = false;
             warmFaceAssetsInBackground();
             warmReferenceAsset();
 
-            try {
-                await loadModels({ silent: true });
-                await loadReferenceDescriptor();
-            } catch (error) {
-                // Warmup should not block interaction flow.
+            if (!warmFacePipelineAggressiveRequested || warmFacePipelineAggressiveDone) {
+                return;
             }
+
+            if (isMemoryGuardActive()) {
+                const memoryReady = await waitForMemoryResponsive(6500);
+                if (!memoryReady) {
+                    return;
+                }
+            }
+
+            if (warmFacePipelinePromise) {
+                return;
+            }
+
+            warmFacePipelinePromise = (async () => {
+                try {
+                    await loadModels({ silent: true });
+                    await loadReferenceDescriptor();
+                    warmFacePipelineAggressiveDone = true;
+                } catch (error) {
+                    // Warmup should never block user flow.
+                } finally {
+                    warmFacePipelinePromise = null;
+                }
+            })();
+
+            await warmFacePipelinePromise;
         };
 
-        if ('requestIdleCallback' in window) {
-            window.requestIdleCallback(() => { run(); }, { timeout: 2000 });
-            return;
-        }
-
-        setTimeout(run, 450);
+        scheduleBackgroundTask(run, aggressive ? 120 : 420, aggressive ? 3600 : 2200);
     }
 
     async function loadModels(options = {}) {
@@ -3410,10 +3638,12 @@ document.addEventListener('DOMContentLoaded', function() {
             setStatus('Sesi verifikasi wajah sudah tidak valid. Silakan Ambil & Cocokkan ulang.');
             return;
         }
+        const activeMode = normalizeMode(absenceMode);
+        const activeModeLabel = getModeLabel(activeMode);
         const hasGeo = !gpsEnabled || (Number.isFinite(currentLat) && Number.isFinite(currentLng));
         const distanceValue = Number.isFinite(currentDistance) ? currentDistance : lastDistance;
         const geoVerified = !gpsEnabled ? true : isWithinRadius(distanceValue, currentAccuracy);
-        const requiresRadius = absenceMode === 'hadir';
+        const requiresRadius = activeMode === 'hadir';
         const requiresGeo = gpsEnabled && requiresRadius;
         if (requiresGeo && !hasGeo) {
             setStatus('Lokasi belum tersedia. Pastikan GPS aktif.');
@@ -3438,9 +3668,7 @@ document.addEventListener('DOMContentLoaded', function() {
         if (attendanceStatusText) {
             attendanceStatusText.textContent = matchPassed ? 'Terverifikasi' : 'Gagal';
         }
-        if (attendanceModeText) {
-            attendanceModeText.textContent = getModeLabel(absenceMode);
-        }
+        updateAttendanceModeUI(activeMode, activeModeLabel);
         if (attendanceMatchBadge) {
             attendanceMatchBadge.textContent = matchPassed ? 'Lolos' : 'Gagal';
             attendanceMatchBadge.className = 'match-badge ' + (matchPassed ? 'success' : 'error');
@@ -3481,7 +3709,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
 
         attendanceSubmitting = false;
-        updateAttendanceInfo();
+        updateAttendanceInfo(activeModeLabel);
         if (attendanceSubmitBtn) {
             const canSubmit = matchPassed && studentScheduleId && lastCapturedData && lastServerMatchToken && (!requiresGeo || hasGeo) && (!requiresRadius || geoVerified);
             attendanceSubmitBtn.disabled = !canSubmit;
@@ -3526,10 +3754,12 @@ document.addEventListener('DOMContentLoaded', function() {
             setAttendanceModalMessage('Sesi verifikasi habis. Silakan Ambil & Cocokkan ulang.', 'danger');
             return;
         }
+        const activeMode = normalizeMode(absenceMode);
+        const activeModeLabel = getModeLabel(activeMode);
         const hasGeo = !gpsEnabled || (Number.isFinite(currentLat) && Number.isFinite(currentLng));
         const distanceValue = Number.isFinite(currentDistance) ? currentDistance : lastDistance;
         const geoVerified = !gpsEnabled ? true : isWithinRadius(distanceValue, currentAccuracy);
-        const requiresRadius = absenceMode === 'hadir';
+        const requiresRadius = activeMode === 'hadir';
         const requiresGeo = gpsEnabled && requiresRadius;
         if (requiresGeo && !hasGeo) {
             setAttendanceModalMessage('Lokasi belum tersedia. Pastikan GPS aktif.', 'danger');
@@ -3539,7 +3769,8 @@ document.addEventListener('DOMContentLoaded', function() {
             setAttendanceModalMessage('Lokasi belum tervalidasi. Pastikan berada di dalam radius.', 'danger');
             return;
         }
-        updateAttendanceInfo();
+        updateAttendanceInfo(activeModeLabel);
+        updateAttendanceModeUI(activeMode, activeModeLabel);
 
         attendanceSubmitting = true;
         if (attendanceSubmitBtn) {
@@ -3559,7 +3790,7 @@ document.addEventListener('DOMContentLoaded', function() {
         if (lastServerMatchToken) {
             payload.append('face_match_token', lastServerMatchToken);
         }
-        payload.append('present_id', String(getPresentId(absenceMode)));
+        payload.append('present_id', String(getPresentId(activeMode)));
         if (attendanceInfoText) {
             payload.append('information', attendanceInfoText);
         }
@@ -3601,17 +3832,17 @@ document.addEventListener('DOMContentLoaded', function() {
             }
 
             attendanceDone = true;
-            const statusLabel = (data.status || '').toUpperCase();
+            const responseData = (data && data.data && typeof data.data === 'object') ? data.data : {};
+            const statusLabel = String((responseData.status || data.status || '')).toUpperCase();
+            const persistedPresentLabel = String(responseData.present_label || activeModeLabel || getModeLabel(activeMode)).trim() || getModeLabel(activeMode);
             setAttendanceModalMessage(`Absensi berhasil (${statusLabel || 'SUCCESS'}).`, 'success');
             setBadge('success', 'Selesai');
             setStatus('Absensi berhasil. Status jadwal diperbarui.');
             lastServerMatchToken = '';
-            if (attendanceInfoStatus) {
-                const baseLabel = getModeLabel(absenceMode);
-                attendanceInfoStatus.textContent = statusLabel ? `${baseLabel} (${statusLabel})` : baseLabel;
-            }
+            updateAttendanceInfo(persistedPresentLabel);
+            updateAttendanceModeUI(activeMode, persistedPresentLabel);
             {
-                const baseLabel = getModeLabel(absenceMode);
+                const baseLabel = persistedPresentLabel;
                 const title = statusLabel === 'OVERDUE' ? 'Absensi Terlambat Tercatat' : 'Absensi Berhasil';
                 const body = statusLabel === 'OVERDUE'
                     ? `Absensi ${baseLabel} tercatat dengan status OVERDUE.`
@@ -3853,7 +4084,7 @@ document.addEventListener('DOMContentLoaded', function() {
     startLocationWatch();
     startMemoryMonitor();
     if (referenceUrl) {
-        warmFacePipeline();
+        warmFacePipeline('light');
     }
     if (!referenceUrl) {
         setBadge('error', 'Gagal');

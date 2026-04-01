@@ -5,7 +5,10 @@ $studentNisn = trim((string) ($student['student_nisn'] ?? ''));
 $studentCode = trim((string) ($student['student_code'] ?? ''));
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['change_student_password_forced'])) {
-    $oldPassword = trim((string) ($_POST['old_password'] ?? ''));
+    $oldPasswordRaw = trim((string) ($_POST['old_password'] ?? ''));
+    $oldPassword = function_exists('mb_strtoupper')
+        ? mb_strtoupper($oldPasswordRaw, 'UTF-8')
+        : strtoupper($oldPasswordRaw);
     $newPassword = trim((string) ($_POST['new_password'] ?? ''));
     $confirmPassword = trim((string) ($_POST['confirm_password'] ?? ''));
 
@@ -96,7 +99,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['change_student_passwo
         <div class="row">
             <div class="col-md-6 mb-3">
                 <label class="form-label">Password Lama</label>
-                <input type="password" class="form-control" name="old_password" required>
+                <input type="password"
+                       class="form-control"
+                       name="old_password"
+                       autocomplete="current-password"
+                       autocapitalize="characters"
+                       spellcheck="false"
+                       data-force-uppercase="true"
+                       required>
             </div>
             <div class="col-md-6 mb-3">
                 <label class="form-label">Password Baru</label>
@@ -112,3 +122,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['change_student_passwo
         </button>
     </form>
 </div>
+
+<script>
+    (function () {
+        const oldPasswordInput = document.querySelector('input[name="old_password"][data-force-uppercase="true"]');
+        if (!oldPasswordInput) {
+            return;
+        }
+
+        const forceUppercase = function () {
+            const transformedValue = oldPasswordInput.value.toUpperCase();
+            if (transformedValue !== oldPasswordInput.value) {
+                oldPasswordInput.value = transformedValue;
+            }
+        };
+
+        oldPasswordInput.addEventListener('input', forceUppercase);
+        oldPasswordInput.addEventListener('blur', forceUppercase);
+        oldPasswordInput.addEventListener('paste', function () {
+            setTimeout(forceUppercase, 0);
+        });
+    })();
+</script>

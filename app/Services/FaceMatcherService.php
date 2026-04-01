@@ -2,6 +2,8 @@
 
 namespace App\Services;
 
+use Illuminate\Support\Facades\Cache;
+
 class FaceMatcherService
 {
     private $threshold = 89; // Minimum similarity percentage (must match .env default)
@@ -23,6 +25,8 @@ class FaceMatcherService
     private $deepfaceBackupMaxReferences = 1;
     private $deepfaceDetectorFallbacks = false;
     private $pythonTimeoutSeconds = 60;
+    private const REFERENCE_CACHE_TTL_SECONDS = 120;
+    private static array $referenceCandidatesCache = [];
     
     public function __construct() {
         $uploadsBase = public_path('uploads');
@@ -121,8 +125,22 @@ class FaceMatcherService
      * Dapatkan path foto referensi aktif (terbaru) berdasarkan NISN / filename database.
      */
     public function getReferencePath($nisn, $photoReference = null) {
+        $cacheKey = $this->buildReferenceCacheKey($nisn, $photoReference);
+        if ($cacheKey !== null) {
+            $cached = Cache::get($cacheKey);
+            if (is_string($cached) && $cached !== '' && is_file($cached)) {
+                return $cached;
+            }
+        }
+
         $candidates = $this->getReferenceCandidates($nisn, $photoReference);
-        return !empty($candidates) ? $candidates[0] : null;
+        $resolved = !empty($candidates) ? (string) $candidates[0] : null;
+
+        if ($cacheKey !== null && is_string($resolved) && $resolved !== '' && is_file($resolved)) {
+            Cache::put($cacheKey, $resolved, now()->addSeconds(self::REFERENCE_CACHE_TTL_SECONDS));
+        }
+
+        return $resolved;
     }
 
     /**
@@ -130,9 +148,20 @@ class FaceMatcherService
      */
     public function getReferenceCandidates($nisn, $photoReference = null) {
         $nisn = trim((string) $nisn);
+        $photoReference = trim((string) $photoReference);
+        $requestCacheKey = strtolower($nisn . '|' . $photoReference);
+        if ($requestCacheKey !== '' && isset(self::$referenceCandidatesCache[$requestCacheKey])) {
+            $cachedCandidates = self::$referenceCandidatesCache[$requestCacheKey];
+            if (is_array($cachedCandidates) && $cachedCandidates !== []) {
+                $first = (string) ($cachedCandidates[0] ?? '');
+                if ($first !== '' && is_file($first)) {
+                    return $cachedCandidates;
+                }
+            }
+        }
+
         $files = [];
 
-        $photoReference = trim((string) $photoReference);
         if ($photoReference !== '') {
             $normalizedReference = function_exists('normalize_face_reference_path')
                 ? normalize_face_reference_path($photoReference)
@@ -232,7 +261,27 @@ class FaceMatcherService
             return ($mtimeB <=> $mtimeA);
         });
 
+        if ($requestCacheKey !== '') {
+            self::$referenceCandidatesCache[$requestCacheKey] = $files;
+        }
+
         return $files;
+    }
+
+    private function buildReferenceCacheKey($nisn, $photoReference): ?string
+    {
+        $nisn = trim((string) $nisn);
+        $photoReference = trim((string) $photoReference);
+        if ($nisn === '' && $photoReference === '') {
+            return null;
+        }
+
+        $normalized = $photoReference;
+        if ($normalized !== '' && function_exists('normalize_face_reference_path')) {
+            $normalized = (string) normalize_face_reference_path($normalized);
+        }
+
+        return 'face_ref_path:' . sha1($nisn . '|' . strtolower($normalized));
     }
 
     /**

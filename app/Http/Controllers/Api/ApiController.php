@@ -9,6 +9,7 @@ use App\Services\StudentPushNotificationService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 
 class ApiController extends Controller
@@ -30,29 +31,37 @@ class ApiController extends Controller
             return response()->json(['success' => false, 'message' => 'Koordinat tidak ditemukan']);
         }
 
+        if (!is_numeric($latitude) || !is_numeric($longitude)) {
+            return response()->json(['success' => false, 'message' => 'Koordinat GPS tidak valid']);
+        }
+
+        $latValue = (float) $latitude;
+        $lngValue = (float) $longitude;
+        if (!$this->isCoordinateInRange($latValue, $lngValue)) {
+            return response()->json(['success' => false, 'message' => 'Koordinat GPS berada di luar rentang valid']);
+        }
+
         try {
             $school = $this->getDefaultSchoolLocation();
             if ($school === null) {
                 return response()->json(['success' => false, 'message' => 'Lokasi sekolah belum dikonfigurasi']);
             }
 
-            $distance = $this->calculateDistance((float) $latitude, (float) $longitude, (float) $school['latitude'], (float) $school['longitude']);
-            $accuracyValue = is_numeric($accuracy) ? (float) $accuracy : null;
+            $distance = $this->calculateDistance($latValue, $lngValue, (float) $school['latitude'], (float) $school['longitude']);
             $radius = (float) ($school['radius'] ?? 0);
-            $accuracyBuffer = 0.0;
-            if ($accuracyValue !== null && $accuracyValue > 0) {
-                $accuracyBuffer = min($accuracyValue, max(50, $radius * 1.5));
-            }
-            $withinRadius = $distance <= ($radius + $accuracyBuffer);
+            $accuracyValue = $this->normalizeGpsAccuracy($accuracy);
+            $locationValidation = $this->buildLocationValidationMetrics($distance, $radius, $accuracyValue);
 
             return response()->json([
                 'success' => true,
                 'data' => [
-                    'distance' => round($distance, 2),
-                    'within_radius' => $withinRadius,
-                    'radius_limit' => $school['radius'],
-                    'accuracy' => $accuracyValue !== null ? round($accuracyValue, 2) : null,
-                    'accuracy_buffer' => round($accuracyBuffer, 2),
+                    'distance' => $locationValidation['distance'],
+                    'within_radius' => $locationValidation['within_radius'],
+                    'radius_limit' => $locationValidation['radius_limit'],
+                    'accuracy' => $locationValidation['accuracy'],
+                    'accuracy_buffer' => $locationValidation['accuracy_buffer'],
+                    'accuracy_limit' => $locationValidation['accuracy_limit'],
+                    'accuracy_ok' => $locationValidation['accuracy_ok'],
                     'school_location' => $school,
                 ],
             ]);
@@ -662,6 +671,18 @@ class ApiController extends Controller
             return $this->attendanceJson($requestPath, ['success' => false, 'message' => 'Data tidak lengkap'], 422);
         }
 
+        if (!is_numeric($latitude) || !is_numeric($longitude)) {
+            return $this->attendanceJson($requestPath, ['success' => false, 'message' => 'Koordinat GPS tidak valid'], 422);
+        }
+
+        $latitude = (float) $latitude;
+        $longitude = (float) $longitude;
+        if (!$this->isCoordinateInRange($latitude, $longitude)) {
+            return $this->attendanceJson($requestPath, ['success' => false, 'message' => 'Koordinat GPS berada di luar rentang valid'], 422);
+        }
+
+        $accuracy = $this->normalizeGpsAccuracy($accuracy);
+
         try {
             $schedule = DB::table('student_schedule as ss')
                 ->join('teacher_schedule as ts', 'ss.teacher_schedule_id', '=', 'ts.schedule_id')
@@ -722,14 +743,18 @@ class ApiController extends Controller
                 return $this->attendanceJson($requestPath, ['success' => false, 'message' => 'Waktu absensi sudah ditutup'], 403);
             }
 
-            $gpsCheck = $this->checkLocationData((float) $latitude, (float) $longitude, $accuracy);
+            $gpsCheck = $this->checkLocationData($latitude, $longitude, $accuracy);
             if (!$gpsCheck['success']) {
                 return $this->attendanceJson($requestPath, ['success' => false, 'message' => 'Gagal memvalidasi lokasi'], 422);
             }
 
             $withinRadius = !empty($gpsCheck['data']['within_radius']);
             if ($presentId === 1 && !$withinRadius) {
-                return $this->attendanceJson($requestPath, ['success' => false, 'message' => 'Anda berada di luar radius sekolah'], 403);
+                $accuracyOk = !array_key_exists('accuracy_ok', $gpsCheck['data']) || !empty($gpsCheck['data']['accuracy_ok']);
+                $message = $accuracyOk
+                    ? 'Anda berada di luar radius sekolah'
+                    : 'Akurasi GPS terlalu rendah. Pindah ke area dengan sinyal GPS lebih stabil lalu coba lagi.';
+                return $this->attendanceJson($requestPath, ['success' => false, 'message' => $message], 403);
             }
 
             $selfieResult = $faceMatcher->saveSelfie($studentId, $base64Image);
@@ -1116,29 +1141,31 @@ class ApiController extends Controller
      */
     private function getDefaultSchoolLocation(): ?array
     {
-        $site = DB::table('site')
-            ->select('default_location_id')
-            ->first();
-        $locationId = (int) ($site->default_location_id ?? 0);
-
-        if ($locationId > 0) {
-            $school = DB::table('school_location')
-                ->where('location_id', $locationId)
+        return Cache::remember('presenova:default_school_location', now()->addSeconds(45), function () {
+            $site = DB::table('site')
+                ->select('default_location_id')
                 ->first();
-            if ($school && (string) ($school->is_active ?? 'N') === 'Y') {
-                return (array) $school;
+            $locationId = (int) ($site->default_location_id ?? 0);
+
+            if ($locationId > 0) {
+                $school = DB::table('school_location')
+                    ->where('location_id', $locationId)
+                    ->first();
+                if ($school && (string) ($school->is_active ?? 'N') === 'Y') {
+                    return (array) $school;
+                }
             }
-        }
 
-        $fallback = DB::table('school_location')
-            ->where('is_active', 'Y')
-            ->orderByDesc('location_id')
-            ->first();
-        if (!$fallback) {
-            return null;
-        }
+            $fallback = DB::table('school_location')
+                ->where('is_active', 'Y')
+                ->orderByDesc('location_id')
+                ->first();
+            if (!$fallback) {
+                return null;
+            }
 
-        return (array) $fallback;
+            return (array) $fallback;
+        });
     }
 
     private function calculateDistance(float $lat1, float $lon1, float $lat2, float $lon2): float
@@ -1415,6 +1442,10 @@ class ApiController extends Controller
      */
     private function checkLocationData(float $latitude, float $longitude, mixed $accuracy = null): array
     {
+        if (!$this->isCoordinateInRange($latitude, $longitude)) {
+            return ['success' => false, 'message' => 'Koordinat GPS berada di luar rentang valid'];
+        }
+
         $school = $this->getDefaultSchoolLocation();
         if ($school === null) {
             return ['success' => false, 'message' => 'Lokasi sekolah belum dikonfigurasi'];
@@ -1427,22 +1458,66 @@ class ApiController extends Controller
             (float) ($school['longitude'] ?? 0)
         );
 
-        $accuracyValue = is_numeric($accuracy) ? (float) $accuracy : null;
+        $accuracyValue = $this->normalizeGpsAccuracy($accuracy);
         $radius = (float) ($school['radius'] ?? 0);
-        $accuracyBuffer = 0.0;
-        if ($accuracyValue !== null && $accuracyValue > 0) {
-            $accuracyBuffer = min($accuracyValue, max(50, $radius * 1.5));
-        }
+        $locationValidation = $this->buildLocationValidationMetrics($distance, $radius, $accuracyValue);
 
         return [
             'success' => true,
-            'data' => [
-                'distance' => round($distance, 2),
-                'within_radius' => $distance <= ($radius + $accuracyBuffer),
-                'radius_limit' => $school['radius'] ?? 0,
-                'accuracy' => $accuracyValue !== null ? round($accuracyValue, 2) : null,
-                'accuracy_buffer' => round($accuracyBuffer, 2),
-            ],
+            'data' => $locationValidation,
+        ];
+    }
+
+    private function normalizeGpsAccuracy(mixed $accuracy): ?float
+    {
+        if (!is_numeric($accuracy)) {
+            return null;
+        }
+        $accuracyValue = (float) $accuracy;
+        if ($accuracyValue <= 0 || $accuracyValue > 5000) {
+            return null;
+        }
+
+        return $accuracyValue;
+    }
+
+    private function isCoordinateInRange(float $latitude, float $longitude): bool
+    {
+        return $latitude >= -90.0
+            && $latitude <= 90.0
+            && $longitude >= -180.0
+            && $longitude <= 180.0;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function buildLocationValidationMetrics(float $distance, float $radius, ?float $accuracyValue): array
+    {
+        $radius = max(0.0, $radius);
+        $distance = max(0.0, $distance);
+
+        $accuracyLimit = max(80.0, min(400.0, $radius > 0 ? ($radius * 3.0) : 180.0));
+        $accuracyOk = true;
+        $accuracyBuffer = 0.0;
+        if ($accuracyValue !== null && $accuracyValue > 0) {
+            if ($accuracyValue > $accuracyLimit) {
+                $accuracyOk = false;
+            } else {
+                $accuracyBuffer = min($accuracyValue, max(35.0, min(140.0, $radius > 0 ? ($radius * 1.1) : 90.0)));
+            }
+        }
+
+        $withinRadius = $accuracyOk && ($distance <= ($radius + $accuracyBuffer));
+
+        return [
+            'distance' => round($distance, 2),
+            'within_radius' => $withinRadius,
+            'radius_limit' => round($radius, 2),
+            'accuracy' => $accuracyValue !== null ? round($accuracyValue, 2) : null,
+            'accuracy_buffer' => round($accuracyBuffer, 2),
+            'accuracy_limit' => round($accuracyLimit, 2),
+            'accuracy_ok' => $accuracyOk,
         ];
     }
 
@@ -1523,4 +1598,3 @@ class ApiController extends Controller
         return @file_put_contents($outputPath, $binary) !== false;
     }
 }
-

@@ -1053,15 +1053,73 @@ $(document).ready(function() {
             });
         }
 
+        const topNavEl = document.getElementById('topNav');
+        const navToggleEl = document.getElementById('navToggle');
+        const navLinksEl = document.getElementById('navLinks');
+        const compactViewportMq = window.matchMedia('(max-width: 992px)');
+
+        const syncGuruTopNavOffset = () => {
+            const mainContent = document.getElementById('mainContent');
+            if (!topNavEl || !mainContent) {
+                return;
+            }
+            const navTop = parseFloat(window.getComputedStyle(topNavEl).top) || 0;
+            const navHeight = topNavEl.getBoundingClientRect().height;
+            const extraGap = compactViewportMq.matches ? 12 : 22;
+            const offsetValue = Math.ceil(navTop + navHeight + extraGap);
+            document.documentElement.style.setProperty('--guru-top-nav-offset', `${offsetValue}px`);
+        };
+
+        const setGuruMobileNavOpen = (isOpen) => {
+            if (!topNavEl) {
+                return;
+            }
+            topNavEl.classList.toggle('nav-open', isOpen);
+            topNavEl.classList.remove('nav-hidden');
+            if (navToggleEl) {
+                navToggleEl.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+                const icon = navToggleEl.querySelector('i');
+                if (icon) {
+                    icon.classList.toggle('fa-bars', !isOpen);
+                    icon.classList.toggle('fa-times', isOpen);
+                }
+            }
+            window.requestAnimationFrame(syncGuruTopNavOffset);
+        };
+
+        if (navToggleEl) {
+            navToggleEl.setAttribute('aria-expanded', 'false');
+            if (navLinksEl) {
+                navToggleEl.setAttribute('aria-controls', 'navLinks');
+            }
+        }
+
         // Mobile navigation toggle
         $('#navToggle').on('click', function() {
-            $('#topNav').toggleClass('nav-open').removeClass('nav-hidden');
+            const isOpen = topNavEl ? !topNavEl.classList.contains('nav-open') : false;
+            setGuruMobileNavOpen(isOpen);
         });
 
         // Close mobile navigation on link click
         $('#topNav .nav-links a').on('click', function() {
-            $('#topNav').removeClass('nav-open');
+            setGuruMobileNavOpen(false);
         });
+
+        // Close mobile navigation when tapping outside of navbar
+        $(document).on('click', function(event) {
+            if (!compactViewportMq.matches || !topNavEl || !topNavEl.classList.contains('nav-open')) {
+                return;
+            }
+            if (topNavEl.contains(event.target)) {
+                return;
+            }
+            setGuruMobileNavOpen(false);
+        });
+
+        window.requestAnimationFrame(syncGuruTopNavOffset);
+        window.setTimeout(syncGuruTopNavOffset, 220);
+        window.addEventListener('resize', syncGuruTopNavOffset, { passive: true });
+        window.addEventListener('orientationchange', syncGuruTopNavOffset);
 
         // Theme toggle
         $('#themeToggle').click(function() {
@@ -1228,24 +1286,61 @@ $(document).ready(function() {
     // Hide/show top navigation on scroll
     (function() {
         const nav = document.getElementById('topNav');
-        if (!nav) return;
-        let lastScroll = window.scrollY;
+        if (!nav) {
+            return;
+        }
 
-        window.addEventListener('scroll', function() {
-            const currentScroll = window.scrollY;
+        const compactViewportMq = window.matchMedia('(max-width: 992px)');
+        let lastScroll = window.scrollY || 0;
+        let isTicking = false;
+
+        const handleScrollState = () => {
+            const currentScroll = window.scrollY || 0;
+            const isMobile = compactViewportMq.matches;
+            const hideOffset = isMobile ? 10 : 120;
+            const deltaThreshold = isMobile ? 2 : 8;
+            const delta = currentScroll - lastScroll;
+
             if (nav.classList.contains('nav-open')) {
                 lastScroll = currentScroll;
+                isTicking = false;
                 return;
             }
 
-            if (currentScroll > lastScroll && currentScroll > 120) {
+            if (currentScroll <= 0) {
+                nav.classList.remove('nav-hidden');
+                lastScroll = 0;
+                isTicking = false;
+                return;
+            }
+
+            if (delta > deltaThreshold && currentScroll > hideOffset) {
                 nav.classList.add('nav-hidden');
-            } else {
+            } else if (delta < -deltaThreshold || currentScroll <= hideOffset) {
                 nav.classList.remove('nav-hidden');
             }
 
             lastScroll = currentScroll;
+            isTicking = false;
+        };
+
+        window.addEventListener('scroll', function() {
+            if (isTicking) {
+                return;
+            }
+            isTicking = true;
+            window.requestAnimationFrame(handleScrollState);
         }, { passive: true });
+
+        const resetOnViewportChange = () => {
+            nav.classList.remove('nav-hidden');
+            lastScroll = window.scrollY || 0;
+        };
+        if (typeof compactViewportMq.addEventListener === 'function') {
+            compactViewportMq.addEventListener('change', resetOnViewportChange);
+        } else if (typeof compactViewportMq.addListener === 'function') {
+            compactViewportMq.addListener(resetOnViewportChange);
+        }
     })();
     </script>
 </body>

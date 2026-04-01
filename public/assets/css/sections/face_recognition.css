@@ -1604,61 +1604,100 @@ body.attendance-modal-open .modal-backdrop {
     aspect-ratio: 16 / 9;
     min-height: 240px;
     max-height: min(52vh, 520px);
+    position: relative;
+    overflow: hidden;
+    background: #020617;
 }
 
 #attendanceModal .attendance-photo-wrap img {
-    object-fit: contain;
+    object-fit: cover;
     object-position: center center;
-    background: rgba(2, 6, 23, 0.92);
+    background: #020617;
 }
 
-/* Overlay now stretches full width at the bottom of preview */
 #attendanceModal .attendance-photo-overlay {
+    position: absolute;
     left: 12px;
     right: 12px;
     bottom: 12px;
+    top: auto;
     width: auto;
-    max-height: min(32%, 210px);
+    max-height: calc(100% - 24px);
+    overflow-y: auto;
     border-radius: 14px;
-    border: 1px solid rgba(148, 163, 184, 0.32);
-    background: linear-gradient(160deg, rgba(12, 18, 35, 0.45), rgba(6, 11, 27, 0.7));
-    box-shadow: 0 10px 22px rgba(2, 6, 23, 0.35);
-    padding: 7px 10px;
-    backdrop-filter: blur(6px);
+    border: 1px solid rgba(148, 163, 184, 0.38);
+    background: linear-gradient(160deg, rgba(12, 18, 35, 0.72), rgba(6, 11, 27, 0.88));
+    box-shadow: 0 12px 24px rgba(2, 6, 23, 0.45);
+    padding: 10px 12px;
+    backdrop-filter: blur(7px);
+    -webkit-backdrop-filter: blur(7px);
+    color: #f8fafc;
 }
 
 [data-theme="light"] #attendanceModal .attendance-photo-overlay {
-    background: linear-gradient(160deg, rgba(248, 250, 252, 0.62), rgba(226, 232, 240, 0.85));
+    background: linear-gradient(160deg, rgba(248, 250, 252, 0.88), rgba(226, 232, 240, 0.93));
+    border-color: rgba(148, 163, 184, 0.52);
+    color: #0f172a;
 }
 
 #attendanceModal .attendance-photo-overlay .overlay-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
     font-size: 0.86rem;
-    margin-bottom: 6px;
+    margin-bottom: 8px;
+}
+
+#attendanceModal .attendance-photo-overlay .overlay-badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    justify-content: flex-end;
 }
 
 #attendanceModal .attendance-photo-overlay .overlay-body {
-    grid-template-columns: 1fr 1.22fr;
-    gap: 10px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.18fr);
+    gap: 12px;
+    align-items: start;
 }
 
 #attendanceModal .attendance-photo-overlay .overlay-geo-grid {
-    grid-template-columns: 1fr 210px;
-    gap: 8px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 220px;
+    gap: 10px;
+    align-items: stretch;
 }
 
 #attendanceModal .attendance-photo-overlay .overlay-info-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 4px 8px;
-    font-size: 0.74rem;
+    gap: 7px 11px;
+    font-size: 0.76rem;
 }
 
 #attendanceModal .attendance-photo-overlay .overlay-info-grid strong {
-    font-size: 0.84rem;
+    display: block;
+    margin-top: 1px;
+    font-size: 0.86rem;
+    line-height: 1.25;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+#attendanceModal .attendance-photo-overlay .overlay-info-grid span {
+    font-size: 0.66rem;
+    letter-spacing: 0.01em;
+}
+
+[data-theme="light"] #attendanceModal .attendance-photo-overlay .overlay-info-grid span {
+    color: rgba(30, 41, 59, 0.78);
 }
 
 #attendanceModal .attendance-photo-overlay .geo-map {
-    width: 210px;
-    height: 120px;
+    width: 220px;
+    height: 126px;
     border-radius: 10px;
     border: 1px solid rgba(148, 163, 184, 0.45);
     overflow: hidden;
@@ -1670,11 +1709,27 @@ body.attendance-modal-open .modal-backdrop {
 }
 
 #attendanceModal .attendance-photo-overlay .overlay-metrics {
-    gap: 4px 8px;
+    gap: 7px 10px;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 #attendanceModal .attendance-photo-overlay .geo-detail-grid {
-    gap: 4px 8px;
+    gap: 7px 10px;
+}
+
+#attendanceModal .attendance-photo-overlay .geo-main strong {
+    font-size: 0.92rem;
+}
+
+#attendanceModal .attendance-photo-overlay .geo-main span,
+#attendanceModal .attendance-photo-overlay .geo-time {
+    font-size: 0.68rem;
+}
+
+#attendanceModal .attendance-photo-overlay .geo-main span {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 @media (max-width: 1200px) {
@@ -1684,7 +1739,7 @@ body.attendance-modal-open .modal-backdrop {
     }
 
     #attendanceModal .attendance-photo-overlay {
-        max-height: min(42%, 250px);
+        max-height: calc(100% - 24px);
     }
 }
 
@@ -1709,7 +1764,7 @@ body.attendance-modal-open .modal-backdrop {
     }
 
     #attendanceModal .attendance-photo-overlay {
-        max-height: min(52%, 300px);
+        max-height: calc(100% - 24px);
     }
 }
 
@@ -1722,7 +1777,7 @@ body.attendance-modal-open .modal-backdrop {
     #attendanceModal .attendance-photo-overlay {
         left: 10px;
         right: 10px;
-        max-height: min(66%, 340px);
+        max-height: calc(100% - 20px);
         padding: 8px 9px;
     }
 
@@ -1733,13 +1788,35 @@ body.attendance-modal-open .modal-backdrop {
 
     #attendanceModal .attendance-photo-overlay .geo-map {
         width: 100%;
-        height: 112px;
+        height: 120px;
     }
 
     #attendanceModal .attendance-photo-overlay .overlay-info-grid,
     #attendanceModal .attendance-photo-overlay .geo-detail-grid {
         grid-template-columns: 1fr;
     }
+
+    #attendanceModal .attendance-photo-overlay .overlay-badges {
+        justify-content: flex-start;
+    }
+}
+
+#attendanceModal .attendance-photo-wrap.snapshot-capture {
+    aspect-ratio: 16 / 9;
+}
+
+#attendanceModal .attendance-photo-wrap.snapshot-capture .attendance-photo-overlay,
+#attendanceModal .attendance-photo-overlay.snapshot-capture {
+    max-height: calc(100% - 24px);
+    overflow: hidden;
+    border-color: rgba(148, 163, 184, 0.4);
+    background: linear-gradient(160deg, rgba(8, 15, 32, 0.78), rgba(4, 10, 24, 0.92));
+    box-shadow: 0 12px 26px rgba(2, 6, 23, 0.48);
+}
+
+[data-theme="light"] #attendanceModal .attendance-photo-wrap.snapshot-capture .attendance-photo-overlay,
+[data-theme="light"] #attendanceModal .attendance-photo-overlay.snapshot-capture {
+    background: linear-gradient(160deg, rgba(248, 250, 252, 0.9), rgba(226, 232, 240, 0.95));
 }
 
 .memory-stats {

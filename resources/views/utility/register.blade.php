@@ -1,18 +1,46 @@
 <?php
-$appRootUrl = rtrim((string) url('/'), '/');
-$assetBaseUrl = $appRootUrl . '/';
-$loginUrl = (string) url('login.php');
-$registerUrl = (string) url('register.php');
-$dashboardUrl = (string) url('dashboard/siswa.php');
+// Build URLs from request context to avoid redirects to XAMPP dashboard/root.
+$scriptName = str_replace('\\', '/', (string) ($_SERVER['SCRIPT_NAME'] ?? ''));
+$scriptDir = trim((string) dirname($scriptName), '/.');
+$scriptSegments = array_values(array_filter(
+    explode('/', $scriptDir),
+    static fn (string $segment): bool => $segment !== ''
+));
+if ($scriptSegments !== [] && strcasecmp((string) end($scriptSegments), 'public') === 0) {
+    array_pop($scriptSegments);
+}
+$basePrefix = $scriptSegments === [] ? '' : '/' . implode('/', $scriptSegments);
+
+$appPath = static function (string $path = '') use ($basePrefix): string {
+    $cleanPath = ltrim($path, '/');
+    if ($cleanPath === '') {
+        return $basePrefix === '' ? '/' : $basePrefix . '/';
+    }
+
+    return ($basePrefix === '' ? '/' : $basePrefix . '/') . $cleanPath;
+};
+
+$isHttps = (!empty($_SERVER['HTTPS']) && strtolower((string) $_SERVER['HTTPS']) !== 'off')
+    || (isset($_SERVER['REQUEST_SCHEME']) && strtolower((string) $_SERVER['REQUEST_SCHEME']) === 'https')
+    || ((int) ($_SERVER['SERVER_PORT'] ?? 80) === 443);
+$scheme = $isHttps ? 'https' : 'http';
+$host = trim((string) ($_SERVER['HTTP_HOST'] ?? 'localhost'));
+$siteUrl = $scheme . '://' . $host . ($basePrefix !== '' ? $basePrefix : '') . '/';
+
+$appRootUrl = rtrim($siteUrl, '/');
+$assetBaseUrl = $siteUrl;
+$loginUrl = $appPath('login.php');
+$registerUrl = $appPath('register.php');
+$dashboardUrl = $appPath('dashboard/siswa.php');
 $registerLogoutUrl = $registerUrl . '?logout=1';
 $registerUploadFaceUrl = $registerUrl . '?upload_face=1';
 $registerPoseOnlyUrl = $registerUrl . '?upload_face=1&pose_only=1';
-$appDialogCssUrl = (string) url('assets/css/app-dialog.css');
-$mainStyleCssUrl = (string) url('assets/css/style.css');
-$appDialogScriptUrl = (string) url('assets/js/app-dialog.js');
-$faceApiScriptUrl = (string) url('face/faces_logics/face-api.min.js');
-$faceModelBaseUrl = (string) url('face/faces_logics/models');
-$savePoseFramesUrl = (string) url('api/save_pose_frames.php');
+$appDialogCssUrl = $appPath('assets/css/app-dialog.css');
+$mainStyleCssUrl = $appPath('assets/css/style.css');
+$appDialogScriptUrl = $appPath('assets/js/app-dialog.js');
+$faceApiScriptUrl = $appPath('face/faces_logics/face-api.min.js');
+$faceModelBaseUrl = $appPath('face/faces_logics/models');
+$savePoseFramesUrl = $appPath('api/save_pose_frames.php');
 
 try {
     $auth = new \App\Support\Core\Auth();

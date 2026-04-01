@@ -548,6 +548,8 @@ if ($active_siswa_section_css !== null) {
 
     window.addEventListener('resize', updateThemeOrbitPath);
     
+    let lastRenderedDateKey = '';
+
     // Real-time clock
     function updateClock() {
         const now = new Date();
@@ -561,11 +563,11 @@ if ($active_siswa_section_css !== null) {
             clockEl.textContent = `${hours}:${minutes}:${seconds}`;
         }
 
-        // Update date if needed
-        const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
-        const dateStr = now.toLocaleDateString('id-ID', options);
-        if (dateDisplayEl) {
-            dateDisplayEl.textContent = dateStr;
+        const currentDateKey = `${now.getFullYear()}-${now.getMonth()}-${now.getDate()}`;
+        if (dateDisplayEl && currentDateKey !== lastRenderedDateKey) {
+            const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
+            dateDisplayEl.textContent = now.toLocaleDateString('id-ID', options);
+            lastRenderedDateKey = currentDateKey;
         }
     }
     

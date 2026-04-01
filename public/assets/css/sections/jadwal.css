@@ -113,7 +113,7 @@
     overflow-x: scroll;
     overflow-y: hidden;
     -webkit-overflow-scrolling: touch;
-    touch-action: pan-x;
+    touch-action: pan-x pan-y;
     max-width: 100%;
     padding-bottom: 6px;
     scrollbar-width: thin;
@@ -489,7 +489,7 @@
         overflow-x: scroll;
         overflow-y: hidden;
         -webkit-overflow-scrolling: touch;
-        touch-action: pan-x;
+        touch-action: pan-x pan-y;
     }
 
     .jadwal-table-responsive .schedule-table {

@@ -614,22 +614,58 @@
             const togglePassword = document.getElementById('togglePassword');
             const loginForm = document.getElementById('loginForm');
 
+            function sanitizeUsernameByRole(role, value) {
+                const raw = String(value ?? '');
+                if (role === 'siswa') {
+                    return raw.replace(/\D+/g, '');
+                }
+                if (role === 'guru') {
+                    return raw.toUpperCase();
+                }
+                return raw;
+            }
+
+            function applyRoleSanitization() {
+                const role = roleInput.value;
+                const currentValue = usernameInput.value;
+                const sanitizedValue = sanitizeUsernameByRole(role, currentValue);
+                if (currentValue === sanitizedValue) {
+                    return;
+                }
+                usernameInput.value = sanitizedValue;
+            }
+
+            function resetLoginInputsForRoleSwitch() {
+                usernameInput.value = '';
+                passwordInput.value = '';
+                passwordInput.setAttribute('type', 'password');
+                if (togglePassword) {
+                    togglePassword.innerHTML = '<i class="fas fa-eye"></i>';
+                }
+            }
+
             function applyUsernameInputMode(role) {
                 if (role === 'siswa') {
                     usernameInput.setAttribute('inputmode', 'numeric');
                     usernameInput.setAttribute('autocapitalize', 'off');
+                    usernameInput.setAttribute('pattern', '[0-9]*');
+                    usernameInput.removeAttribute('maxlength');
                     usernameInput.setAttribute('spellcheck', 'false');
                     return;
                 }
 
                 usernameInput.setAttribute('inputmode', 'text');
-                usernameInput.setAttribute('autocapitalize', 'off');
+                usernameInput.removeAttribute('pattern');
+                usernameInput.removeAttribute('maxlength');
+                usernameInput.setAttribute('autocapitalize', role === 'guru' ? 'characters' : 'off');
                 usernameInput.setAttribute('spellcheck', 'false');
             }
 
             // Role Selection
             roleButtons.forEach(button => {
                 button.addEventListener('click', function() {
+                    const previousRole = roleInput.value;
+
                     // Remove active class from all buttons
                     roleButtons.forEach(btn => btn.classList.remove('active'));
                     
@@ -659,12 +695,24 @@
                     usernameLabel.textContent = label;
                     usernameInput.placeholder = placeholder;
                     applyUsernameInputMode(role);
+                    if (previousRole !== role) {
+                        resetLoginInputsForRoleSwitch();
+                    }
+                    applyRoleSanitization();
                     
                     // Auto-focus on username field
                     usernameInput.focus();
                 });
             });
             applyUsernameInputMode('siswa');
+
+            usernameInput.addEventListener('input', function() {
+                applyRoleSanitization();
+            });
+
+            usernameInput.addEventListener('paste', function() {
+                setTimeout(applyRoleSanitization, 0);
+            });
 
             // Toggle Password Visibility
             togglePassword.addEventListener('click', function() {
@@ -684,9 +732,7 @@
                     return false;
                 }
 
-                if (roleInput.value === 'siswa') {
-                    usernameInput.value = username.replace(/\s+/g, '');
-                }
+                usernameInput.value = sanitizeUsernameByRole(roleInput.value, username.replace(/\s+/g, ''));
                 
                 // Show loading state
                 const submitBtn = this.querySelector('.btn-submit');
@@ -772,5 +818,3 @@
     </script>
 </body>
 </html>
-
-

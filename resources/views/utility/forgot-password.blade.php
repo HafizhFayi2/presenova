@@ -8,8 +8,8 @@ $error = '';
 $success = '';
 $siteInfo = null;
 $db = new Database();
-$loginUrl = rtrim((string) url('login.php'), '/');
-$loginSiswaUrl = (string) url('login.php?role=siswa');
+$loginUrl = 'login.php';
+$loginSiswaUrl = 'login.php?role=siswa';
 
 // Security tuning
 $rateWindowMinutes = 15;
@@ -171,7 +171,13 @@ if (!empty($siteInfo['site_phone'])) {
     $contactParts[] = htmlspecialchars($siteInfo['site_phone'], ENT_QUOTES, 'UTF-8');
 }
 if (!empty($siteInfo['site_email'])) {
-    $contactParts[] = htmlspecialchars($siteInfo['site_email'], ENT_QUOTES, 'UTF-8');
+    $normalizedSiteEmail = trim((string) $siteInfo['site_email']);
+    if (preg_match('/^admin@presenova\.my\.id$/i', $normalizedSiteEmail) === 1) {
+        $normalizedSiteEmail = 'adm@presenova.my.id';
+    }
+    if ($normalizedSiteEmail !== '') {
+        $contactParts[] = htmlspecialchars($normalizedSiteEmail, ENT_QUOTES, 'UTF-8');
+    }
 }
 ?>
 
@@ -379,21 +385,46 @@ if (!empty($siteInfo['site_email'])) {
             box-shadow: 0 8px 20px rgba(16, 185, 129, 0.3);
         }
 
+        .btn-submit:active {
+            transform: translateY(0);
+            box-shadow: 0 4px 14px rgba(16, 185, 129, 0.22);
+        }
+
+        .btn-submit:focus-visible {
+            outline: none;
+            box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.2), 0 8px 20px rgba(16, 185, 129, 0.28);
+        }
+
         .login-footer {
             text-align: center;
             margin-top: 1.5rem;
-            font-size: 0.9rem;
-            color: var(--text-light);
         }
 
-        .login-footer a {
-            color: var(--primary-green);
+        .login-footer a.btn-back-login {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            width: 100%;
+            padding: 0.85rem;
+            border-radius: 12px;
+            border: 1.5px solid rgba(16, 185, 129, 0.28);
+            background: rgba(16, 185, 129, 0.06);
+            color: var(--dark-green);
+            font-weight: 600;
             text-decoration: none;
-            font-weight: 500;
+            transition: all 0.2s ease;
         }
 
-        .login-footer a:hover {
-            text-decoration: underline;
+        .login-footer a.btn-back-login:hover {
+            background: rgba(16, 185, 129, 0.12);
+            box-shadow: 0 8px 20px rgba(16, 185, 129, 0.2);
+            transform: translateY(-1px);
+        }
+
+        .login-footer a.btn-back-login:focus-visible {
+            outline: none;
+            box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.2);
         }
     </style>
 </head>
@@ -477,7 +508,9 @@ if (!empty($siteInfo['site_email'])) {
             </form>
 
             <div class="login-footer">
-                <a href="<?php echo htmlspecialchars($loginUrl, ENT_QUOTES, 'UTF-8'); ?>">Kembali ke Login</a>
+                <a class="btn-back-login" href="<?php echo htmlspecialchars($loginUrl, ENT_QUOTES, 'UTF-8'); ?>">
+                    <i class="fas fa-arrow-left"></i> Kembali ke Login
+                </a>
             </div>
         </div>
     </div>

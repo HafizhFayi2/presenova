@@ -1895,6 +1895,58 @@
         }
 
 @media (max-width: 992px) {
+        :root {
+                --blur: 10px;
+                --glass-shadow: 0 12px 24px rgba(15, 23, 42, 0.14);
+                --glass-shadow-strong: 0 18px 34px rgba(15, 23, 42, 0.2);
+        }
+
+        body {
+                background-attachment: scroll;
+        }
+
+        body::before {
+                opacity: 0.08;
+                filter: none;
+                transform: none;
+        }
+
+        .bg-orbs .orb {
+                animation: none;
+                opacity: 0.4;
+        }
+
+        .student-shell::before,
+        .nav-shell,
+        .sidebar,
+        .top-bar,
+        .dashboard-card,
+        .attendance-card,
+        .data-table-container,
+        .profile-card,
+        .riwayat-card,
+        .section-shell,
+        .student-info-card,
+        .filter-card,
+        .liquidGlass-wrapper,
+        .liquidGlass-content,
+        .liquidGlass-effect {
+                backdrop-filter: none !important;
+                -webkit-backdrop-filter: none !important;
+        }
+
+        .liquidGlass-effect {
+                display: none;
+                filter: none !important;
+        }
+
+        .dashboard-card:hover,
+        .attendance-card:hover,
+        .data-table-container:hover,
+        .liquidGlass-wrapper:hover {
+                transform: none;
+        }
+
         html,
         body {
                 max-width: 100%;
@@ -1944,12 +1996,23 @@
         /* Keep horizontal scroll only for actual table wrappers */
         .data-table-container,
         .table-responsive,
+        .dataTables_scroll,
         .dataTables_scrollBody {
                 overflow-x: auto;
                 overflow-y: hidden;
                 -webkit-overflow-scrolling: touch;
-                touch-action: pan-x;
                 max-width: 100%;
+        }
+
+        .data-table-container,
+        .dataTables_wrapper {
+                touch-action: pan-y pinch-zoom;
+        }
+
+        .table-responsive,
+        .dataTables_scroll,
+        .dataTables_scrollBody {
+                touch-action: pan-x pan-y pinch-zoom;
         }
 
         .table-responsive.dt-scroll {

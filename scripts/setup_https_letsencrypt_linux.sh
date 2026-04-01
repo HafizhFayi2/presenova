@@ -4,7 +4,7 @@ set -euo pipefail
 usage() {
   cat <<'USAGE'
 Usage:
-  sudo bash scripts/setup_https_letsencrypt_linux.sh --domain presenova.my.id --email admin@presenova.my.id [options]
+  sudo bash scripts/setup_https_letsencrypt_linux.sh --domain presenova.my.id --email adm@presenova.my.id [options]
 
 Options:
   --domain <domain>         Domain utama (wajib), contoh: presenova.my.id
