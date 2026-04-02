@@ -63,7 +63,7 @@ if (!defined('FACE_DESCRIPTOR_DISTANCE_THRESHOLD')) {
     define('FACE_DESCRIPTOR_DISTANCE_THRESHOLD', (float) runtime_env('FACE_DESCRIPTOR_THRESHOLD', 0.55));
 }
 if (!defined('FACE_MATCH_MODEL')) {
-    define('FACE_MATCH_MODEL', (string) runtime_env('FACE_MATCH_MODEL', 'SFace'));
+    define('FACE_MATCH_MODEL', (string) runtime_env('FACE_MATCH_MODEL', 'ArcFace'));
 }
 if (!defined('FACE_MATCH_DETECTOR')) {
     define('FACE_MATCH_DETECTOR', (string) runtime_env('FACE_MATCH_DETECTOR', 'opencv'));
@@ -78,7 +78,7 @@ if (!defined('FACE_MATCH_ENFORCE_DETECTION')) {
     );
 }
 if (!defined('FACE_MATCH_MAX_REFERENCES')) {
-    define('FACE_MATCH_MAX_REFERENCES', (int) runtime_env('FACE_MATCH_MAX_REFERENCES', 1));
+    define('FACE_MATCH_MAX_REFERENCES', (int) runtime_env('FACE_MATCH_MAX_REFERENCES', 5));
 }
 if (!defined('FACE_MATCH_ALLOW_FALLBACK')) {
     define(
@@ -93,13 +93,13 @@ if (!defined('FACE_MATCH_USE_BACKUP')) {
     );
 }
 if (!defined('FACE_MATCH_BACKUP_MODEL')) {
-    define('FACE_MATCH_BACKUP_MODEL', (string) runtime_env('FACE_MATCH_BACKUP_MODEL', 'SFace'));
+    define('FACE_MATCH_BACKUP_MODEL', (string) runtime_env('FACE_MATCH_BACKUP_MODEL', 'ArcFace'));
 }
 if (!defined('FACE_MATCH_BACKUP_DETECTOR')) {
     define('FACE_MATCH_BACKUP_DETECTOR', (string) runtime_env('FACE_MATCH_BACKUP_DETECTOR', 'mtcnn'));
 }
 if (!defined('FACE_MATCH_BACKUP_MAX_REFERENCES')) {
-    define('FACE_MATCH_BACKUP_MAX_REFERENCES', (int) runtime_env('FACE_MATCH_BACKUP_MAX_REFERENCES', 1));
+    define('FACE_MATCH_BACKUP_MAX_REFERENCES', (int) runtime_env('FACE_MATCH_BACKUP_MAX_REFERENCES', 5));
 }
 if (!defined('FACE_MATCH_DETECTOR_FALLBACKS')) {
     define(
@@ -110,9 +110,18 @@ if (!defined('FACE_MATCH_DETECTOR_FALLBACKS')) {
 if (!defined('FACE_MATCH_TIMEOUT_SECONDS')) {
     define('FACE_MATCH_TIMEOUT_SECONDS', (int) runtime_env('FACE_MATCH_TIMEOUT_SECONDS', 60));
 }
+if (!defined('FACE_MATCH_STRICT_MARGIN')) {
+    define('FACE_MATCH_STRICT_MARGIN', (float) runtime_env('FACE_MATCH_STRICT_MARGIN', 0.03));
+}
 
-$deepfaceVenvPython = public_path('face/.venv/Scripts/python.exe');
-$pythonBinDefault = is_file($deepfaceVenvPython) ? $deepfaceVenvPython : 'python';
+$deepfaceVenvPythonWindows = public_path('face/.venv/Scripts/python.exe');
+$deepfaceVenvPythonLinux = public_path('face/.venv/bin/python');
+$pythonBinDefault = 'python';
+if (is_file($deepfaceVenvPythonWindows)) {
+    $pythonBinDefault = $deepfaceVenvPythonWindows;
+} elseif (is_file($deepfaceVenvPythonLinux)) {
+    $pythonBinDefault = $deepfaceVenvPythonLinux;
+}
 if (!defined('PYTHON_BIN')) {
     define('PYTHON_BIN', (string) runtime_env('PYTHON_BIN', $pythonBinDefault));
 }
@@ -973,5 +982,3 @@ if (!function_exists('buildScheduleWindow')) {
         return [$start, $end, $base_end];
     }
 }
-
-

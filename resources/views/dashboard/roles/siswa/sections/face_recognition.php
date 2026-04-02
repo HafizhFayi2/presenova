@@ -507,14 +507,22 @@ document.addEventListener('DOMContentLoaded', function() {
     const descriptorHardFailDistance = Math.max(1.1, descriptorMaxDistance + 0.1);
     const faceLabel = page.dataset.faceLabel || '';
     const modelBase = '../face/faces_logics/models';
-    const faceModelFiles = [
-        'ssd_mobilenetv1_model-weights_manifest.json',
-        'ssd_mobilenetv1_model-shard1',
-        'ssd_mobilenetv1_model-shard2',
-        'tiny_face_detector_model-weights_manifest.json',
-        'tiny_face_detector_model-shard1',
+    const detectorModelFiles = {
+        tiny: [
+            'tiny_face_detector_model-weights_manifest.json',
+            'tiny_face_detector_model-shard1'
+        ],
+        ssd: [
+            'ssd_mobilenetv1_model-weights_manifest.json',
+            'ssd_mobilenetv1_model-shard1',
+            'ssd_mobilenetv1_model-shard2'
+        ]
+    };
+    const commonModelFiles = [
         'face_landmark_68_model-weights_manifest.json',
-        'face_landmark_68_model-shard1',
+        'face_landmark_68_model-shard1'
+    ];
+    const descriptorModelFiles = [
         'face_recognition_model-weights_manifest.json',
         'face_recognition_model-shard1',
         'face_recognition_model-shard2'
@@ -528,6 +536,15 @@ document.addEventListener('DOMContentLoaded', function() {
     const lastDistanceMaxAgeMs = 10 * 60 * 1000;
 
     const isMobileFr = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+    const hardwareThreads = Number.isFinite(navigator.hardwareConcurrency) ? navigator.hardwareConcurrency : 4;
+    const memoryHintGb = Number.isFinite(navigator.deviceMemory) ? navigator.deviceMemory : 4;
+    const saveDataEnabled = !!(navigator.connection && navigator.connection.saveData);
+    const reducedMotion = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+    const isConstrainedDevice = isMobileFr || saveDataEnabled || reducedMotion || hardwareThreads <= 4 || memoryHintGb <= 4;
+    const preferredDetector = isConstrainedDevice ? 'tiny' : 'ssd';
+    const allowDescriptorGuard = !isConstrainedDevice;
+    const tinyDetectorInputSize = isConstrainedDevice ? 192 : (isMobileFr ? 224 : 320);
+    const tinyDetectorScoreThreshold = isConstrainedDevice ? 0.45 : 0.5;
     const video = document.getElementById('faceVideo');
     const canvas = document.getElementById('faceCanvas');
     const previewImg = document.getElementById('facePreview');
@@ -706,7 +723,7 @@ document.addEventListener('DOMContentLoaded', function() {
     let attendanceInfoText = '';
     const SATELLITE_TILE_URL = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
 
-    let detectorType = 'tiny';
+    let detectorType = preferredDetector;
     const poseFlowEnabled = false;
     const poseRequiredPerSide = 5;
     const poseRequiredFront = 1;
@@ -752,14 +769,22 @@ document.addEventListener('DOMContentLoaded', function() {
     function getDetectorOptions() {
         if (detectorType === 'ssd') {
             return new faceapi.SsdMobilenetv1Options({
-                minConfidence: 0.5
+                minConfidence: isConstrainedDevice ? 0.45 : 0.5
             });
         }
 
         return new faceapi.TinyFaceDetectorOptions({
-            inputSize: isMobileFr ? 224 : 320,
-            scoreThreshold: 0.5
+            inputSize: tinyDetectorInputSize,
+            scoreThreshold: tinyDetectorScoreThreshold
         });
+    }
+
+    function withLandmarksChain(detectionTask, includeDescriptor = false) {
+        let task = detectionTask.withFaceLandmarks();
+        if (includeDescriptor && descriptorModelReady) {
+            task = task.withFaceDescriptor();
+        }
+        return task;
     }
 
     function setBadge(state, text) {
@@ -1034,10 +1059,10 @@ document.addEventListener('DOMContentLoaded', function() {
     function updateCaptureButtonByPose() {
         const hasStream = !!stream && !!video.srcObject;
         if (!poseFlowEnabled) {
-            captureBtn.disabled = !(hasStream && referenceReady);
+            captureBtn.disabled = !(hasStream && modelsReady && referenceReady);
             return;
         }
-        captureBtn.disabled = !(hasStream && referenceReady && poseCompleted);
+        captureBtn.disabled = !(hasStream && modelsReady && referenceReady && poseCompleted);
     }
 
     function refreshPoseButtons() {
@@ -1161,9 +1186,10 @@ document.addEventListener('DOMContentLoaded', function() {
         const poseCanvas = buildPoseFrameCanvas(640);
         if (!poseCanvas) return null;
 
-        let detection = await faceapi
-            .detectSingleFace(poseCanvas, getDetectorOptions())
-            .withFaceLandmarks();
+        let detection = await withLandmarksChain(
+            faceapi.detectSingleFace(poseCanvas, getDetectorOptions()),
+            false
+        );
 
         if (!detection) {
             return null;
@@ -2811,6 +2837,23 @@ document.addEventListener('DOMContentLoaded', function() {
         return `${cleanBase}/${cleanFile}`;
     }
 
+    function getWarmModelAssets() {
+        const detectorAssets = detectorModelFiles[preferredDetector] || detectorModelFiles.tiny;
+        const assets = [...detectorAssets, ...commonModelFiles];
+
+        if (!isConstrainedDevice) {
+            const fallbackDetector = preferredDetector === 'ssd' ? 'tiny' : 'ssd';
+            const fallbackAssets = detectorModelFiles[fallbackDetector] || [];
+            fallbackAssets.forEach((asset) => assets.push(asset));
+        }
+
+        if (allowDescriptorGuard) {
+            descriptorModelFiles.forEach((asset) => assets.push(asset));
+        }
+
+        return Array.from(new Set(assets));
+    }
+
     function warmReferenceAsset() {
         if (!referenceUrl || referencePrefetchStarted) {
             return;
@@ -2853,7 +2896,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         modelWarmupStarted = true;
 
-        const assetQueue = faceModelFiles.map((file) => resolveModelUrl(file));
+        const assetQueue = getWarmModelAssets().map((file) => resolveModelUrl(file));
         if (referenceUrl) {
             assetQueue.push(referenceUrl);
         }
@@ -2951,36 +2994,43 @@ document.addEventListener('DOMContentLoaded', function() {
 
         modelLoadPromise = (async () => {
             try {
-                if (isMobileFr) {
-                    /* Mobile: load lighter TinyFaceDetector first (~200KB vs ~6MB SSD) */
+                const detectorOrder = preferredDetector === 'tiny'
+                    ? ['tiny', 'ssd']
+                    : ['ssd', 'tiny'];
+                let detectorLoaded = false;
+                for (const detectorName of detectorOrder) {
                     try {
-                        await faceapi.nets.tinyFaceDetector.loadFromUri(modelBase);
-                        detectorType = 'tiny';
-                    } catch (error) {
-                        await faceapi.nets.ssdMobilenetv1.loadFromUri(modelBase);
-                        detectorType = 'ssd';
-                    }
-                } else {
-                    try {
-                        await faceapi.nets.ssdMobilenetv1.loadFromUri(modelBase);
-                        detectorType = 'ssd';
-                    } catch (error) {
-                        detectorType = 'tiny';
-                        await faceapi.nets.tinyFaceDetector.loadFromUri(modelBase);
+                        if (detectorName === 'tiny') {
+                            await faceapi.nets.tinyFaceDetector.loadFromUri(modelBase);
+                            detectorType = 'tiny';
+                        } else {
+                            await faceapi.nets.ssdMobilenetv1.loadFromUri(modelBase);
+                            detectorType = 'ssd';
+                        }
+                        detectorLoaded = true;
+                        break;
+                    } catch (detectorError) {
+                        // Try next candidate.
                     }
                 }
+                if (!detectorLoaded) {
+                    throw new Error('Model deteksi wajah tidak dapat dimuat.');
+                }
 
-                await Promise.all([
-                    faceapi.nets.faceLandmark68Net.loadFromUri(modelBase),
-                    faceapi.nets.faceRecognitionNet
+                await faceapi.nets.faceLandmark68Net.loadFromUri(modelBase);
+
+                if (allowDescriptorGuard) {
+                    await faceapi.nets.faceRecognitionNet
                         .loadFromUri(modelBase)
                         .then(() => {
                             descriptorModelReady = true;
                         })
                         .catch(() => {
                             descriptorModelReady = false;
-                        })
-                ]);
+                        });
+                } else {
+                    descriptorModelReady = false;
+                }
 
                 modelsReady = true;
                 if (!silent) {
@@ -3004,12 +3054,10 @@ document.addEventListener('DOMContentLoaded', function() {
 
         referenceDescriptorPromise = (async () => {
             const refImg = await faceapi.fetchImage(referenceUrl);
-            let detectionTask = faceapi
-                .detectSingleFace(refImg, getDetectorOptions())
-                .withFaceLandmarks();
-            if (descriptorModelReady) {
-                detectionTask = detectionTask.withFaceDescriptor();
-            }
+            const detectionTask = withLandmarksChain(
+                faceapi.detectSingleFace(refImg, getDetectorOptions()),
+                true
+            );
 
             const detection = await detectionTask;
             if (!detection) {
@@ -3344,12 +3392,10 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         }
 
-        let detectionTask = faceapi
-            .detectSingleFace(canvas, getDetectorOptions())
-            .withFaceLandmarks();
-        if (descriptorModelReady) {
-            detectionTask = detectionTask.withFaceDescriptor();
-        }
+        let detectionTask = withLandmarksChain(
+            faceapi.detectSingleFace(canvas, getDetectorOptions()),
+            true
+        );
         const detection = await detectionTask;
 
         if (!detection) {
@@ -3499,14 +3545,17 @@ document.addEventListener('DOMContentLoaded', function() {
         setStatus('Memuat model dan menyiapkan kamera...');
 
         try {
-            await loadModels();
             await startCamera();
             retryBtn.disabled = false;
-            setBadge('ready', 'Siap');
-            setStatus('Kamera aktif. Konfirmasi siap untuk memulai validasi pose otomatis.');
             setCameraStatus('Kamera aktif');
+            setStatus('Kamera aktif. Menyiapkan engine verifikasi wajah...');
             resetPoseValidation();
             startMemoryMonitor();
+            await new Promise((resolve) => setTimeout(resolve, 60));
+
+            await loadModels();
+            setBadge('loading', 'Menyiapkan');
+            setStatus('Model siap. Menyiapkan foto referensi...');
 
             try {
                 await loadReferenceDescriptor();

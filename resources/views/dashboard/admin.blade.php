@@ -14,13 +14,13 @@ if (!$auth->isLoggedIn()) {
 // ROUTING BERDASARKAN ROLE
 // Jika siswa, redirect ke dashboard siswa
 if (isset($_SESSION['student_id'])) {
-    header("Location: dashboard/siswa.php");
+    header("Location: siswa.php");
     exit();
 }
 
 // Jika guru, redirect ke dashboard guru
 if (isset($_SESSION['teacher_id'])) {
-    header("Location: dashboard/guru.php");
+    header("Location: guru.php");
     exit();
 }
 

@@ -14,17 +14,18 @@ class FaceMatcherService
     private $pythonScript = null;
     private $pythonEnabled = false;
     private $allowFallback = false;
-    private $deepfaceModel = 'SFace';
+    private $deepfaceModel = 'ArcFace';
     private $deepfaceDetector = 'opencv';
     private $deepfaceMetric = 'cosine';
     private $deepfaceEnforceDetection = true;
-    private $deepfaceMaxReferences = 1;
+    private $deepfaceMaxReferences = 5;
     private $deepfaceUseBackup = true;
-    private $deepfaceBackupModel = 'SFace';
+    private $deepfaceBackupModel = 'ArcFace';
     private $deepfaceBackupDetector = 'mtcnn';
-    private $deepfaceBackupMaxReferences = 1;
+    private $deepfaceBackupMaxReferences = 5;
     private $deepfaceDetectorFallbacks = false;
     private $pythonTimeoutSeconds = 60;
+    private $deepfaceStrictMargin = 0.03;
     private const REFERENCE_CACHE_TTL_SECONDS = 120;
     private static array $referenceCandidatesCache = [];
     
@@ -82,6 +83,10 @@ class FaceMatcherService
         }
         if (defined('FACE_MATCH_TIMEOUT_SECONDS')) {
             $this->pythonTimeoutSeconds = max(15, (int) FACE_MATCH_TIMEOUT_SECONDS);
+        }
+        if (defined('FACE_MATCH_STRICT_MARGIN')) {
+            $margin = (float) FACE_MATCH_STRICT_MARGIN;
+            $this->deepfaceStrictMargin = max(0.0, min(0.2, $margin));
         }
 
         $scriptPath = realpath(public_path('face/faces_conf/face_match.py'));
@@ -458,6 +463,7 @@ class FaceMatcherService
             . ' --backup-detector ' . escapeshellarg($this->deepfaceBackupDetector)
             . ' --backup-max-references ' . escapeshellarg((string) $this->deepfaceBackupMaxReferences)
             . ' --detector-fallbacks ' . escapeshellarg($this->deepfaceDetectorFallbacks ? 'true' : 'false')
+            . ' --strict-margin ' . escapeshellarg((string) $this->deepfaceStrictMargin)
             . ' --max-runtime-seconds ' . escapeshellarg((string) $this->pythonTimeoutSeconds);
 
         if ($label !== '') {
@@ -501,6 +507,7 @@ class FaceMatcherService
         $details['backup_enabled'] = $this->deepfaceUseBackup;
         $details['backup_model'] = $this->deepfaceBackupModel;
         $details['backup_detector'] = $this->deepfaceBackupDetector;
+        $details['strict_margin'] = $this->deepfaceStrictMargin;
 
         $result = [
             'success' => true,
