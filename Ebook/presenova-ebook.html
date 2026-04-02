@@ -165,8 +165,8 @@ body.performance-lite .review-item::before {
 /* -- NAVBAR -- */
 #navbar {
   position: fixed;
-  top: 0; left: 50%;
-  transform: translateX(-50%) translateY(-100%);
+  top: max(0px, env(safe-area-inset-top)); left: 50%;
+  transform: translateX(-50%) translateY(calc(-100% - 30px));
   z-index: 900;
   display: flex;
   align-items: center;
@@ -178,10 +178,19 @@ body.performance-lite .review-item::before {
   margin-top: 16px;
   overflow: hidden;
   isolation: isolate;
-  transition: transform .5s cubic-bezier(.34,1.56,.64,1), box-shadow .5s ease, border-color .5s ease;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: transform .5s cubic-bezier(.34,1.56,.64,1), opacity .24s ease, box-shadow .5s ease, border-color .5s ease, visibility 0s linear .24s;
   box-shadow: 0 8px 40px rgba(0,0,0,.5), 0 0 26px var(--nav-glow), 0 0 0 1px rgba(232,160,18,.05);
 }
-#navbar.visible { transform: translateX(-50%) translateY(0); }
+#navbar.visible {
+  transform: translateX(-50%) translateY(0);
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transition-delay: 0s;
+}
 #navbar::before,
 #navbar::after {
   content: '';
@@ -211,6 +220,12 @@ body.performance-lite .review-item::before {
   letter-spacing: 2px;
   margin-right: 24px;
   white-space: nowrap;
+  text-decoration: none;
+  transition: color .22s ease, text-shadow .22s ease;
+}
+.nav-brand:hover {
+  color: var(--gold2);
+  text-shadow: 0 0 12px rgba(245,200,66,.35);
 }
 .nav-links {
   display: flex;
@@ -1200,9 +1215,59 @@ footer {
 @media (max-width: 900px) {
   section { padding: 100px 24px 60px; }
   .problems-grid, .features-showcase, .feat-grid-4 { grid-template-columns: 1fr; }
-  #navbar { padding: 8px 8px 8px 20px; }
+  #navbar {
+    width: min(94vw, 560px);
+    padding: 8px 8px 8px 14px;
+    margin-top: 10px;
+  }
+  .nav-brand {
+    font-size: .72rem;
+    letter-spacing: 1.4px;
+    margin-right: 12px;
+  }
+  .nav-links { gap: 2px; }
+  .nav-links a {
+    font-size: .66rem;
+    letter-spacing: .7px;
+    padding: 7px 10px;
+  }
   .nav-links li:nth-child(n+3) { display:none; }
   .badge { animation-duration: 7.5s; }
+}
+
+@media (max-width: 560px) {
+  #navbar {
+    width: min(96vw, 420px);
+    padding: 8px 8px 8px 10px;
+    border-radius: 16px;
+  }
+  .nav-brand {
+    font-size: .66rem;
+    letter-spacing: 1px;
+    margin-right: 8px;
+  }
+  .nav-links a {
+    font-size: .62rem;
+    letter-spacing: .45px;
+    padding: 6px 8px;
+  }
+}
+
+@media (max-width: 420px) {
+  #navbar {
+    width: calc(100vw - 12px);
+    padding: 7px 7px 7px 9px;
+  }
+  .nav-brand {
+    font-size: .62rem;
+    letter-spacing: .8px;
+    margin-right: 6px;
+  }
+  .nav-links a {
+    font-size: .58rem;
+    letter-spacing: .35px;
+    padding: 6px 7px;
+  }
 }
 </style>
 </head>
@@ -1221,7 +1286,7 @@ footer {
 
 <!-- NAVBAR -->
 <nav id="navbar">
-  <div class="nav-brand">PRESENOVA</div>
+  <a class="nav-brand" id="nav-brand-link" href="./getstarted/index.php" aria-label="Buka halaman Get Started PRESENOVA">PRESENOVA</a>
   <ul class="nav-links">
     <li><a href="#cover" data-section="cover">Home</a></li>
     <li><a href="#masalah" data-section="masalah">Masalah</a></li>
@@ -1708,6 +1773,37 @@ function detectAppBasePath(){
   }
 
   return '';
+}
+
+function resolveGetStartedUrl(){
+  const params = new URLSearchParams(window.location.search);
+  const forcedUrl = params.get('get_started_url');
+  if(forcedUrl){
+    try {
+      return new URL(forcedUrl, window.location.href).toString();
+    } catch (error) {
+      // Ignore invalid override URL.
+    }
+  }
+
+  if(!isHttpProtocol){
+    return './getstarted/index.php';
+  }
+
+  const host = String(window.location.hostname || '').toLowerCase();
+  if(host.endsWith('.presenova.my.id') && host !== 'presenova.my.id'){
+    return `${window.location.protocol}//presenova.my.id/getstarted/index.php`;
+  }
+
+  const appBasePath = detectAppBasePath();
+  const relativePath = appBasePath ? `${appBasePath}/getstarted/index.php` : '/getstarted/index.php';
+  return `${window.location.origin}${relativePath}`;
+}
+
+function initGetStartedLink(){
+  const brandLink = document.getElementById('nav-brand-link');
+  if(!brandLink) return;
+  brandLink.href = resolveGetStartedUrl();
 }
 
 function buildApiEndpointCandidates(){
@@ -2277,6 +2373,7 @@ function showToast(){
 }
 
 async function initRatingSystem(){
+  initGetStartedLink();
   updateSuggestionHint();
   ratings = loadStoredRatings();
   updateRatingUI();
