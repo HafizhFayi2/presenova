@@ -88,7 +88,7 @@ Contoh VirtualHost:
 ```apache
 <VirtualHost *:80>
     ServerName presenova.my.id
-    ServerAdmin admin@presenova.my.id
+    ServerAdmin adm@presenova.my.id
     DocumentRoot /var/www/presenova/public
 
     <Directory /var/www/presenova/public>
@@ -109,7 +109,7 @@ Gunakan installer otomatis berikut agar Apache langsung aktif HTTPS + redirect H
 ```bash
 sudo bash scripts/setup_https_letsencrypt_linux.sh \
   --domain presenova.my.id \
-  --email admin@presenova.my.id \
+  --email adm@presenova.my.id \
   --app-dir /var/www/presenova \
   --aliases www.presenova.my.id
 ```
@@ -813,4 +813,3 @@ Dokumen ini menetapkan kebijakan retensi data untuk transparansi komunitas sekol
 ---
 
 ---
-

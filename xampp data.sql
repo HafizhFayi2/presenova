@@ -795,7 +795,7 @@ CREATE TABLE `site` (
 --
 
 INSERT INTO `site` (`site_id`, `site_url`, `site_name`, `site_phone`, `site_address`, `site_description`, `site_logo`, `site_email`, `site_email_domain`, `time_tolerance`, `enable_gps_validation`, `enable_photo_validation`, `default_location_id`) VALUES
-(1, 'http://localhost/presenova/', 'presenova', '0811-1444-240', 'Jl. Ciantra, Sukadami, Cikarang Selatan', 'Sistem Absensi Online dengan Foto Selfie & GPS Validation', 'presenova.png', 'admin@presenova.my.id', 'presenova.my.id', 15, 'Y', 'Y', 1);
+(1, 'http://localhost/presenova/', 'presenova', '0811-1444-240', 'Jl. Ciantra, Sukadami, Cikarang Selatan', 'Sistem Absensi Online dengan Foto Selfie & GPS Validation', 'presenova.png', 'adm@presenova.my.id', 'presenova.my.id', 15, 'Y', 'Y', 1);
 
 -- --------------------------------------------------------
 
@@ -1328,7 +1328,7 @@ CREATE TABLE `user` (
 --
 
 INSERT INTO `user` (`user_id`, `username`, `email`, `password`, `fullname`, `registered`, `created_login`, `last_login`, `session`, `ip`, `browser`, `level`, `is_active`) VALUES
-(1, 'adm', 'admin@presenova.my.id', '0e8910802f4d94f33b73469695c7ac7783941e8134c24005e706d6760a228276', 'Administrator', '2026-01-29 23:34:21', '2026-01-29 23:34:21', '2026-02-16 19:00:00', '-', '127.0.0.1', 'Chrome', 1, 'N'),
+(1, 'adm', 'adm@presenova.my.id', '0e8910802f4d94f33b73469695c7ac7783941e8134c24005e706d6760a228276', 'Administrator', '2026-01-29 23:34:21', '2026-01-29 23:34:21', '2026-02-16 19:00:00', '-', '127.0.0.1', 'Chrome', 1, 'N'),
 (2, 'operator', 'operator@smkn1cikarang.sch.id', 'ec276d4c3452a528915c218e1b878d0e8119c5b1142215817747d1e784bb0a8b', 'Operator', '2026-01-29 23:34:21', '2026-01-29 23:34:21', '2026-02-19 05:53:00', '-', '127.0.0.1', 'Chrome', 2, 'Y'),
 (3, 'hafizh', 'hafizhoffcll@gmail.com', 'ec276d4c3452a528915c218e1b878d0e8119c5b1142215817747d1e784bb0a8b', 'hafizh', '2026-02-13 23:19:55', NULL, '2026-02-19 21:22:36', '-', '0', 'Unknown', 1, 'Y');
 

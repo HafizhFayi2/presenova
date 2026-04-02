@@ -1,15 +1,44 @@
 <?php
-// Generate canonical URL
-$fullurl = ($_SERVER['PHP_SELF']);
+// Build URLs from current request context so links stay in this app (not XAMPP root).
+$requestPath = (string) parse_url((string) ($_SERVER['REQUEST_URI'] ?? ''), PHP_URL_PATH);
+$scriptName = str_replace('\\', '/', (string) ($_SERVER['SCRIPT_NAME'] ?? ''));
+$scriptDir = trim((string) dirname($scriptName), '/.');
+$scriptSegments = array_values(array_filter(
+    explode('/', $scriptDir),
+    static fn (string $segment): bool => $segment !== ''
+));
+if ($scriptSegments !== [] && strcasecmp((string) end($scriptSegments), 'public') === 0) {
+    array_pop($scriptSegments);
+}
+$basePrefix = $scriptSegments === [] ? '' : '/' . implode('/', $scriptSegments);
+
+$appPath = static function (string $path = '') use ($basePrefix): string {
+    $cleanPath = ltrim($path, '/');
+    if ($cleanPath === '') {
+        return $basePrefix === '' ? '/' : $basePrefix . '/';
+    }
+
+    return ($basePrefix === '' ? '/' : $basePrefix . '/') . $cleanPath;
+};
+
+$isHttps = (!empty($_SERVER['HTTPS']) && strtolower((string) $_SERVER['HTTPS']) !== 'off')
+    || (isset($_SERVER['REQUEST_SCHEME']) && strtolower((string) $_SERVER['REQUEST_SCHEME']) === 'https')
+    || ((int) ($_SERVER['SERVER_PORT'] ?? 80) === 443);
+$scheme = $isHttps ? 'https' : 'http';
+$host = trim((string) ($_SERVER['HTTP_HOST'] ?? 'localhost'));
+$siteUrl = $scheme . '://' . $host . ($basePrefix !== '' ? $basePrefix : '') . '/';
+
+$canonicalUrl = $requestPath !== '' ? $scheme . '://' . $host . $requestPath : ($siteUrl . 'call.php');
+$fullurl = $requestPath !== '' ? $requestPath : ($basePrefix . '/call.php');
 $trimmed = trim($fullurl, ".php");
 $canonical = rtrim($trimmed, '/' . '/?');
-$siteUrl = rtrim((string) url('/'), '/') . '/';
-$loginUrl = rtrim((string) url('login.php'), '/');
-$logoutUrl = rtrim((string) url('logout.php'), '/');
-$registerUrl = rtrim((string) url('register.php'), '/');
-$adminDashboardUrl = rtrim((string) url('dashboard/admin.php'), '/');
-$guruDashboardUrl = rtrim((string) url('dashboard/guru.php'), '/');
-$siswaDashboardUrl = rtrim((string) url('dashboard/siswa.php'), '/');
+
+$loginUrl = $appPath('login.php');
+$logoutUrl = $appPath('logout.php');
+$registerUrl = $appPath('register.php');
+$adminDashboardUrl = $appPath('dashboard/admin.php');
+$guruDashboardUrl = $appPath('dashboard/guru.php');
+$siswaDashboardUrl = $appPath('dashboard/siswa.php');
 
 // Set title halaman
 $pageTitle = "call - presenova";
@@ -51,7 +80,7 @@ $registrationMailtoDraft = $registrationMailto . '?subject=' . $registrationSubj
     <!-- Canonical -->
     <meta content="index, follow" name="robots"/>
     <link href="<?php echo $siteUrl; ?>" rel="home"/>
-    <link href="<?php echo $siteUrl . $fullurl; ?>" rel="canonical"/>
+    <link href="<?php echo htmlspecialchars($canonicalUrl, ENT_QUOTES, 'UTF-8'); ?>" rel="canonical"/>
     
     <!-- Title -->
     <title><?php echo $pageTitle; ?></title>
@@ -60,7 +89,7 @@ $registrationMailtoDraft = $registrationMailto . '?subject=' . $registrationSubj
     <meta property="og:type" content="website"/>
     <meta property="og:title" content="call - presenova"/>
     <meta property="og:description" content="Halaman registrasi akun peserta Presenova melalui administrator"/>
-    <meta property="og:url" content="<?php echo $siteUrl . $fullurl; ?>"/>
+    <meta property="og:url" content="<?php echo htmlspecialchars($canonicalUrl, ENT_QUOTES, 'UTF-8'); ?>"/>
     <meta property="og:site_name" content="Presenova"/>
     <meta property="og:image" content="<?php echo $siteUrl; ?>assets/images/presenova.png"/>
     <meta property="og:image:width" content="1200"/>
