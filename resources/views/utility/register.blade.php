@@ -292,114 +292,352 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['face_data'])) {
     <link rel="stylesheet" href="<?php echo htmlspecialchars($appDialogCssUrl, ENT_QUOTES, 'UTF-8'); ?>">
     <link rel="stylesheet" href="<?php echo htmlspecialchars($mainStyleCssUrl, ENT_QUOTES, 'UTF-8'); ?>">
     <style>
+        :root {
+            --page-bg: #050b16;
+            --card-bg: rgba(10, 20, 40, 0.9);
+            --card-border: rgba(96, 165, 250, 0.25);
+            --panel-bg: rgba(10, 18, 34, 0.92);
+            --panel-border: rgba(56, 189, 248, 0.24);
+            --surface-soft: rgba(15, 27, 49, 0.8);
+            --stroke-soft: rgba(148, 163, 184, 0.28);
+            --text-main: #eaf2ff;
+            --text-muted: #9cb0cc;
+            --accent: #38bdf8;
+            --accent-soft: #22d3ee;
+            --accent-strong: #60a5fa;
+            --danger: #fb7185;
+            --warning: #f59e0b;
+            --success: #34d399;
+        }
+
+        body.guide-mobile-open {
+            overflow: hidden;
+        }
+
         .register-container {
             min-height: 100vh;
-            background: linear-gradient(135deg, #0a0f1e 0%, #1a2332 100%);
+            background:
+                radial-gradient(1200px 520px at 10% -20%, rgba(56, 189, 248, 0.14), transparent 60%),
+                radial-gradient(900px 420px at 92% 115%, rgba(96, 165, 250, 0.1), transparent 65%),
+                linear-gradient(140deg, var(--page-bg) 0%, #081327 52%, #0d1d3a 100%);
             display: flex;
-            align-items: center;
+            align-items: flex-start;
             justify-content: center;
             position: relative;
             overflow: hidden;
-            padding: 72px 14px 18px;
+            padding: 76px 16px 12px;
         }
-        
+
+        .register-layout {
+            width: min(1320px, 100%);
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) 270px;
+            grid-auto-flow: dense;
+            gap: 12px;
+            align-items: start;
+            position: relative;
+            z-index: 5;
+        }
+
+        .register-brand-bg {
+            position: fixed;
+            inset: 0;
+            z-index: 4;
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            opacity: 1;
+            user-select: none;
+            transform: translateY(10px);
+        }
+
+        .brand-kicker {
+            letter-spacing: 0.55em;
+            text-transform: uppercase;
+            font-size: clamp(0.46rem, 0.72vw, 0.72rem);
+            color: rgba(248, 211, 120, 0.62);
+            margin-bottom: 10px;
+        }
+
+        .brand-pre {
+            font-family: "Times New Roman", Georgia, serif;
+            font-size: clamp(3.8rem, 10vw, 11rem);
+            line-height: 0.88;
+            font-weight: 700;
+            letter-spacing: 0.06em;
+            color: rgba(252, 246, 226, 0.54);
+            text-shadow: 0 0 34px rgba(255, 220, 130, 0.2);
+        }
+
+        .brand-senova {
+            font-family: "Times New Roman", Georgia, serif;
+            font-size: clamp(4.1rem, 11.2vw, 12.5rem);
+            line-height: 0.88;
+            font-weight: 700;
+            letter-spacing: 0.03em;
+            margin-top: -8px;
+            background: linear-gradient(105deg, rgba(251, 191, 36, 0.64) 0%, rgba(196, 220, 110, 0.62) 45%, rgba(45, 212, 191, 0.68) 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            text-shadow: 0 0 54px rgba(250, 204, 21, 0.26);
+        }
+
+        .brand-tagline {
+            font-family: "Times New Roman", Georgia, serif;
+            margin-top: 8px;
+            font-size: clamp(1rem, 2vw, 2.1rem);
+            font-style: italic;
+            color: rgba(255, 224, 174, 0.58);
+        }
+
         .logout-btn-container {
             position: absolute;
             top: 20px;
             right: 20px;
-            z-index: 100;
+            z-index: 110;
         }
-        
+
         .logout-btn {
-            background: rgba(255, 107, 107, 0.2);
-            border: 1px solid rgba(255, 107, 107, 0.5);
-            color: #ff6b6b;
-            padding: 10px 20px;
-            border-radius: 8px;
+            background: rgba(251, 113, 133, 0.15);
+            border: 1px solid transparent;
+            color: #fda4af;
+            padding: 10px 22px;
+            border-radius: 10px;
             text-decoration: none;
-            font-weight: 600;
+            font-weight: 700;
             display: flex;
             align-items: center;
             gap: 8px;
-            transition: all 0.3s ease;
+            transition: all 0.25s ease;
         }
-        
+
         .logout-btn:hover {
-            background: rgba(255, 107, 107, 0.3);
-            border-color: #ff6b6b;
+            background: rgba(251, 113, 133, 0.28);
+            border-color: #fda4af;
             color: #fff;
             transform: translateY(-2px);
-            box-shadow: 0 5px 15px rgba(255, 107, 107, 0.3);
+            box-shadow: 0 10px 28px rgba(251, 113, 133, 0.24);
         }
-        
+
+        .student-info {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            z-index: 110;
+            background: rgba(15, 23, 42, 0.56);
+            padding: 10px 18px;
+            border-radius: 10px;
+            border: 1px solid transparent;
+            box-shadow: 0 8px 20px rgba(4, 8, 20, 0.35);
+        }
+
+        .student-info .name {
+            color: #edf4ff;
+            font-weight: 700;
+            font-size: 1.06rem;
+        }
+
+        .student-info .nisn {
+            color: #9fb1c9;
+            font-size: 0.84rem;
+            margin-top: 2px;
+        }
+
         .register-card {
-            background: rgba(15, 22, 41, 0.9);
-            backdrop-filter: blur(20px);
-            border: 1px solid rgba(0, 255, 136, 0.2);
-            border-radius: 16px;
-            padding: 22px;
+            grid-column: 1;
+            grid-row: 1;
+            background: var(--card-bg);
+            backdrop-filter: blur(16px);
+            border: 1px solid transparent;
+            border-radius: 18px;
+            padding: 14px 16px;
+            box-shadow: 0 22px 60px rgba(2, 7, 19, 0.5);
             width: 100%;
-            max-width: 700px;
-            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
-            position: relative;
-            z-index: 2;
         }
-        
+
         .register-title {
             font-family: 'Orbitron', sans-serif;
             font-weight: 700;
-            font-size: 1.7rem;
-            background: linear-gradient(135deg, #00ff88 0%, #00d4ff 100%);
+            font-size: clamp(1.35rem, 1.55vw, 1.88rem);
+            background: linear-gradient(120deg, var(--accent-soft) 0%, var(--accent-strong) 100%);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             background-clip: text;
             text-align: center;
-            margin-bottom: 16px;
+            margin-bottom: 8px;
+            letter-spacing: 0.02em;
         }
-        
-        .instructions {
-            background: rgba(0, 255, 136, 0.1);
-            border: 1px solid rgba(0, 255, 136, 0.3);
-            border-radius: 10px;
-            padding: 14px;
-            margin-bottom: 14px;
+
+        .register-subtitle {
+            color: var(--text-muted);
+            text-align: center;
+            margin: 0 0 8px;
+            font-size: 0.84rem;
         }
-        
-        .instructions h4 {
-            color: #00ff88;
-            margin-bottom: 10px;
-            font-size: 1.05rem;
+
+        .register-guide {
+            grid-column: 2;
+            grid-row: 1;
+            background: var(--panel-bg);
+            border: 1px solid transparent;
+            border-radius: 14px;
+            padding: 10px 11px;
+            color: var(--text-main);
+            box-shadow: 0 18px 40px rgba(2, 7, 19, 0.45);
+            align-self: start;
         }
-        
-        .instructions ol {
-            color: #8b92a8;
-            padding-left: 18px;
+
+        .guide-header {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 8px;
+            margin-bottom: 7px;
+        }
+
+        .guide-header h4 {
+            font-size: 0.9rem;
             margin: 0;
-            font-size: 0.92rem;
+            color: var(--accent-soft);
         }
-        
-        .instructions li {
-            margin-bottom: 6px;
+
+        .guide-header p {
+            margin: 2px 0 0;
+            color: var(--text-muted);
+            font-size: 0.76rem;
+            line-height: 1.35;
         }
-        
+
+        .guide-close {
+            display: none;
+            width: 30px;
+            height: 30px;
+            border-radius: 999px;
+            border: 1px solid rgba(148, 163, 184, 0.35);
+            background: rgba(30, 41, 59, 0.75);
+            color: #d8e2f2;
+            line-height: 1;
+            font-size: 1.05rem;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+        }
+
+        .guide-list {
+            margin: 0;
+            padding-left: 14px;
+            color: #b8cce4;
+            font-size: 0.74rem;
+            line-height: 1.35;
+        }
+
+        .guide-list li {
+            margin-bottom: 3px;
+        }
+
+        .guide-list li:last-child {
+            margin-bottom: 0;
+        }
+
+        .guide-progress-card {
+            margin-top: 8px;
+            background: rgba(8, 15, 30, 0.74);
+            border: 1px solid transparent;
+            border-radius: 10px;
+            padding: 7px 8px;
+        }
+
+        .guide-progress-top {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            margin-bottom: 8px;
+        }
+
+        .guide-progress-top span {
+            color: #98b1cf;
+            font-size: 0.67rem;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+        }
+
+        .guide-progress-top strong {
+            color: #d6ebfd;
+            font-size: 0.93rem;
+        }
+
+        .guide-progress-mini {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 5px;
+            font-size: 0.72rem;
+        }
+
+        .guide-progress-mini span {
+            display: block;
+            text-align: center;
+            padding: 6px 4px;
+            border-radius: 8px;
+            border: 1px solid transparent;
+            background: rgba(20, 33, 56, 0.46);
+            color: #9db4d1;
+        }
+
+        .guide-progress-mini strong {
+            color: #deebf8;
+            display: block;
+            font-size: 0.82rem;
+            margin-top: 1px;
+        }
+
+        .pose-instruction {
+            margin-top: 8px;
+            border-radius: 9px;
+            padding: 7px 8px;
+            background: rgba(14, 116, 144, 0.16);
+            border: 1px solid transparent;
+            color: #d9eeff;
+            font-size: 0.73rem;
+            line-height: 1.35;
+            min-height: 40px;
+        }
+
+        .guide-fab {
+            display: none;
+        }
+
+        .guide-backdrop {
+            display: none;
+        }
+
         .camera-container {
             position: relative;
-            width: 100%;
-            max-width: 420px;
-            margin: 0 auto 12px;
+            width: min(100%, 68vh);
+            max-width: 620px;
+            margin: 0 auto 8px;
+            border-radius: 14px;
+            overflow: hidden;
+            border: 1px solid transparent;
+            box-shadow: 0 12px 26px rgba(2, 7, 19, 0.45);
+            background: #020912;
         }
-        
+
         #video {
             width: 100%;
-            border-radius: 10px;
+            border-radius: 14px;
             transform: scaleX(-1);
             display: block;
         }
-        
+
         #canvas {
             display: none;
         }
-        
+
         .face-overlay {
             position: absolute;
             top: 0;
@@ -411,165 +649,21 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['face_data'])) {
             justify-content: center;
             pointer-events: none;
         }
-        
+
         .face-guide {
-            width: 170px;
-            height: 220px;
-            border: 2px solid #00ff88;
-            border-radius: 10px;
-            position: relative;
-            box-shadow: 0 0 20px rgba(0, 255, 136, 0.5);
-        }
-        
-        .capture-btn {
-            background: linear-gradient(135deg, #00ff88 0%, #00d4ff 100%);
-            border: none;
-            color: #0a0f1e;
-            font-weight: 700;
-            padding: 11px 20px;
-            border-radius: 10px;
-            font-size: 0.95rem;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            margin: 0 auto;
-        }
-        
-        .capture-btn:hover {
-            transform: translateY(-3px);
-            box-shadow: 0 10px 30px rgba(0, 255, 136, 0.5);
-        }
-        
-        .capture-btn:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-        }
-        
-        .preview-container {
-            display: none;
-            text-align: center;
-            margin-top: 12px;
-        }
-        
-        #preview {
-            max-width: 300px;
-            border-radius: 10px;
-            margin-bottom: 20px;
-        }
-        
-        .btn-group {
-            display: flex;
-            gap: 10px;
-            justify-content: center;
-        }
-        
-        .btn-retake, .btn-submit {
-            padding: 10px 20px;
-            border-radius: 8px;
-            border: none;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.3s ease;
-        }
-        
-        .btn-retake {
-            background: rgba(255, 255, 255, 0.1);
-            color: #ffffff;
-            border: 1px solid rgba(255, 255, 255, 0.2);
-        }
-        
-        .btn-submit {
-            background: linear-gradient(135deg, #00ff88 0%, #00d4ff 100%);
-            color: #0a0f1e;
-        }
-        
-        .btn-retake:hover, .btn-submit:hover {
-            transform: translateY(-2px);
-        }
-        
-        .success-message {
-            text-align: center;
-            padding: 40px;
-        }
-        
-        .success-icon {
-            font-size: 4rem;
-            color: #00ff88;
-            margin-bottom: 20px;
-        }
-        
-        .error-message {
-            background: rgba(255, 0, 0, 0.1);
-            border: 1px solid rgba(255, 0, 0, 0.3);
-            color: #ff6b6b;
-            padding: 10px;
-            border-radius: 8px;
-            margin-bottom: 20px;
-            text-align: center;
-        }
-
-        .notice-message {
-            background: rgba(255, 193, 7, 0.12);
-            border: 1px solid rgba(255, 193, 7, 0.35);
-            color: #ffd166;
-            padding: 10px;
-            border-radius: 8px;
-            margin-bottom: 20px;
-            text-align: center;
-        }
-        
-        .student-info {
-            position: absolute;
-            top: 20px;
-            left: 20px;
-            z-index: 100;
-            background: rgba(255, 255, 255, 0.05);
-            padding: 10px 20px;
-            border-radius: 8px;
-            border: 1px solid rgba(255, 255, 255, 0.1);
-        }
-        
-        .student-info .name {
-            color: #ffffff;
-            font-weight: 600;
-            font-size: 1rem;
-        }
-        
-        .student-info .nisn {
-            color: #8b92a8;
-            font-size: 0.8rem;
-        }
-        
-        .filename-info {
-            background: rgba(0, 123, 255, 0.1);
-            border: 1px solid rgba(0, 123, 255, 0.3);
-            color: #4da3ff;
-            padding: 10px;
-            border-radius: 8px;
-            margin: 15px 0;
-            text-align: center;
-            font-family: monospace;
-            font-size: 0.9rem;
-        }
-
-        .register-status {
-            margin: 10px 0 12px;
-            padding: 10px 12px;
-            border-radius: 10px;
-            background: rgba(79, 70, 229, 0.14);
-            border: 1px solid rgba(129, 140, 248, 0.35);
-            color: #dbeafe;
-            font-size: 0.88rem;
+            width: clamp(148px, 43%, 186px);
+            height: clamp(188px, 52%, 236px);
+            border: 2px solid rgba(34, 211, 238, 0.92);
+            border-radius: 14px;
+            box-shadow: 0 0 18px rgba(34, 211, 238, 0.35);
         }
 
         .pose-flow-card {
-            margin: 12px 0;
-            padding: 12px;
+            margin: 0;
+            padding: 10px;
             border-radius: 12px;
-            background: rgba(12, 18, 35, 0.78);
-            border: 1px solid rgba(56, 189, 248, 0.25);
+            background: rgba(10, 20, 40, 0.8);
+            border: 1px solid transparent;
             text-align: center;
         }
 
@@ -578,22 +672,23 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['face_data'])) {
             align-items: center;
             justify-content: center;
             gap: 8px;
-            margin-bottom: 8px;
+            margin-bottom: 7px;
         }
 
         .pose-flow-header h5 {
             margin: 0;
-            color: #dbeafe;
-            font-size: 0.95rem;
+            color: #dce8f8;
+            font-size: 0.94rem;
         }
 
         .match-badge {
             border-radius: 999px;
             padding: 5px 12px;
-            font-size: 0.74rem;
+            font-size: 0.73rem;
             font-weight: 700;
             letter-spacing: 0.02em;
             border: 1px solid transparent;
+            white-space: nowrap;
         }
 
         .match-badge.waiting {
@@ -621,46 +716,9 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['face_data'])) {
         }
 
         .pose-flow-desc {
-            color: #93c5fd;
-            font-size: 0.82rem;
+            color: #9ac5e9;
+            font-size: 0.79rem;
             margin-bottom: 8px;
-            text-align: center;
-        }
-
-        .pose-progress-grid {
-            display: grid;
-            grid-template-columns: repeat(3, minmax(0, 1fr));
-            gap: 8px;
-            margin-bottom: 8px;
-            justify-items: center;
-        }
-
-        .pose-progress-item {
-            background: rgba(30, 41, 59, 0.62);
-            border: 1px solid rgba(148, 163, 184, 0.24);
-            border-radius: 8px;
-            padding: 8px 6px;
-            text-align: center;
-            width: 100%;
-            max-width: 160px;
-        }
-
-        .pose-progress-item span {
-            display: block;
-            color: #94a3b8;
-            font-size: 0.78rem;
-        }
-
-        .pose-progress-item strong {
-            color: #e2e8f0;
-            font-size: 0.95rem;
-        }
-
-        .pose-instruction {
-            margin-top: 0;
-            margin-bottom: 8px;
-            font-size: 0.84rem;
-            color: #cbd5e1;
             text-align: center;
         }
 
@@ -671,53 +729,344 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['face_data'])) {
             justify-content: center;
         }
 
-        .pose-only-complete {
-            margin-top: 16px;
+        .pose-actions .btn {
+            min-width: 170px;
+        }
+
+        .register-status {
+            margin: 8px 0 9px;
+            padding: 8px 10px;
+            border-radius: 10px;
+            background: rgba(37, 99, 235, 0.15);
+            border: 1px solid transparent;
+            color: #cadcf2;
+            font-size: 0.83rem;
+        }
+
+        .capture-btn {
+            background: linear-gradient(120deg, var(--accent) 0%, var(--accent-soft) 100%);
+            border: none;
+            color: #031525;
+            font-weight: 800;
+            padding: 11px 20px;
+            border-radius: 10px;
+            font-size: 0.95rem;
+            cursor: pointer;
+            transition: all 0.25s ease;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            min-width: 230px;
+        }
+
+        .capture-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 12px 24px rgba(56, 189, 248, 0.34);
+        }
+
+        .capture-btn:disabled {
+            opacity: 0.52;
+            cursor: not-allowed;
+            box-shadow: none;
+            transform: none;
+        }
+
+        .preview-container {
+            display: none;
+            text-align: center;
+            margin-top: 12px;
+            padding: 12px;
+            border: 1px solid transparent;
             border-radius: 12px;
-            padding: 16px;
-            background: rgba(16, 185, 129, 0.12);
-            border: 1px solid rgba(16, 185, 129, 0.32);
+            background: rgba(8, 14, 28, 0.58);
+        }
+
+        .preview-title {
+            color: #c8dbef;
+            margin-bottom: 12px;
+            font-size: 0.92rem;
+        }
+
+        #preview {
+            width: min(100%, 260px);
+            border-radius: 10px;
+            margin-bottom: 12px;
+            border: 1px solid transparent;
+        }
+
+        .btn-group {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+        }
+
+        .btn-retake,
+        .btn-submit {
+            padding: 10px 18px;
+            border-radius: 8px;
+            border: none;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .btn-retake {
+            background: rgba(30, 41, 59, 0.55);
+            color: #dfeafa;
+            border: 1px solid transparent;
+        }
+
+        .btn-submit {
+            background: linear-gradient(120deg, var(--accent) 0%, var(--accent-soft) 100%);
+            color: #031525;
+        }
+
+        .btn-retake:hover,
+        .btn-submit:hover {
+            transform: translateY(-2px);
+        }
+
+        .filename-info {
+            background: rgba(2, 132, 199, 0.16);
+            border: 1px solid transparent;
+            color: #9ddcff;
+            padding: 9px 10px;
+            border-radius: 10px;
+            margin: 10px 0 12px;
+            text-align: center;
+            font-family: monospace;
+            font-size: 0.84rem;
+        }
+
+        .error-message {
+            background: rgba(225, 29, 72, 0.14);
+            border: 1px solid transparent;
+            color: #ffd1d8;
+            padding: 10px;
+            border-radius: 10px;
+            margin-bottom: 12px;
+            text-align: center;
+            font-size: 0.88rem;
+        }
+
+        .notice-message {
+            background: rgba(245, 158, 11, 0.14);
+            border: 1px solid transparent;
+            color: #ffe0aa;
+            padding: 10px;
+            border-radius: 10px;
+            margin-bottom: 12px;
+            text-align: center;
+            font-size: 0.86rem;
+        }
+
+        .success-message {
+            text-align: center;
+            padding: 30px 20px;
+        }
+
+        .success-icon {
+            font-size: 3.4rem;
+            color: var(--accent-soft);
+            margin-bottom: 14px;
+        }
+
+        .pose-only-complete {
+            margin-top: 12px;
+            border-radius: 12px;
+            padding: 14px;
+            background: rgba(16, 185, 129, 0.14);
+            border: 1px solid transparent;
             text-align: center;
         }
 
         .pose-only-complete h5 {
-            margin: 0 0 8px;
-            color: #86efac;
+            margin: 0 0 7px;
+            color: #a7f3d0;
         }
 
         .pose-only-complete p {
-            color: #cbd5e1;
+            color: #d8fbe8;
             margin: 0 0 12px;
+            font-size: 0.9rem;
+        }
+
+        .privacy-note {
+            color: #91a6c0;
+            margin-top: 8px;
+            font-size: 0.78rem;
+            text-align: center;
+        }
+
+        @media (max-width: 1024px) {
+            .register-layout {
+                grid-template-columns: 1fr;
+                max-width: 760px;
+            }
+
+            .register-brand-bg {
+                opacity: 0.5;
+            }
+
+            .register-card,
+            .register-guide {
+                grid-column: auto;
+                grid-row: auto;
+            }
+
+            .register-guide {
+                order: 2;
+            }
+        }
+
+        @media (max-width: 900px) {
+            .register-container {
+                padding-top: 90px;
+            }
+
+            .logout-btn-container {
+                top: 14px;
+                right: 14px;
+            }
+
+            .student-info {
+                top: 14px;
+                left: 14px;
+                padding: 8px 12px;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .register-layout {
+                max-width: 620px;
+            }
+
+            .register-brand-bg {
+                display: none;
+            }
+
+            .register-guide {
+                position: fixed;
+                left: 12px;
+                right: 12px;
+                bottom: 86px;
+                max-height: min(72vh, 540px);
+                overflow-y: auto;
+                z-index: 230;
+                opacity: 0;
+                visibility: hidden;
+                pointer-events: none;
+                transform: translateY(16px) scale(0.985);
+                transition: opacity 0.22s ease, transform 0.22s ease;
+            }
+
+            .register-guide.is-open {
+                opacity: 1;
+                visibility: visible;
+                pointer-events: auto;
+                transform: translateY(0) scale(1);
+            }
+
+            .guide-close {
+                display: inline-flex;
+            }
+
+            .guide-backdrop {
+                display: block;
+                position: fixed;
+                inset: 0;
+                background: rgba(4, 9, 20, 0.6);
+                opacity: 0;
+                visibility: hidden;
+                pointer-events: none;
+                z-index: 220;
+                transition: opacity 0.22s ease;
+            }
+
+            .guide-backdrop.is-open {
+                opacity: 1;
+                visibility: visible;
+                pointer-events: auto;
+            }
+
+            .guide-fab {
+                display: inline-flex;
+                position: fixed;
+                right: 14px;
+                bottom: 20px;
+                z-index: 240;
+                width: 48px;
+                height: 48px;
+                border-radius: 999px;
+                border: 1px solid rgba(56, 189, 248, 0.52);
+                background: linear-gradient(140deg, rgba(11, 26, 50, 0.96), rgba(10, 20, 40, 0.96));
+                color: #bfe9ff;
+                font-weight: 800;
+                font-size: 1.5rem;
+                align-items: center;
+                justify-content: center;
+                line-height: 1;
+                box-shadow: 0 10px 22px rgba(2, 7, 19, 0.58);
+                cursor: pointer;
+            }
+
+            .guide-fab.is-pulsing {
+                animation: guidePulse 1.55s ease-in-out infinite;
+            }
+
+            .guide-fab:focus-visible {
+                outline: 2px solid #7dd3fc;
+                outline-offset: 3px;
+            }
+
+            .guide-progress-mini {
+                gap: 6px;
+            }
+        }
+
+        @keyframes guidePulse {
+            0% {
+                box-shadow: 0 0 0 0 rgba(56, 189, 248, 0.52), 0 8px 18px rgba(2, 7, 19, 0.58);
+            }
+            70% {
+                box-shadow: 0 0 0 10px rgba(56, 189, 248, 0), 0 10px 22px rgba(2, 7, 19, 0.65);
+            }
+            100% {
+                box-shadow: 0 0 0 0 rgba(56, 189, 248, 0), 0 8px 18px rgba(2, 7, 19, 0.58);
+            }
         }
 
         @media (max-width: 576px) {
+            .register-container {
+                padding: 84px 10px 16px;
+            }
+
             .register-card {
-                padding: 16px;
-                border-radius: 12px;
+                padding: 15px;
+                border-radius: 14px;
             }
 
             .register-title {
-                font-size: 1.4rem;
+                font-size: 1.26rem;
             }
 
             .camera-container {
                 max-width: 100%;
             }
 
-            .pose-progress-grid {
-                grid-template-columns: 1fr;
+            .pose-flow-header {
+                flex-wrap: wrap;
+            }
+
+            .pose-actions .btn,
+            .capture-btn {
+                width: 100%;
+                min-width: 0;
             }
 
             .btn-group {
                 flex-direction: column;
-            }
-
-            .btn-retake,
-            .btn-submit,
-            .pose-actions .btn,
-            .capture-btn {
-                width: 100%;
-                justify-content: center;
             }
         }
     </style>
@@ -742,157 +1091,174 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['face_data'])) {
         <div class="grid-background"></div>
         <div class="glow-orb orb-1" style="top: 10%; left: 10%;"></div>
         <div class="glow-orb orb-2" style="top: 70%; right: 10%;"></div>
-        
-        <div class="register-card"
-             data-pose-only="<?php echo $pose_only_mode ? '1' : '0'; ?>"
-             data-has-face="<?php echo $has_face ? '1' : '0'; ?>"
-             data-has-pose="<?php echo $has_pose_capture ? '1' : '0'; ?>"
-             data-student-nisn="<?php echo htmlspecialchars((string) ($student_row['student_nisn'] ?? ''), ENT_QUOTES); ?>">
-            <?php if ($success): ?>
-                <div class="success-message">
-                    <div class="success-icon">
-                        <i class="fas fa-check-circle"></i>
-                    </div>
-                    <h3 style="color: #00ff88;">Registrasi Berhasil!</h3>
-                    <p style="color: #8b92a8;">Wajah Anda telah terdaftar. Mengarahkan ke dashboard...</p>
-                    <div class="spinner-border text-success mt-3" role="status">
-                        <span class="visually-hidden">Loading...</span>
-                    </div>
-                </div>
-            <?php else: ?>
-                <h1 class="register-title"><?php echo $pose_only_mode ? 'VALIDASI POSE KEPALA' : 'REGISTRASI WAJAH'; ?></h1>
+        <div class="register-brand-bg" aria-hidden="true">
+            <div class="brand-kicker">DIGITAL EBOOK - SISTEM ABSENSI MODERN</div>
+            <div class="brand-pre">PRE</div>
+            <div class="brand-senova">SENOVA</div>
+            <div class="brand-tagline">Bringing Back Learning Time</div>
+        </div>
 
-                <?php if ($face_notice): ?>
-                    <div class="notice-message">
-                        <i class="fas fa-exclamation-triangle"></i> <?php echo htmlspecialchars($face_notice); ?>
+        <div class="register-layout">
+            <?php if (!$success): ?>
+                <aside class="register-guide" id="registerGuidePanel" aria-label="Petunjuk registrasi wajah">
+                    <div class="guide-header">
+                        <div>
+                            <h4><i class="fas fa-circle-info"></i> Petunjuk Ringkas</h4>
+                            <p>Satu kali konfirmasi, lalu sistem auto-capture pose hingga selesai.</p>
+                        </div>
+                        <button type="button" class="guide-close" id="guideCloseBtn" aria-label="Tutup petunjuk">
+                            <i class="fas fa-times"></i>
+                        </button>
                     </div>
-                <?php endif; ?>
-
-                <?php if ($pose_notice): ?>
-                    <div class="notice-message">
-                        <i class="fas fa-arrows-left-right"></i> <?php echo htmlspecialchars($pose_notice); ?>
-                    </div>
-                <?php endif; ?>
-                
-                <?php if ($error): ?>
-                    <div class="error-message">
-                        <i class="fas fa-exclamation-circle"></i> <?php echo $error; ?>
-                    </div>
-                <?php endif; ?>
-                
-                <!-- Info nama file -->
-                <?php if (isset($student_data)): ?>
-                <div class="filename-info">
-                    <i class="fas fa-file-image"></i> File akan disimpan dengan nama:<br>
-                    <strong><?php echo $student_data['student_nisn'] . '-' . strtoupper(preg_replace('/\s+/', '', $student_data['student_name'])) . '.jpg'; ?></strong>
-                </div>
-                <?php endif; ?>
-                
-                <div class="instructions">
-                    <h4><i class="fas fa-info-circle"></i> Petunjuk:</h4>
-                    <ol>
-                        <li>Aktifkan kamera dan pastikan wajah terlihat jelas.</li>
-                        <li>Klik konfirmasi pose sekali di awal, lalu menoleh ke kanan, kiri, dan kembali depan.</li>
-                        <li>Sistem akan auto-capture 5 frame kanan, 5 frame kiri, dan 1 frame depan.</li>
+                    <ol class="guide-list">
+                        <li>Pastikan wajah berada di area kotak hijau dan cahaya cukup.</li>
+                        <li>Klik tombol <strong>Mulai Otomatis</strong>, lalu menoleh ke kanan, kiri, lalu depan.</li>
+                        <li>Sistem menyimpan pose otomatis tanpa perlu klik ulang.</li>
                         <?php if (!$pose_only_mode): ?>
-                            <li>Setelah pose selesai, ambil foto depan untuk referensi utama akun.</li>
-                            <li>Foto depan ini yang tampil sebagai foto referensi di dashboard.</li>
+                            <li>Setelah pose lengkap, lanjut ambil satu foto depan.</li>
                         <?php else: ?>
-                            <li>Mode ini hanya melengkapi dataset pose. Foto referensi depan tidak diubah.</li>
+                            <li>Mode ini hanya menyimpan dataset pose, foto referensi depan tidak diubah.</li>
                         <?php endif; ?>
                     </ol>
-                </div>
-                
-                <div class="camera-container">
-                    <video id="video" autoplay playsinline></video>
-                    <canvas id="canvas"></canvas>
-                    <div class="face-overlay">
-                        <div class="face-guide"></div>
-                    </div>
-                </div>
-
-                <div class="pose-flow-card" id="poseFlowCard">
-                    <div class="pose-flow-header">
-                        <h5><i class="fas fa-arrows-left-right"></i> Capture Pose Kepala</h5>
-                        <span id="poseFlowBadge" class="match-badge waiting">Belum Mulai</span>
-                    </div>
-                    <p class="pose-flow-desc">
-                        Klik konfirmasi sekali di awal, lalu sistem auto-capture frame saat Anda menoleh kanan, kiri, dan kembali depan.
-                    </p>
-                    <div class="pose-progress-grid">
-                        <div class="pose-progress-item">
-                            <span>Kanan</span>
-                            <strong id="poseRightProgress">0/5</strong>
+                    <div class="guide-progress-card">
+                        <div class="guide-progress-top">
+                            <span>Total progress pose</span>
+                            <strong id="poseTotalProgress">0/11</strong>
                         </div>
-                        <div class="pose-progress-item">
-                            <span>Kiri</span>
-                            <strong id="poseLeftProgress">0/5</strong>
-                        </div>
-                        <div class="pose-progress-item">
-                            <span>Depan</span>
-                            <strong id="poseFrontProgress">0/1</strong>
+                        <div class="guide-progress-mini">
+                            <span>Kanan <strong id="poseRightProgress">0/5</strong></span>
+                            <span>Kiri <strong id="poseLeftProgress">0/5</strong></span>
+                            <span>Depan <strong id="poseFrontProgress">0/1</strong></span>
                         </div>
                     </div>
                     <div class="pose-instruction" id="poseInstructionText">
-                        Aktifkan kamera, lalu klik <strong>Konfirmasi Siap & Mulai Otomatis</strong>.
+                        Aktifkan kamera lalu klik <strong>Mulai Otomatis</strong>.
                     </div>
-                    <div class="pose-actions">
-                        <button class="btn btn-outline-info btn-sm" id="poseStartBtn" type="button" disabled>
-                            <i class="fas fa-check-circle"></i> Konfirmasi Siap & Mulai Otomatis
-                        </button>
-                        <button class="btn btn-outline-secondary btn-sm" id="poseResetBtn" type="button" disabled>
-                            <i class="fas fa-rotate-left"></i> Reset Pose
-                        </button>
-                    </div>
-                </div>
-                <div class="register-status" id="registerStatus">Kamera siap. Selesaikan pose capture terlebih dahulu.</div>
+                </aside>
+                <button type="button" class="guide-fab" id="guideToggleBtn" aria-label="Buka petunjuk registrasi">!</button>
+                <div class="guide-backdrop" id="guideBackdrop"></div>
+            <?php endif; ?>
 
-                <?php if (!$pose_only_mode): ?>
-                    <form id="faceForm" method="POST">
-                        <input type="hidden" name="face_data" id="faceData">
-                        
-                        <div class="text-center">
-                            <button type="button" id="captureBtn" class="capture-btn" disabled>
-                                <i class="fas fa-camera"></i> Ambil Foto Depan
+            <div class="register-card"
+                 data-pose-only="<?php echo $pose_only_mode ? '1' : '0'; ?>"
+                 data-has-face="<?php echo $has_face ? '1' : '0'; ?>"
+                 data-has-pose="<?php echo $has_pose_capture ? '1' : '0'; ?>"
+                 data-student-nisn="<?php echo htmlspecialchars((string) ($student_row['student_nisn'] ?? ''), ENT_QUOTES); ?>">
+                <?php if ($success): ?>
+                    <div class="success-message">
+                        <div class="success-icon">
+                            <i class="fas fa-check-circle"></i>
+                        </div>
+                        <h3 style="color: #22d3ee;">Registrasi Berhasil!</h3>
+                        <p style="color: #9cb0cc;">Wajah Anda telah terdaftar. Mengarahkan ke dashboard...</p>
+                        <div class="spinner-border text-success mt-3" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                    </div>
+                <?php else: ?>
+                    <h1 class="register-title"><?php echo $pose_only_mode ? 'VALIDASI POSE KEPALA' : 'REGISTRASI WAJAH'; ?></h1>
+                    <p class="register-subtitle">
+                        <?php echo $pose_only_mode
+                            ? 'Lengkapi data pose kepala untuk menyelesaikan aktivasi akun.'
+                            : 'Selesaikan pose otomatis lalu ambil foto depan sebagai referensi utama.'; ?>
+                    </p>
+
+                    <?php if ($face_notice): ?>
+                        <div class="notice-message">
+                            <i class="fas fa-exclamation-triangle"></i> <?php echo htmlspecialchars($face_notice); ?>
+                        </div>
+                    <?php endif; ?>
+
+                    <?php if ($pose_notice): ?>
+                        <div class="notice-message">
+                            <i class="fas fa-arrows-left-right"></i> <?php echo htmlspecialchars($pose_notice); ?>
+                        </div>
+                    <?php endif; ?>
+
+                    <?php if ($error): ?>
+                        <div class="error-message">
+                            <i class="fas fa-exclamation-circle"></i> <?php echo $error; ?>
+                        </div>
+                    <?php endif; ?>
+
+                    <?php if (isset($student_data)): ?>
+                        <div class="filename-info">
+                            <i class="fas fa-file-image"></i> File akan disimpan dengan nama:<br>
+                            <strong><?php echo $student_data['student_nisn'] . '-' . strtoupper(preg_replace('/\s+/', '', $student_data['student_name'])) . '.jpg'; ?></strong>
+                        </div>
+                    <?php endif; ?>
+
+                    <div class="camera-container">
+                        <video id="video" autoplay playsinline></video>
+                        <canvas id="canvas"></canvas>
+                        <div class="face-overlay">
+                            <div class="face-guide"></div>
+                        </div>
+                    </div>
+
+                    <div class="pose-flow-card" id="poseFlowCard">
+                        <div class="pose-flow-header">
+                            <h5><i class="fas fa-arrows-left-right"></i> Capture Pose Kepala</h5>
+                            <span id="poseFlowBadge" class="match-badge waiting">Belum Mulai</span>
+                        </div>
+                        <p class="pose-flow-desc">Klik tombol mulai sekali, lalu sistem capture otomatis kanan, kiri, dan depan.</p>
+                        <div class="pose-actions">
+                            <button class="btn btn-outline-info btn-sm" id="poseStartBtn" type="button" disabled>
+                                <i class="fas fa-check-circle"></i> Mulai Otomatis
+                            </button>
+                            <button class="btn btn-outline-secondary btn-sm" id="poseResetBtn" type="button" disabled>
+                                <i class="fas fa-rotate-left"></i> Reset Pose
                             </button>
                         </div>
-                        
-                        <div class="preview-container" id="previewContainer">
-                            <h4 style="color: #8b92a8; margin-bottom: 15px;">Preview Foto Depan:</h4>
-                            <img id="preview" src="" alt="Preview">
-                            <div class="btn-group">
-                                <button type="button" id="retakeBtn" class="btn-retake">
-                                    <i class="fas fa-redo"></i> Ambil Ulang
-                                </button>
-                                <button type="submit" id="submitBtn" class="btn-submit">
-                                    <i class="fas fa-check"></i> Simpan Wajah
+                    </div>
+                    <div class="register-status" id="registerStatus">Kamera siap. Klik Mulai Otomatis untuk memulai validasi pose.</div>
+
+                    <?php if (!$pose_only_mode): ?>
+                        <form id="faceForm" method="POST">
+                            <input type="hidden" name="face_data" id="faceData">
+
+                            <div class="text-center">
+                                <button type="button" id="captureBtn" class="capture-btn" disabled>
+                                    <i class="fas fa-camera"></i> Ambil Foto Depan
                                 </button>
                             </div>
+
+                            <div class="preview-container" id="previewContainer">
+                                <h4 class="preview-title">Preview Foto Depan</h4>
+                                <img id="preview" src="" alt="Preview">
+                                <div class="btn-group">
+                                    <button type="button" id="retakeBtn" class="btn-retake">
+                                        <i class="fas fa-redo"></i> Ambil Ulang
+                                    </button>
+                                    <button type="submit" id="submitBtn" class="btn-submit">
+                                        <i class="fas fa-check"></i> Simpan Wajah
+                                    </button>
+                                </div>
+                            </div>
+                        </form>
+                    <?php else: ?>
+                        <div class="pose-only-complete" id="poseOnlyComplete" style="display: none;">
+                            <h5><i class="fas fa-circle-check"></i> Pose Berhasil Disimpan</h5>
+                            <p>Dataset pose sudah lengkap. Klik lanjut untuk masuk ke dashboard.</p>
+                            <a href="<?php echo htmlspecialchars($dashboardUrl, ENT_QUOTES, 'UTF-8'); ?>" class="btn btn-success btn-sm">
+                                <i class="fas fa-arrow-right"></i> Lanjut ke Dashboard
+                            </a>
                         </div>
-                    </form>
-                <?php else: ?>
-                    <div class="pose-only-complete" id="poseOnlyComplete" style="display: none;">
-                        <h5><i class="fas fa-circle-check"></i> Pose Berhasil Disimpan</h5>
-                        <p>Dataset pose sudah lengkap. Klik lanjut untuk masuk ke dashboard.</p>
-                        <a href="<?php echo htmlspecialchars($dashboardUrl, ENT_QUOTES, 'UTF-8'); ?>" class="btn btn-success btn-sm">
-                            <i class="fas fa-arrow-right"></i> Lanjut ke Dashboard
+                    <?php endif; ?>
+
+                    <div class="privacy-note">
+                        <small>
+                            <i class="fas fa-lock"></i> Foto wajah digunakan hanya untuk absensi dan tetap terlindungi.
+                        </small>
+                    </div>
+
+                    <div class="text-center mt-3">
+                        <a href="<?php echo htmlspecialchars($registerLogoutUrl, ENT_QUOTES, 'UTF-8'); ?>" class="btn btn-outline-danger btn-sm">
+                            <i class="fas fa-sign-out-alt"></i> Keluar dan Kembali ke Login
                         </a>
                     </div>
                 <?php endif; ?>
-                
-                <div class="text-center mt-4" style="color: #8b92a8;">
-                    <small>
-                        <i class="fas fa-lock"></i> Foto wajah Anda hanya digunakan untuk sistem absensi dan dilindungi kerahasiaannya.
-                    </small>
-                </div>
-                
-                <!-- Additional Logout Button at Bottom -->
-                <div class="text-center mt-4">
-                    <a href="<?php echo htmlspecialchars($registerLogoutUrl, ENT_QUOTES, 'UTF-8'); ?>" class="btn btn-outline-danger btn-sm">
-                        <i class="fas fa-sign-out-alt"></i> Keluar dan Kembali ke Login
-                    </a>
-                </div>
-            <?php endif; ?>
+            </div>
         </div>
     </div>
     
@@ -915,23 +1281,34 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['face_data'])) {
             const faceForm = document.getElementById('faceForm');
             const registerStatus = document.getElementById('registerStatus');
 
+            if (!video || !canvas || !registerStatus) {
+                return;
+            }
+
             const poseFlowBadge = document.getElementById('poseFlowBadge');
             const poseInstructionText = document.getElementById('poseInstructionText');
             const poseStartBtn = document.getElementById('poseStartBtn');
             const poseResetBtn = document.getElementById('poseResetBtn');
+            const poseTotalProgress = document.getElementById('poseTotalProgress');
             const poseRightProgress = document.getElementById('poseRightProgress');
             const poseLeftProgress = document.getElementById('poseLeftProgress');
             const poseFrontProgress = document.getElementById('poseFrontProgress');
             const poseOnlyComplete = document.getElementById('poseOnlyComplete');
+            const registerGuidePanel = document.getElementById('registerGuidePanel');
+            const guideToggleBtn = document.getElementById('guideToggleBtn');
+            const guideCloseBtn = document.getElementById('guideCloseBtn');
+            const guideBackdrop = document.getElementById('guideBackdrop');
 
             const poseOnlyMode = registerCard.dataset.poseOnly === '1';
             const hasPoseFromServer = registerCard.dataset.hasPose === '1';
             const modelBase = '<?php echo htmlspecialchars($faceModelBaseUrl, ENT_QUOTES, 'UTF-8'); ?>';
             const poseRequiredPerSide = 5;
             const poseRequiredFront = 1;
+            const poseTotalRequired = (poseRequiredPerSide * 2) + poseRequiredFront;
             const poseYawSideThreshold = 0.12;
             const poseYawFrontThreshold = 0.08;
             const poseCaptureCooldownMs = 450;
+            const guideSeenStorageKey = 'presenova_register_guide_seen';
 
             let stream = null;
             let capturedImage = null;
@@ -948,6 +1325,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['face_data'])) {
             let poseLastCaptureAt = 0;
             let poseSaving = false;
             let cameraReady = false;
+            let poseInstructionCache = '';
 
             function getSecureContextMessage(featureName) {
                 const feature = featureName || 'fitur ini';
@@ -993,7 +1371,12 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['face_data'])) {
 
             function setPoseInstruction(html) {
                 if (!poseInstructionText) return;
-                poseInstructionText.innerHTML = html;
+                const nextValue = String(html || '');
+                if (poseInstructionCache === nextValue) {
+                    return;
+                }
+                poseInstructionCache = nextValue;
+                poseInstructionText.innerHTML = nextValue;
             }
 
             function updatePoseProgress() {
@@ -1006,6 +1389,10 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['face_data'])) {
                 if (poseFrontProgress) {
                     poseFrontProgress.textContent = `${poseFrontFrames.length}/${poseRequiredFront}`;
                 }
+                if (poseTotalProgress) {
+                    const currentTotal = poseRightFrames.length + poseLeftFrames.length + poseFrontFrames.length;
+                    poseTotalProgress.textContent = `${currentTotal}/${poseTotalRequired}`;
+                }
             }
 
             function stopPoseMonitor() {
@@ -1014,6 +1401,83 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['face_data'])) {
                     poseMonitorId = null;
                 }
                 poseMonitorBusy = false;
+            }
+
+            function isSmallScreen() {
+                return window.matchMedia('(max-width: 768px)').matches;
+            }
+
+            function closeGuidePanel() {
+                if (!registerGuidePanel) return;
+                registerGuidePanel.classList.remove('is-open');
+                if (guideBackdrop) {
+                    guideBackdrop.classList.remove('is-open');
+                }
+                document.body.classList.remove('guide-mobile-open');
+            }
+
+            function openGuidePanel() {
+                if (!registerGuidePanel || !isSmallScreen()) return;
+                registerGuidePanel.classList.add('is-open');
+                if (guideBackdrop) {
+                    guideBackdrop.classList.add('is-open');
+                }
+                document.body.classList.add('guide-mobile-open');
+            }
+
+            function markGuideAsSeen() {
+                if (guideToggleBtn) {
+                    guideToggleBtn.classList.remove('is-pulsing');
+                }
+                try {
+                    window.localStorage.setItem(guideSeenStorageKey, '1');
+                } catch (error) {
+                    // Ignore storage errors.
+                }
+            }
+
+            function initGuidePanel() {
+                if (!registerGuidePanel || !guideToggleBtn) return;
+
+                let guideSeen = false;
+                try {
+                    guideSeen = window.localStorage.getItem(guideSeenStorageKey) === '1';
+                } catch (error) {
+                    guideSeen = false;
+                }
+
+                if (!guideSeen) {
+                    guideToggleBtn.classList.add('is-pulsing');
+                }
+
+                guideToggleBtn.addEventListener('click', function() {
+                    openGuidePanel();
+                    markGuideAsSeen();
+                });
+
+                if (guideCloseBtn) {
+                    guideCloseBtn.addEventListener('click', function() {
+                        closeGuidePanel();
+                    });
+                }
+
+                if (guideBackdrop) {
+                    guideBackdrop.addEventListener('click', function() {
+                        closeGuidePanel();
+                    });
+                }
+
+                document.addEventListener('keydown', function(event) {
+                    if (event.key === 'Escape') {
+                        closeGuidePanel();
+                    }
+                });
+
+                window.addEventListener('resize', function() {
+                    if (!isSmallScreen()) {
+                        closeGuidePanel();
+                    }
+                });
             }
 
             function updateActionButtons() {
@@ -1041,7 +1505,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['face_data'])) {
                 poseLastCaptureAt = 0;
                 poseSaving = false;
                 setPoseBadge('waiting', 'Belum Mulai');
-                setPoseInstruction('Aktifkan kamera, lalu klik <strong>Konfirmasi Siap & Mulai Otomatis</strong>.');
+                setPoseInstruction('Aktifkan kamera lalu klik <strong>Mulai Otomatis</strong>.');
                 updatePoseProgress();
                 updateActionButtons();
             }
@@ -1054,7 +1518,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['face_data'])) {
                 poseLeftFrames = new Array(poseRequiredPerSide).fill({});
                 poseFrontFrames = new Array(poseRequiredFront).fill({});
                 setPoseBadge('success', 'Selesai');
-                setPoseInstruction('Dataset pose sudah lengkap dan tersimpan di server.');
+                setPoseInstruction('Pose sudah lengkap dan tersimpan di server.');
                 setRegisterStatus('Dataset pose sudah lengkap.');
                 updatePoseProgress();
                 if (poseOnlyMode && poseOnlyComplete) {
@@ -1138,7 +1602,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['face_data'])) {
                     await faceapi.nets.tinyFaceDetector.loadFromUri(modelBase);
                     await faceapi.nets.faceLandmark68Net.loadFromUri(modelBase);
                     modelsReady = true;
-                    setRegisterStatus('Model siap. Klik konfirmasi pose untuk memulai auto-capture.');
+                    setRegisterStatus('Model siap. Klik Mulai Otomatis untuk memulai capture pose.');
                     return true;
                 } catch (error) {
                     console.error('Load model error:', error);
@@ -1179,7 +1643,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['face_data'])) {
                     if (!modelsReady) {
                         setRegisterStatus('Kamera aktif, tetapi model wajah belum siap. Refresh halaman lalu coba lagi.');
                     } else if (!hasPoseFromServer) {
-                        setRegisterStatus('Kamera aktif. Klik konfirmasi pose lalu menoleh kanan, kiri, dan depan.');
+                        setRegisterStatus('Kamera aktif. Klik Mulai Otomatis lalu menoleh kanan, kiri, dan depan.');
                     } else {
                         setRegisterStatus('Kamera aktif.');
                     }
@@ -1241,13 +1705,13 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['face_data'])) {
                 if (poseStep === 'left') targetLabel = 'kiri';
                 if (poseStep === 'front') targetLabel = 'depan';
                 if (!sample) {
-                    setPoseInstruction(`Target: <strong>${targetLabel}</strong>. Wajah belum terbaca, posisikan ke tengah.`);
+                    setPoseInstruction(`Target <strong>${targetLabel}</strong> • wajah belum terbaca, posisikan ke tengah.`);
                     return;
                 }
                 const directionText = sample.direction === 'front'
                     ? 'depan'
                     : (sample.direction === 'right' ? 'kanan' : 'kiri');
-                setPoseInstruction(`Target: <strong>${targetLabel}</strong>. Terdeteksi: <strong>${directionText}</strong>.`);
+                setPoseInstruction(`Target <strong>${targetLabel}</strong> • terbaca <strong>${directionText}</strong>.`);
             }
 
             async function savePoseFramesToServer() {
@@ -1294,7 +1758,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['face_data'])) {
                 }
                 poseCompleted = true;
                 setPoseBadge('success', 'Selesai');
-                setPoseInstruction('Pose selesai. Lanjutkan ambil foto depan.');
+                setPoseInstruction('Pose selesai. Lanjut ambil foto depan.');
                 setRegisterStatus('Pose berhasil disimpan.');
                 if (poseOnlyMode) {
                     if (poseOnlyComplete) {
@@ -1330,7 +1794,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['face_data'])) {
                     setRegisterStatus(`Frame kanan tersimpan (${poseRightFrames.length}/${poseRequiredPerSide}).`);
                     if (poseRightFrames.length >= poseRequiredPerSide) {
                         poseStep = 'left';
-                        setPoseInstruction('Step 2/3: Menoleh ke <strong>kiri</strong>.');
+                        setPoseInstruction('Lanjut step 2/3: menoleh ke <strong>kiri</strong>.');
                     }
                     return;
                 }
@@ -1348,7 +1812,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['face_data'])) {
                     setRegisterStatus(`Frame kiri tersimpan (${poseLeftFrames.length}/${poseRequiredPerSide}).`);
                     if (poseLeftFrames.length >= poseRequiredPerSide) {
                         poseStep = 'front';
-                        setPoseInstruction('Step 3/3: Hadapkan wajah ke <strong>depan</strong>.');
+                        setPoseInstruction('Lanjut step 3/3: hadapkan wajah ke <strong>depan</strong>.');
                     }
                     return;
                 }
@@ -1404,8 +1868,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['face_data'])) {
                 poseStarted = true;
                 poseStep = 'right';
                 setPoseBadge('loading', 'Berjalan');
-                setPoseInstruction('Step 1/3: Menoleh ke <strong>kanan</strong>. Sistem menangkap 5 frame otomatis.');
-                setRegisterStatus('Capture pose berjalan otomatis.');
+                setPoseInstruction('Step 1/3: menoleh ke <strong>kanan</strong>.');
+                setRegisterStatus('Capture pose otomatis sedang berjalan.');
                 updateActionButtons();
                 startPoseMonitor();
             }
@@ -1492,7 +1956,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['face_data'])) {
             if (poseResetBtn) {
                 poseResetBtn.addEventListener('click', function() {
                     resetPoseState();
-                    setRegisterStatus('Pose direset. Klik konfirmasi untuk memulai ulang.');
+                    setRegisterStatus('Pose direset. Klik Mulai Otomatis untuk mengulang.');
                 });
             }
             
@@ -1515,6 +1979,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['face_data'])) {
             });
             
             // Initialize state and camera
+            initGuidePanel();
             resetPoseState();
             if (hasPoseFromServer) {
                 setPoseAlreadyCompleted();
