@@ -9,6 +9,58 @@ set -euo pipefail
 #   PHP_BIN=/usr/bin/php
 #   CRON_SCHEDULE="* * * * *"
 
+log() {
+  printf '[install-push-cron] %s\n' "$*"
+}
+
+fail() {
+  printf '[install-push-cron] ERROR: %s\n' "$*" >&2
+  exit 1
+}
+
+can_escalate_root() {
+  [[ "$(id -u)" -eq 0 ]] || command -v sudo >/dev/null 2>&1
+}
+
+run_as_root() {
+  if [[ "$(id -u)" -eq 0 ]]; then
+    "$@"
+  else
+    sudo "$@"
+  fi
+}
+
+APT_UPDATED=0
+apt_install_if_missing() {
+  local cmd="$1"
+  shift
+  local packages=("$@")
+
+  if command -v "${cmd}" >/dev/null 2>&1; then
+    return 0
+  fi
+
+  if ! command -v apt-get >/dev/null 2>&1; then
+    fail "Command '${cmd}' tidak ditemukan dan apt-get tidak tersedia."
+  fi
+
+  if ! can_escalate_root; then
+    fail "Command '${cmd}' tidak ditemukan. Jalankan sebagai root/sudo untuk install paket: ${packages[*]}"
+  fi
+
+  export DEBIAN_FRONTEND=noninteractive
+  if [[ "${APT_UPDATED}" -eq 0 ]]; then
+    log "Menjalankan apt-get update..."
+    run_as_root apt-get update -y
+    APT_UPDATED=1
+  fi
+
+  log "Install paket untuk '${cmd}': ${packages[*]}"
+  run_as_root apt-get install -y "${packages[@]}"
+
+  command -v "${cmd}" >/dev/null 2>&1 || fail "Gagal menemukan command '${cmd}' setelah install paket."
+}
+
 APP_DIR_INPUT="${1:-}"
 if [[ -n "${APP_DIR_INPUT}" ]]; then
   APP_DIR="$(cd "${APP_DIR_INPUT}" && pwd)"
@@ -18,14 +70,19 @@ else
 fi
 
 if [[ ! -f "${APP_DIR}/artisan" ]]; then
-  echo "ERROR: artisan tidak ditemukan di ${APP_DIR}"
-  exit 1
+  fail "artisan tidak ditemukan di ${APP_DIR}"
 fi
+
+if [[ ! -f "${APP_DIR}/public/cron/send_notifications.php" ]]; then
+  fail "File cron tidak ditemukan: ${APP_DIR}/public/cron/send_notifications.php"
+fi
+
+apt_install_if_missing crontab cron
+apt_install_if_missing php php-cli
 
 PHP_BIN="${PHP_BIN:-$(command -v php || true)}"
 if [[ -z "${PHP_BIN}" ]]; then
-  echo "ERROR: binary php tidak ditemukan. Set env PHP_BIN dulu."
-  exit 1
+  fail "binary php tidak ditemukan. Set env PHP_BIN dulu."
 fi
 
 FLOCK_BIN="$(command -v flock || true)"

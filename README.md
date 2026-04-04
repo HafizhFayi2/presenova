@@ -90,6 +90,10 @@ Konfigurasi `DocumentRoot` wajib ke folder `public`, bukan ke `resources/views/p
 
 Jika salah (mis. ke `resources/views/pages`), route Laravel tidak aktif dan tombol bisa loop / URL duplikat.
 
+Catatan Debian 12 VPS fresh:
+- Script Linux di folder `scripts/` sudah menyiapkan dependency yang dibutuhkan sebelum konfigurasi inti dijalankan.
+- Tetap jalankan script sebagai `root/sudo` agar proses install paket otomatis bisa berjalan.
+
 ### Linux VPS (`/var/www/presenova`)
 Contoh VirtualHost:
 
@@ -119,7 +123,7 @@ sudo bash scripts/setup_https_letsencrypt_linux.sh \
   --domain presenova.my.id \
   --email adm@presenova.my.id \
   --app-dir /var/www/presenova \
-  --aliases www.presenova.my.id
+  --aliases www.presenova.my.id,ebook.presenova.my.id
 ```
 
 Script akan:
@@ -148,8 +152,28 @@ Pastikan nilai `.env` produksi:
 Checklist anti warning `Not Secure`:
 - `curl -I http://presenova.my.id` harus 301/302 ke `https://`.
 - `curl -I https://presenova.my.id` harus 200/302 tanpa error sertifikat.
+- `curl -I https://ebook.presenova.my.id` harus 200/302 tanpa error sertifikat.
 - Tidak ada aset `http://` (mixed content) pada source HTML/CSS/JS.
 - `sudo systemctl status certbot.timer` aktif untuk auto-renew.
+
+### Linux VPS + aaPanel (SSL webroot, tanpa Apache script)
+Jika web server dikelola aaPanel (Nginx/OpenLiteSpeed), gunakan mode webroot berikut:
+
+```bash
+sudo bash scripts/setup_ssl_webroot_linux.sh \
+  --domains presenova.my.id,ebook.presenova.my.id \
+  --email adm@presenova.my.id \
+  --webroot /www/wwwroot/presenova/public \
+  --reload-cmd "bt reload"
+```
+
+Output cert akan tersedia di:
+- `/etc/letsencrypt/live/presenova.my.id/fullchain.pem`
+- `/etc/letsencrypt/live/presenova.my.id/privkey.pem`
+
+Jika aaPanel mengelola SSL langsung dari panel, domain SAN tetap harus mencakup:
+- `presenova.my.id`
+- `ebook.presenova.my.id`
 
 ### Windows XAMPP (`C:/xampp/htdocs/presenova`)
 Jika memakai host `localhost/presenova`, pastikan root `.htaccess` aktif (`AllowOverride All`) atau gunakan VirtualHost:
@@ -170,8 +194,12 @@ Template siap pakai juga tersedia di: `scripts/apache-vhost-windows.conf`.
 
 ## Setup DeepFace
 ```bash
-bash scripts/setup_deepface.sh --write-env
+bash scripts/setup_deepface.sh --install-system-deps --write-env
 ```
+
+Catatan Debian 12 fresh:
+- Script akan menginstall dependency Python/OpenCV ketika `--install-system-deps` dipakai.
+- `.venv` default berada di `public/face/.venv` dan `PYTHON_BIN` di `.env` akan diarahkan ke path venv Linux.
 
 ## Setup Cron Push (VPS Linux)
 Jalankan installer cron (idempotent, aman di-run ulang):
@@ -181,6 +209,7 @@ bash scripts/install_push_cron_linux.sh /var/www/presenova
 ```
 
 Catatan:
+- Script akan memasang dependency dasar (`cron`, `php-cli`) jika belum tersedia.
 - Script akan memasang cron per 1 menit untuk menjalankan `public/cron/send_notifications.php`.
 - Jika `flock` tersedia, eksekusi cron diberi lock agar tidak overlap.
 - Log cron tersimpan di `storage/logs/push-cron.log`.
@@ -420,6 +449,7 @@ Dokumen dan template:
 - `scripts/apache-vhost-linux-https-letsencrypt.conf`
 - `scripts/apache-vhost-windows.conf`
 - `scripts/setup_https_letsencrypt_linux.sh`
+- `scripts/setup_ssl_webroot_linux.sh`
 
 ## 11. Pro dan Cons Terkini
 
@@ -483,7 +513,7 @@ DeepFace dijalankan melalui script Python:
 
 Setup otomatis:
 ```bash
-bash scripts/setup_deepface.sh --write-env
+bash scripts/setup_deepface.sh --install-system-deps --write-env
 ```
 
 ## Verifikasi Cepat

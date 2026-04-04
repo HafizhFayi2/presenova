@@ -130,12 +130,6 @@ MAILBOX_DOMAIN="${ADMIN_EMAIL#*@}"
 [[ -n "${MAILBOX_LOCALPART}" && "${MAILBOX_DOMAIN}" != "${ADMIN_EMAIL}" ]] || fail "Format --admin-email tidak valid."
 [[ "${MAILBOX_DOMAIN}" == "${DOMAIN}" ]] || fail "Domain email admin harus sama dengan --domain."
 
-if [[ -z "${MAIL_PASSWORD}" ]]; then
-  require_cmd openssl
-  MAIL_PASSWORD="$(openssl rand -hex 16)"
-  AUTO_GENERATED_PASSWORD=1
-fi
-
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DEFAULT_APP_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 APP_DIR="${APP_DIR:-${DEFAULT_APP_DIR}}"
@@ -147,6 +141,10 @@ require_cmd apt-get
 require_cmd systemctl
 require_cmd sed
 require_cmd awk
+if ! command -v debconf-set-selections >/dev/null 2>&1; then
+  apt-get update -y
+  apt-get install -y debconf-utils
+fi
 require_cmd debconf-set-selections
 
 log "Install dependency mail server..."
@@ -154,13 +152,20 @@ export DEBIAN_FRONTEND=noninteractive
 echo "postfix postfix/mailname string ${DOMAIN}" | debconf-set-selections
 echo "postfix postfix/main_mailer_type select Internet Site" | debconf-set-selections
 apt-get update -y
-apt-get install -y postfix postfix-pcre libsasl2-modules dovecot-core dovecot-imapd dovecot-pop3d dovecot-lmtpd opendkim opendkim-tools certbot ca-certificates curl
+apt-get install -y postfix postfix-pcre libsasl2-modules dovecot-core dovecot-imapd dovecot-pop3d dovecot-lmtpd opendkim opendkim-tools certbot ca-certificates curl openssl bsd-mailx
 
 require_cmd postconf
 require_cmd postmap
 require_cmd doveadm
+require_cmd doveconf
 require_cmd opendkim-genkey
 require_cmd certbot
+require_cmd openssl
+
+if [[ -z "${MAIL_PASSWORD}" ]]; then
+  MAIL_PASSWORD="$(openssl rand -hex 16)"
+  AUTO_GENERATED_PASSWORD=1
+fi
 
 if ! getent group vmail >/dev/null 2>&1; then
   groupadd --system vmail

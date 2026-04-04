@@ -11,8 +11,8 @@ Usage:
 Options:
   --project-root <path>      Project root path (default: auto from script location)
   --python <binary>          Python binary to create venv (default: python3)
-  --venv <relative-path>     Venv path relative to project root (default: public/face/.venv)
-  --requirements <path>      Requirements path relative to project root (default: public/face/faces_conf/requirements.txt)
+  --venv <path>              Venv path (relative project root atau absolute), default: public/face/.venv
+  --requirements <path>      Requirements path (relative project root atau absolute), default: public/face/faces_conf/requirements.txt
   --write-env                Update .env PYTHON_BIN to the venv python path
   --install-system-deps      Install Debian/Ubuntu system deps for DeepFace/OpenCV
   -h, --help                 Show help
@@ -34,6 +34,18 @@ die() {
 
 need_cmd() {
   command -v "$1" >/dev/null 2>&1 || die "Command not found: $1"
+}
+
+can_escalate_root() {
+  [[ "$(id -u)" -eq 0 ]] || command -v sudo >/dev/null 2>&1
+}
+
+run_as_root() {
+  if [[ "$(id -u)" -eq 0 ]]; then
+    "$@"
+  else
+    sudo "$@"
+  fi
 }
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
@@ -85,8 +97,18 @@ while [[ $# -gt 0 ]]; do
 done
 
 PROJECT_ROOT="$(cd -- "${PROJECT_ROOT}" && pwd -P)"
-VENV_PATH="${PROJECT_ROOT}/${VENV_REL}"
-REQ_PATH="${PROJECT_ROOT}/${REQ_REL}"
+if [[ "${VENV_REL}" = /* ]]; then
+  VENV_PATH="${VENV_REL}"
+else
+  VENV_PATH="${PROJECT_ROOT}/${VENV_REL}"
+fi
+
+if [[ "${REQ_REL}" = /* ]]; then
+  REQ_PATH="${REQ_REL}"
+else
+  REQ_PATH="${PROJECT_ROOT}/${REQ_REL}"
+fi
+
 ENV_FILE="${PROJECT_ROOT}/.env"
 ENV_EXAMPLE_FILE="${PROJECT_ROOT}/.env.example"
 
@@ -94,20 +116,18 @@ ENV_EXAMPLE_FILE="${PROJECT_ROOT}/.env.example"
 
 if [[ "${INSTALL_SYSTEM_DEPS}" -eq 1 ]]; then
   need_cmd apt-get
-  if [[ "$(id -u)" -eq 0 ]]; then
-    APT_RUN=()
-  elif command -v sudo >/dev/null 2>&1; then
-    APT_RUN=(sudo)
-  else
+  if ! can_escalate_root; then
     die "Perlu root/sudo untuk --install-system-deps"
   fi
 
   log "Install system dependencies (Debian/Ubuntu)..."
-  "${APT_RUN[@]}" apt-get update
-  "${APT_RUN[@]}" apt-get install -y \
+  run_as_root apt-get update
+  run_as_root apt-get install -y \
     python3 \
     python3-venv \
     python3-pip \
+    python3-dev \
+    build-essential \
     libglib2.0-0 \
     libgl1 \
     libsm6 \
@@ -118,8 +138,13 @@ fi
 
 need_cmd "${PYTHON_BIN}"
 
+if ! "${PYTHON_BIN}" -m venv --help >/dev/null 2>&1; then
+  die "Modul venv tidak tersedia pada '${PYTHON_BIN}'. Jalankan ulang dengan --install-system-deps di Debian/Ubuntu."
+fi
+
 log "Project root: ${PROJECT_ROOT}"
 log "Create/update venv: ${VENV_PATH}"
+mkdir -p "$(dirname "${VENV_PATH}")"
 "${PYTHON_BIN}" -m venv "${VENV_PATH}"
 
 if [[ -x "${VENV_PATH}/bin/python" ]]; then
@@ -144,7 +169,8 @@ if [[ "${WRITE_ENV}" -eq 1 ]]; then
   fi
 
   if grep -q '^PYTHON_BIN=' "${ENV_FILE}"; then
-    sed -i "s#^PYTHON_BIN=.*#PYTHON_BIN=${VENV_PYTHON}#g" "${ENV_FILE}"
+    escaped_python_bin="$(printf '%s' "${VENV_PYTHON}" | sed 's/[&#]/\\&/g')"
+    sed -i "s#^PYTHON_BIN=.*#PYTHON_BIN=${escaped_python_bin}#g" "${ENV_FILE}"
   else
     printf '\nPYTHON_BIN=%s\n' "${VENV_PYTHON}" >> "${ENV_FILE}"
   fi

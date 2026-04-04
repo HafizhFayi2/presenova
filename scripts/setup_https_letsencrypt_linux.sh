@@ -9,7 +9,7 @@ Usage:
 Options:
   --domain <domain>         Domain utama (wajib), contoh: presenova.my.id
   --email <email>           Email Let's Encrypt (wajib)
-  --aliases <a,b,c>         Domain alias dipisah koma, contoh: www.presenova.my.id
+  --aliases <a,b,c>         Domain alias dipisah koma, contoh: www.presenova.my.id,ebook.presenova.my.id
   --app-dir <path>          Root project (default: parent folder script ini)
   --site-name <name>        Nama file vhost Apache (default: presenova-<domain>)
   --skip-env-update         Jangan update file .env
@@ -33,6 +33,24 @@ fail() {
 require_cmd() {
   local cmd="$1"
   command -v "${cmd}" >/dev/null 2>&1 || fail "Perintah '${cmd}' tidak ditemukan."
+}
+
+APT_UPDATED=0
+apt_install_packages() {
+  local packages=("$@")
+  [[ ${#packages[@]} -gt 0 ]] || return 0
+
+  require_cmd apt-get
+  export DEBIAN_FRONTEND=noninteractive
+
+  if [[ "${APT_UPDATED}" -eq 0 ]]; then
+    log "Menjalankan apt-get update..."
+    apt-get update -y
+    APT_UPDATED=1
+  fi
+
+  log "Install paket: ${packages[*]}"
+  apt-get install -y "${packages[@]}"
 }
 
 render_vhost_template() {
@@ -113,6 +131,10 @@ APP_DIR="${APP_DIR:-${DEFAULT_APP_DIR}}"
 APP_DIR="$(cd "${APP_DIR}" && pwd)"
 
 [[ -f "${APP_DIR}/artisan" ]] || fail "File artisan tidak ditemukan di ${APP_DIR}."
+
+log "Memastikan dependency Debian tersedia..."
+apt_install_packages ca-certificates curl apache2 certbot python3-certbot-apache
+
 [[ -d /etc/apache2 ]] || fail "Apache2 tidak terdeteksi (folder /etc/apache2 tidak ditemukan)."
 
 SITE_NAME="${SITE_NAME:-presenova-${DOMAIN//./-}}"
@@ -129,7 +151,7 @@ if [[ -n "${ALIASES_RAW}" ]]; then
   done
 fi
 
-SERVER_ALIAS_TEMPLATE_LINE="    # ServerAlias www.${DOMAIN}"
+SERVER_ALIAS_TEMPLATE_LINE="    # ServerAlias www.${DOMAIN} ebook.${DOMAIN}"
 if [[ ${#ALIASES[@]} -gt 0 ]]; then
   SERVER_ALIAS_TEMPLATE_LINE="    ServerAlias ${ALIASES[*]}"
 fi
@@ -139,22 +161,19 @@ if [[ ${#ALIASES[@]} -gt 0 ]]; then
   DOMAINS+=("${ALIASES[@]}")
 fi
 
-log "Memastikan dependency tersedia..."
-if command -v apt-get >/dev/null 2>&1; then
-  export DEBIAN_FRONTEND=noninteractive
-  apt-get update -y
-  apt-get install -y certbot python3-certbot-apache
-else
-  fail "apt-get tidak ditemukan. Install manual 'certbot' dan 'python3-certbot-apache' terlebih dahulu."
-fi
-
 require_cmd certbot
 require_cmd a2enmod
 require_cmd a2ensite
 require_cmd a2query
+require_cmd a2dissite
+require_cmd awk
+require_cmd sed
+require_cmd systemctl
 
 APACHECTL_BIN="$(command -v apache2ctl || command -v apachectl || true)"
 [[ -n "${APACHECTL_BIN}" ]] || fail "apache2ctl/apachectl tidak ditemukan."
+
+systemctl enable --now apache2 >/dev/null 2>&1 || true
 
 log "Mengaktifkan module Apache yang dibutuhkan..."
 a2enmod rewrite ssl headers >/dev/null
