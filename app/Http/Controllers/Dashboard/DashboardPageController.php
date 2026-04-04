@@ -53,6 +53,9 @@ class DashboardPageController extends Controller
             'server has gone away',
             'connection timed out',
             'could not find driver',
+            'database file at path',
+            'sqlitedatabasedoesnotexistexception',
+            'no such file or directory',
         ];
 
         $current = $e;

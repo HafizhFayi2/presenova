@@ -1,27 +1,53 @@
 <?php
 // Get statistics
-$stats = [];
+$stats = [
+    'students' => 0,
+    'teachers' => 0,
+    'classes' => 0,
+    'attendance_today' => 0,
+];
+$dashboardSectionError = '';
 
 // Total Students
 $sql = "SELECT COUNT(*) as total FROM student";
 $stmt = $db->query($sql);
-$stats['students'] = $stmt->fetch()['total'];
+if ($stmt) {
+    $row = $stmt->fetch();
+    $stats['students'] = (int) ($row['total'] ?? 0);
+} else {
+    $dashboardSectionError = 'Sebagian data dashboard gagal dimuat. Periksa koneksi database.';
+}
 
 // Total Teachers
 $sql = "SELECT COUNT(*) as total FROM teacher";
 $stmt = $db->query($sql);
-$stats['teachers'] = $stmt->fetch()['total'];
+if ($stmt) {
+    $row = $stmt->fetch();
+    $stats['teachers'] = (int) ($row['total'] ?? 0);
+} elseif ($dashboardSectionError === '') {
+    $dashboardSectionError = 'Sebagian data dashboard gagal dimuat. Periksa koneksi database.';
+}
 
 // Total Classes
 $sql = "SELECT COUNT(*) as total FROM class";
 $stmt = $db->query($sql);
-$stats['classes'] = $stmt->fetch()['total'];
+if ($stmt) {
+    $row = $stmt->fetch();
+    $stats['classes'] = (int) ($row['total'] ?? 0);
+} elseif ($dashboardSectionError === '') {
+    $dashboardSectionError = 'Sebagian data dashboard gagal dimuat. Periksa koneksi database.';
+}
 
 // Today's Attendance
 $today = date('Y-m-d');
 $sql = "SELECT COUNT(*) as total FROM presence WHERE DATE(presence_date) = ?";
 $stmt = $db->query($sql, [$today]);
-$stats['attendance_today'] = $stmt->fetch()['total'];
+if ($stmt) {
+    $row = $stmt->fetch();
+    $stats['attendance_today'] = (int) ($row['total'] ?? 0);
+} elseif ($dashboardSectionError === '') {
+    $dashboardSectionError = 'Sebagian data dashboard gagal dimuat. Periksa koneksi database.';
+}
 
 // Recent Activities
 $sql = "SELECT p.*, s.student_name, c.class_name 
@@ -31,8 +57,17 @@ $sql = "SELECT p.*, s.student_name, c.class_name
         ORDER BY p.presence_date DESC, p.time_in DESC 
         LIMIT 10";
 $stmt = $db->query($sql);
-$recent_activities = $stmt->fetchAll();
+$recent_activities = $stmt ? ($stmt->fetchAll() ?: []) : [];
+if (!$stmt && $dashboardSectionError === '') {
+    $dashboardSectionError = 'Sebagian data dashboard gagal dimuat. Periksa koneksi database.';
+}
 ?>
+
+<?php if ($dashboardSectionError !== ''): ?>
+<div class="alert alert-warning mb-3">
+    <?php echo htmlspecialchars($dashboardSectionError); ?>
+</div>
+<?php endif; ?>
 
 <div class="row mb-4">
     <div class="col-md-3">

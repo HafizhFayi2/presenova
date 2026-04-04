@@ -1654,7 +1654,10 @@ if ($active_admin_section_css !== null) {
                     if (isset($_SESSION['level']) && (int) $_SESSION['level'] === 2) {
                         $adminRoleLabel = 'Operator';
                     }
-                    $adminDisplayName = $_SESSION['fullname'] ?? ($_SESSION['username'] ?? 'User');
+                    $adminDisplayName = trim((string) ($_SESSION['fullname'] ?? ($_SESSION['username'] ?? 'User')));
+                    if ($adminDisplayName === '') {
+                        $adminDisplayName = 'User';
+                    }
                     ?>
                     <div class="topbar-userinfo">
                         <div class="topbar-user-name"><?php echo htmlspecialchars($adminDisplayName); ?></div>
@@ -1664,11 +1667,14 @@ if ($active_admin_section_css !== null) {
                     <!-- User -->
                     <div class="user">
                         <?php
-                        $nameParts = explode(' ', $_SESSION['fullname']);
+                        $nameParts = preg_split('/\s+/', $adminDisplayName) ?: ['User'];
                         $initials = '';
                         foreach ($nameParts as $part) {
                             $initials .= strtoupper(substr($part, 0, 1));
                             if (strlen($initials) >= 2) break;
+                        }
+                        if ($initials === '') {
+                            $initials = 'U';
                         }
                         ?>
                         <div class="avatar-text" style="
@@ -1725,22 +1731,36 @@ if ($active_admin_section_css !== null) {
                 } else {
                     // Default dashboard
                     // Get statistics
-                    $stats = [];
+                    $stats = [
+                        'students' => 0,
+                        'teachers' => 0,
+                        'classes' => 0,
+                        'attendance_today' => 0,
+                    ];
 
                     // Total Students
                     $sql = "SELECT COUNT(*) as total FROM student";
                     $stmt = $db->query($sql);
-                    $stats['students'] = $stmt->fetch()['total'];
+                    if ($stmt) {
+                        $row = $stmt->fetch();
+                        $stats['students'] = (int) ($row['total'] ?? 0);
+                    }
 
                     // Total Teachers
                     $sql = "SELECT COUNT(*) as total FROM teacher";
                     $stmt = $db->query($sql);
-                    $stats['teachers'] = $stmt->fetch()['total'];
+                    if ($stmt) {
+                        $row = $stmt->fetch();
+                        $stats['teachers'] = (int) ($row['total'] ?? 0);
+                    }
 
                     // Total Classes
                     $sql = "SELECT COUNT(*) as total FROM class";
                     $stmt = $db->query($sql);
-                    $stats['classes'] = $stmt->fetch()['total'];
+                    if ($stmt) {
+                        $row = $stmt->fetch();
+                        $stats['classes'] = (int) ($row['total'] ?? 0);
+                    }
 
                     // Weekly cycle (Mon-Sat 15:00 WIB)
                     $tz = new DateTimeZone('Asia/Jakarta');
@@ -1757,7 +1777,10 @@ if ($active_admin_section_css !== null) {
                     // Attendance in current cycle
                     $sql = "SELECT COUNT(*) as total FROM presence WHERE presence_date BETWEEN ? AND ?";
                     $stmt = $db->query($sql, [$cycle_start, $cycle_end]);
-                    $stats['attendance_today'] = $stmt->fetch()['total'];
+                    if ($stmt) {
+                        $row = $stmt->fetch();
+                        $stats['attendance_today'] = (int) ($row['total'] ?? 0);
+                    }
 
                     // Recent Activities (current cycle)
                     $sql = "SELECT p.*, s.student_name, c.class_name 
@@ -1768,7 +1791,7 @@ if ($active_admin_section_css !== null) {
                             ORDER BY p.presence_date DESC, p.time_in DESC 
                             LIMIT 10";
                     $stmt = $db->query($sql, [$cycle_start, $cycle_end]);
-                    $recent_activities = $stmt->fetchAll();
+                    $recent_activities = $stmt ? ($stmt->fetchAll() ?: []) : [];
                     ?>
                     
                     <div class="row mb-4">
@@ -1970,6 +1993,7 @@ if ($active_admin_section_css !== null) {
     }
 
     const adminPrefetchLoaded = new Set();
+    const isOperatorSession = <?php echo $isOperator ? 'true' : 'false'; ?>;
 
     function normalizeAdminPrefetchUrl(rawUrl) {
         if (!rawUrl) {
@@ -2012,10 +2036,14 @@ if ($active_admin_section_css !== null) {
             const parsed = new URL(url, window.location.origin);
             const pathname = parsed.pathname.toLowerCase();
             const params = parsed.searchParams;
+            const table = (params.get('table') || '').toLowerCase();
             if (pathname.endsWith('/logout.php') || pathname.includes('/logout')) {
                 return true;
             }
             if (params.has('download') || params.has('export') || params.has('autoprint') || params.has('action')) {
+                return true;
+            }
+            if (isOperatorSession && (table === 'system' || table === 'location')) {
                 return true;
             }
             return false;
@@ -2059,7 +2087,9 @@ if ($active_admin_section_css !== null) {
     }
     
     $(document).ready(function() {
-        initAdminSectionPrefetch();
+        if (!isOperatorSession) {
+            initAdminSectionPrefetch();
+        }
         // Fail-safe: clear stale body lock state (can happen after interrupted modal navigation)
         document.documentElement.classList.remove('scroll-locked');
         document.documentElement.style.overflow = '';

@@ -23,9 +23,15 @@ class LoginController extends Controller
             return redirect($this->appPath('login.php?timeout=1'));
         }
 
+        $hasDbError = $request->query->has('db_error');
+        if ($hasDbError) {
+            // Prevent login <-> dashboard redirect loop when DB is unavailable.
+            $this->destroyLoginState($request);
+        }
+
         $this->touchActivityTimestamp($request);
 
-        if (!$request->query->has('timeout') && $this->isLoggedIn()) {
+        if (!$request->query->has('timeout') && !$hasDbError && $this->isLoggedIn()) {
             return redirect($this->roleDashboardPath((string) session('role', '')));
         }
 

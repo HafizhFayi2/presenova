@@ -62,19 +62,27 @@ Lihat contoh lengkap di `.env.example`.
 ## Menjalankan Lokal
 1. Jalankan Apache + MySQL (XAMPP).
 2. Pastikan extension PHP yang dibutuhkan aktif (`pdo_mysql`, `openssl`, `mbstring`, `gd`).
-3. Install dependency:
+3. Buat file environment lokal (sekali per mesin):
+```bash
+cp .env.example .env
+```
+4. Install dependency:
 ```bash
 composer install
 ```
-4. Generate key jika belum ada:
+5. Generate key aplikasi:
 ```bash
 php artisan key:generate
 ```
-5. Jalankan migrasi jika diperlukan:
+6. Bersihkan cache config lama (penting setelah `git pull`):
+```bash
+php artisan optimize:clear
+```
+7. Jalankan migrasi jika diperlukan:
 ```bash
 php artisan migrate
 ```
-6. Akses aplikasi:
+8. Akses aplikasi:
 - `http://localhost/presenova`
 
 ## Konfigurasi Apache (Windows + Linux)
