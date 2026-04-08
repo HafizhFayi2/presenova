@@ -109,6 +109,7 @@ Yang dikerjakan script ini secara berurutan:
 - Install paket OS penting (Apache, MariaDB, PHP ext, Composer, Certbot, Node, cron).
 - Siapkan database + user + update `.env`.
 - Install dependency Composer + generate `APP_KEY`.
+- Install dependency frontend (`npm`) + build aset produksi (`npm run build`).
 - Import SQL bootstrap (`presenova.sql`) saat database masih kosong.
 - Jalankan `php artisan migrate --force`, `storage:link`, permission runtime.
 - Setup HTTPS Let's Encrypt + redirect + update `.env` produksi.
@@ -117,7 +118,7 @@ Yang dikerjakan script ini secara berurutan:
 Opsional:
 - Tambah `--with-deepface` untuk setup DeepFace venv.
 - Tambah `--with-mail` untuk setup Postfix/Dovecot mail server.
-- Tambah `--skip-https` atau `--skip-cron` jika ingin dipasang terpisah.
+- Tambah `--skip-frontend-build`, `--skip-https`, atau `--skip-cron` jika ingin dipasang terpisah.
 
 Contoh deploy + mail server domain `mail.presenova.my.id`:
 

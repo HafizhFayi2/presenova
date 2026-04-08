@@ -22,6 +22,7 @@ Options:
   --db-port <port>             DB port untuk .env (default: 3306)
   --sql-file <path>            File SQL bootstrap (default: <app-dir>/presenova.sql)
   --skip-sql-import            Lewati import SQL awal
+  --skip-frontend-build        Lewati npm install + npm run build
   --skip-https                 Lewati setup HTTPS/Let's Encrypt
   --skip-cron                  Lewati setup cron push notification
   --with-deepface              Sekalian setup DeepFace venv
@@ -100,6 +101,7 @@ DB_HOST="127.0.0.1"
 DB_PORT="3306"
 SQL_FILE=""
 SKIP_SQL_IMPORT=0
+SKIP_FRONTEND_BUILD=0
 SKIP_HTTPS=0
 SKIP_CRON=0
 WITH_DEEPFACE=0
@@ -161,6 +163,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --skip-sql-import)
       SKIP_SQL_IMPORT=1
+      shift
+      ;;
+    --skip-frontend-build)
+      SKIP_FRONTEND_BUILD=1
       shift
       ;;
     --skip-https)
@@ -275,6 +281,7 @@ require_cmd composer
 require_cmd mysql
 require_cmd a2enmod
 require_cmd systemctl
+require_cmd npm
 
 if [[ -z "${DB_PASS}" ]]; then
   if command -v openssl >/dev/null 2>&1; then
@@ -340,6 +347,22 @@ export COMPOSER_ALLOW_SUPERUSER=1
 (cd "${APP_DIR}" && composer install --no-dev --optimize-autoloader --no-interaction)
 
 [[ -f "${APP_DIR}/vendor/autoload.php" ]] || fail "vendor/autoload.php tidak ditemukan setelah composer install."
+
+if [[ "${SKIP_FRONTEND_BUILD}" -eq 0 ]]; then
+  if [[ -f "${APP_DIR}/package.json" ]]; then
+    log "Install dependency frontend (npm) + build asset..."
+    if [[ -f "${APP_DIR}/package-lock.json" ]]; then
+      (cd "${APP_DIR}" && npm ci --include=dev --no-audit --no-fund)
+    else
+      (cd "${APP_DIR}" && npm install --include=dev --no-audit --no-fund)
+    fi
+    (cd "${APP_DIR}" && npm run build)
+  else
+    log "Lewati build frontend karena package.json tidak ditemukan."
+  fi
+else
+  log "Build frontend dilewati (--skip-frontend-build)."
+fi
 
 if grep -qE '^APP_KEY=$' "${ENV_FILE}" || ! grep -qE '^APP_KEY=base64:' "${ENV_FILE}"; then
   log "Generate APP_KEY..."
