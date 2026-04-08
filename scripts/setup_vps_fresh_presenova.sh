@@ -11,7 +11,9 @@ Usage:
 Options:
   --domain <domain>            Domain utama app (default: presenova.my.id)
   --email <email>              Email Let's Encrypt (default: adm@presenova.my.id)
-  --aliases <a,b,c>            Alias domain (default: www.<domain>,ebook.<domain>)
+  --aliases <a,b,c>            Alias domain app utama (default: www.<domain>)
+  --ebook-domain <domain>      Domain ebook terpisah (default: ebook.<domain>)
+  --ebook-dir <path>           DocumentRoot ebook (default: <app-dir>/Ebook)
   --app-dir <path>             Root project (default: parent folder script)
   --db-name <name>             Nama database (default: presenova)
   --db-user <user>             User database (default: presenova)
@@ -34,6 +36,8 @@ Contoh:
     --domain presenova.my.id \
     --email adm@presenova.my.id \
     --app-dir /var/www/presenova \
+    --ebook-domain ebook.presenova.my.id \
+    --ebook-dir /var/www/presenova/Ebook \
     --db-name presenova \
     --db-user presenova
 USAGE
@@ -86,6 +90,8 @@ apt_install_packages() {
 DOMAIN="presenova.my.id"
 EMAIL="adm@presenova.my.id"
 ALIASES_RAW=""
+EBOOK_DOMAIN=""
+EBOOK_DIR=""
 APP_DIR=""
 DB_NAME="presenova"
 DB_USER="presenova"
@@ -115,6 +121,14 @@ while [[ $# -gt 0 ]]; do
       ;;
     --aliases)
       ALIASES_RAW="${2:-}"
+      shift 2
+      ;;
+    --ebook-domain)
+      EBOOK_DOMAIN="${2:-}"
+      shift 2
+      ;;
+    --ebook-dir)
+      EBOOK_DIR="${2:-}"
       shift 2
       ;;
     --app-dir)
@@ -209,12 +223,17 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DEFAULT_APP_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 APP_DIR="${APP_DIR:-${DEFAULT_APP_DIR}}"
 APP_DIR="$(cd "${APP_DIR}" && pwd)"
+EBOOK_DOMAIN="${EBOOK_DOMAIN:-ebook.${DOMAIN}}"
+EBOOK_DIR="${EBOOK_DIR:-${APP_DIR}/Ebook}"
 
 [[ -f "${APP_DIR}/artisan" ]] || fail "File artisan tidak ditemukan di ${APP_DIR}."
 
 if [[ -z "${ALIASES_RAW}" ]]; then
-  ALIASES_RAW="www.${DOMAIN},ebook.${DOMAIN}"
+  ALIASES_RAW="www.${DOMAIN}"
 fi
+
+mkdir -p "${EBOOK_DIR}"
+EBOOK_DIR="$(cd "${EBOOK_DIR}" && pwd)"
 
 if [[ -z "${SQL_FILE}" ]]; then
   SQL_FILE="${APP_DIR}/presenova.sql"
@@ -316,14 +335,16 @@ upsert_env "${ENV_FILE}" "DB_DATABASE" "${DB_NAME}"
 upsert_env "${ENV_FILE}" "DB_USERNAME" "${DB_USER}"
 upsert_env "${ENV_FILE}" "DB_PASSWORD" "${DB_PASS}"
 
+log "Install dependency composer..."
+export COMPOSER_ALLOW_SUPERUSER=1
+(cd "${APP_DIR}" && composer install --no-dev --optimize-autoloader --no-interaction)
+
+[[ -f "${APP_DIR}/vendor/autoload.php" ]] || fail "vendor/autoload.php tidak ditemukan setelah composer install."
+
 if grep -qE '^APP_KEY=$' "${ENV_FILE}" || ! grep -qE '^APP_KEY=base64:' "${ENV_FILE}"; then
   log "Generate APP_KEY..."
   (cd "${APP_DIR}" && php artisan key:generate --force --no-interaction)
 fi
-
-log "Install dependency composer..."
-export COMPOSER_ALLOW_SUPERUSER=1
-(cd "${APP_DIR}" && composer install --no-dev --optimize-autoloader --no-interaction)
 
 if [[ "${SKIP_SQL_IMPORT}" -eq 0 ]]; then
   if [[ -f "${SQL_FILE}" ]]; then
@@ -354,10 +375,12 @@ if [[ "${CORE_TABLE_COUNT}" -lt 4 ]]; then
 fi
 
 log "Set permission runtime Laravel..."
-mkdir -p "${APP_DIR}/storage" "${APP_DIR}/bootstrap/cache" "${APP_DIR}/public/uploads"
-chown -R www-data:www-data "${APP_DIR}/storage" "${APP_DIR}/bootstrap/cache" "${APP_DIR}/public/uploads"
+mkdir -p "${APP_DIR}/storage" "${APP_DIR}/bootstrap/cache" "${APP_DIR}/public/uploads" "${EBOOK_DIR}"
+chown -R www-data:www-data "${APP_DIR}/storage" "${APP_DIR}/bootstrap/cache" "${APP_DIR}/public/uploads" "${EBOOK_DIR}"
 find "${APP_DIR}/storage" "${APP_DIR}/bootstrap/cache" "${APP_DIR}/public/uploads" -type d -exec chmod 775 {} \;
 find "${APP_DIR}/storage" "${APP_DIR}/bootstrap/cache" "${APP_DIR}/public/uploads" -type f -exec chmod 664 {} \;
+find "${EBOOK_DIR}" -type d -exec chmod 755 {} \;
+find "${EBOOK_DIR}" -type f -exec chmod 644 {} \;
 
 if [[ "${SKIP_HTTPS}" -eq 0 ]]; then
   log "Setup HTTPS Let's Encrypt..."
@@ -365,7 +388,9 @@ if [[ "${SKIP_HTTPS}" -eq 0 ]]; then
     --domain "${DOMAIN}" \
     --email "${EMAIL}" \
     --app-dir "${APP_DIR}" \
-    --aliases "${ALIASES_RAW}"
+    --aliases "${ALIASES_RAW}" \
+    --ebook-domain "${EBOOK_DOMAIN}" \
+    --ebook-dir "${EBOOK_DIR}"
 else
   log "Setup HTTPS dilewati (--skip-https)."
 fi
@@ -407,7 +432,9 @@ log "Finalisasi cache Laravel..."
 CREDENTIAL_FILE="/root/${DOMAIN//./-}-presenova-vps-credentials.txt"
 cat > "${CREDENTIAL_FILE}" <<EOF
 Domain        : ${DOMAIN}
+Ebook domain  : ${EBOOK_DOMAIN}
 App directory : ${APP_DIR}
+Ebook dir     : ${EBOOK_DIR}
 DB host       : ${DB_HOST}
 DB port       : ${DB_PORT}
 DB name       : ${DB_NAME}
@@ -426,5 +453,6 @@ echo
 echo "Verifikasi cepat:"
 echo "  curl -I http://${DOMAIN}"
 echo "  curl -I https://${DOMAIN}"
+echo "  curl -I https://${EBOOK_DOMAIN}"
 echo "  crontab -l | grep PRESENOVA_PUSH_CRON"
 echo "  systemctl status apache2 mariadb cron --no-pager"

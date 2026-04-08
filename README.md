@@ -99,6 +99,8 @@ sudo bash scripts/setup_vps_fresh_presenova.sh \
   --domain presenova.my.id \
   --email adm@presenova.my.id \
   --app-dir /var/www/presenova \
+  --ebook-domain ebook.presenova.my.id \
+  --ebook-dir /var/www/presenova/Ebook \
   --db-name presenova \
   --db-user presenova
 ```
@@ -124,6 +126,8 @@ sudo bash scripts/setup_vps_fresh_presenova.sh \
   --domain presenova.my.id \
   --email adm@presenova.my.id \
   --app-dir /var/www/presenova \
+  --ebook-domain ebook.presenova.my.id \
+  --ebook-dir /var/www/presenova/Ebook \
   --db-name presenova \
   --db-user presenova \
   --with-mail \
@@ -205,12 +209,15 @@ sudo bash scripts/setup_https_letsencrypt_linux.sh \
   --domain presenova.my.id \
   --email adm@presenova.my.id \
   --app-dir /var/www/presenova \
-  --aliases www.presenova.my.id,ebook.presenova.my.id
+  --aliases www.presenova.my.id \
+  --ebook-domain ebook.presenova.my.id \
+  --ebook-dir /var/www/presenova/Ebook
 ```
 
 Script akan:
 - Mengaktifkan module Apache (`rewrite`, `ssl`, `headers`).
 - Membuat/aktifkan vhost HTTPS dengan redirect `:80 -> :443`.
+- Membuat vhost `ebook.presenova.my.id` terpisah dengan `DocumentRoot /var/www/presenova/Ebook`.
 - Request sertifikat Let's Encrypt + aktifkan auto-renew.
 - Update `.env` agar URL/cookie konsisten HTTPS.
 

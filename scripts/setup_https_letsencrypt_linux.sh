@@ -9,7 +9,9 @@ Usage:
 Options:
   --domain <domain>         Domain utama (wajib), contoh: presenova.my.id
   --email <email>           Email Let's Encrypt (wajib)
-  --aliases <a,b,c>         Domain alias dipisah koma, contoh: www.presenova.my.id,ebook.presenova.my.id
+  --aliases <a,b,c>         Domain alias app utama dipisah koma, contoh: www.presenova.my.id
+  --ebook-domain <domain>   Domain ebook terpisah (default: ebook.<domain>)
+  --ebook-dir <path>        DocumentRoot domain ebook (default: <app-dir>/Ebook)
   --app-dir <path>          Root project (default: parent folder script ini)
   --site-name <name>        Nama file vhost Apache (default: presenova-<domain>)
   --skip-env-update         Jangan update file .env
@@ -59,6 +61,8 @@ render_vhost_template() {
   content="${content//__DOMAIN__/${DOMAIN}}"
   content="${content//__APP_DIR__/${APP_DIR}}"
   content="${content//__SERVER_ALIAS_DIRECTIVE__/${SERVER_ALIAS_TEMPLATE_LINE}}"
+  content="${content//__EBOOK_HTTP_VHOST__/${EBOOK_HTTP_TEMPLATE_BLOCK}}"
+  content="${content//__EBOOK_HTTPS_VHOST__/${EBOOK_HTTPS_TEMPLATE_BLOCK}}"
   printf '%s\n' "${content}"
 }
 
@@ -75,9 +79,94 @@ write_full_https_conf() {
   render_vhost_template > "${SITE_CONF}"
 }
 
+build_ebook_http_vhost_block() {
+  cat <<EOF
+<VirtualHost *:80>
+    ServerName ${EBOOK_DOMAIN}
+
+    # Ebook webroot terpisah dari aplikasi utama.
+    DocumentRoot "${EBOOK_DIR}"
+
+    <Directory "${EBOOK_DIR}">
+        Options FollowSymLinks
+        AllowOverride All
+        Require all granted
+    </Directory>
+
+    # Gunakan webroot challenge yang sama agar penerbitan cert SAN tetap konsisten.
+    Alias /.well-known/acme-challenge/ "${APP_DIR}/public/.well-known/acme-challenge/"
+    <Directory "${APP_DIR}/public/.well-known/acme-challenge/">
+        Options None
+        AllowOverride None
+        Require all granted
+    </Directory>
+
+    RewriteEngine On
+    RewriteCond %{REQUEST_URI} !^/\\.well-known/acme-challenge/
+    RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [R=301,L,NE]
+
+    ErrorLog \${APACHE_LOG_DIR}/presenova-ebook-error.log
+    CustomLog \${APACHE_LOG_DIR}/presenova-ebook-access.log combined
+</VirtualHost>
+EOF
+}
+
+build_ebook_https_vhost_block() {
+  cat <<EOF
+<VirtualHost *:443>
+    ServerName ${EBOOK_DOMAIN}
+
+    # Ebook webroot terpisah dari aplikasi utama.
+    DocumentRoot "${EBOOK_DIR}"
+
+    <Directory "${EBOOK_DIR}">
+        Options FollowSymLinks
+        AllowOverride All
+        Require all granted
+    </Directory>
+
+    SSLEngine on
+    SSLCertificateFile /etc/letsencrypt/live/${DOMAIN}/fullchain.pem
+    SSLCertificateKeyFile /etc/letsencrypt/live/${DOMAIN}/privkey.pem
+    IncludeOptional /etc/letsencrypt/options-ssl-apache.conf
+
+    # Fallback hardening if options-ssl-apache.conf is not present.
+    SSLProtocol all -SSLv3 -TLSv1 -TLSv1.1
+    SSLCipherSuite HIGH:!aNULL:!MD5
+    SSLHonorCipherOrder off
+    SSLCompression off
+    SSLSessionTickets off
+
+    Header always set Strict-Transport-Security "max-age=31536000; includeSubDomains"
+    Header always set X-Content-Type-Options "nosniff"
+    Header always set X-Frame-Options "SAMEORIGIN"
+    Header always set Referrer-Policy "strict-origin-when-cross-origin"
+
+    ErrorLog \${APACHE_LOG_DIR}/presenova-ebook-ssl-error.log
+    CustomLog \${APACHE_LOG_DIR}/presenova-ebook-ssl-access.log combined
+</VirtualHost>
+EOF
+}
+
+add_unique_domain() {
+  local candidate="$1"
+  [[ -n "${candidate}" ]] || return 0
+
+  local existing
+  for existing in "${DOMAINS[@]}"; do
+    if [[ "${existing}" == "${candidate}" ]]; then
+      return 0
+    fi
+  done
+
+  DOMAINS+=("${candidate}")
+}
+
 DOMAIN=""
 EMAIL=""
 ALIASES_RAW=""
+EBOOK_DOMAIN=""
+EBOOK_DIR=""
 APP_DIR=""
 SITE_NAME=""
 SKIP_ENV_UPDATE=0
@@ -94,6 +183,14 @@ while [[ $# -gt 0 ]]; do
       ;;
     --aliases)
       ALIASES_RAW="${2:-}"
+      shift 2
+      ;;
+    --ebook-domain)
+      EBOOK_DOMAIN="${2:-}"
+      shift 2
+      ;;
+    --ebook-dir)
+      EBOOK_DIR="${2:-}"
       shift 2
       ;;
     --app-dir)
@@ -129,8 +226,12 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DEFAULT_APP_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 APP_DIR="${APP_DIR:-${DEFAULT_APP_DIR}}"
 APP_DIR="$(cd "${APP_DIR}" && pwd)"
+EBOOK_DOMAIN="${EBOOK_DOMAIN:-ebook.${DOMAIN}}"
+EBOOK_DIR="${EBOOK_DIR:-${APP_DIR}/Ebook}"
 
 [[ -f "${APP_DIR}/artisan" ]] || fail "File artisan tidak ditemukan di ${APP_DIR}."
+mkdir -p "${EBOOK_DIR}"
+EBOOK_DIR="$(cd "${EBOOK_DIR}" && pwd)"
 
 log "Memastikan dependency Debian tersedia..."
 apt_install_packages ca-certificates curl apache2 certbot python3-certbot-apache
@@ -151,14 +252,36 @@ if [[ -n "${ALIASES_RAW}" ]]; then
   done
 fi
 
-SERVER_ALIAS_TEMPLATE_LINE="    # ServerAlias www.${DOMAIN} ebook.${DOMAIN}"
+SERVER_ALIAS_TEMPLATE_LINE="    # ServerAlias www.${DOMAIN}"
 if [[ ${#ALIASES[@]} -gt 0 ]]; then
   SERVER_ALIAS_TEMPLATE_LINE="    ServerAlias ${ALIASES[*]}"
 fi
 
-DOMAINS=("${DOMAIN}")
+if [[ "${EBOOK_DOMAIN}" == "${DOMAIN}" ]]; then
+  fail "--ebook-domain tidak boleh sama dengan --domain."
+fi
 if [[ ${#ALIASES[@]} -gt 0 ]]; then
-  DOMAINS+=("${ALIASES[@]}")
+  for alias in "${ALIASES[@]}"; do
+    if [[ "${alias}" == "${EBOOK_DOMAIN}" ]]; then
+      fail "--ebook-domain tidak boleh sama dengan salah satu --aliases."
+    fi
+  done
+fi
+
+DOMAINS=()
+add_unique_domain "${DOMAIN}"
+if [[ ${#ALIASES[@]} -gt 0 ]]; then
+  for alias in "${ALIASES[@]}"; do
+    add_unique_domain "${alias}"
+  done
+fi
+add_unique_domain "${EBOOK_DOMAIN}"
+
+EBOOK_HTTP_TEMPLATE_BLOCK=""
+EBOOK_HTTPS_TEMPLATE_BLOCK=""
+if [[ -n "${EBOOK_DOMAIN}" ]]; then
+  EBOOK_HTTP_TEMPLATE_BLOCK="$(build_ebook_http_vhost_block)"
+  EBOOK_HTTPS_TEMPLATE_BLOCK="$(build_ebook_https_vhost_block)"
 fi
 
 require_cmd certbot
@@ -254,6 +377,7 @@ echo
 echo "Verifikasi cepat:"
 echo "  curl -I http://${DOMAIN}"
 echo "  curl -I https://${DOMAIN}"
+echo "  curl -I https://${EBOOK_DOMAIN}"
 echo "  openssl s_client -connect ${DOMAIN}:443 -servername ${DOMAIN} </dev/null 2>/dev/null | openssl x509 -noout -issuer -subject -dates"
 echo
 echo "Jika APP_URL/.env baru diubah, jalankan:"
