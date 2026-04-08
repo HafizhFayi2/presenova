@@ -55,9 +55,15 @@ Minimal variabel yang harus diisi:
 - Database: `DB_*`
 - JWT remember: `JWT_REMEMBER_SECRET`
 - Face matcher: `PYTHON_BIN`, `FACE_MATCH_*`
+- Private media: `MEDIA_SIGNED_URL_TTL_MINUTES` (default 60 menit)
 - Push: `PUSH_ENABLED`, `PUSH_VAPID_PUBLIC_KEY`, `PUSH_VAPID_PRIVATE_KEY`, `PUSH_VAPID_SUBJECT`
 
 Lihat contoh lengkap di `.env.example`.
+
+## Keamanan Media Wajah/Absensi
+- Foto wajah dan foto absensi tidak lagi disajikan langsung dari URL publik `uploads/*`.
+- Akses media memakai URL signed sementara (`/media/face`, `/media/attendance`) + validasi role/session.
+- Direct access ke `/uploads/faces/*` dan `/uploads/attendance/*` diblokir di `.htaccess` (HTTP 403).
 
 ## Menjalankan Lokal
 1. Jalankan Apache + MySQL (XAMPP).
@@ -84,6 +90,82 @@ php artisan migrate
 ```
 8. Akses aplikasi:
 - `http://localhost/presenova`
+
+## Quick Deploy VPS Fresh (Instant)
+Untuk VPS Linux fresh 0 progress, gunakan installer satu langkah berikut:
+
+```bash
+sudo bash scripts/setup_vps_fresh_presenova.sh \
+  --domain presenova.my.id \
+  --email adm@presenova.my.id \
+  --app-dir /var/www/presenova \
+  --db-name presenova \
+  --db-user presenova
+```
+
+Yang dikerjakan script ini secara berurutan:
+- Install paket OS penting (Apache, MariaDB, PHP ext, Composer, Certbot, Node, cron).
+- Siapkan database + user + update `.env`.
+- Install dependency Composer + generate `APP_KEY`.
+- Import SQL bootstrap (`presenova.sql`) saat database masih kosong.
+- Jalankan `php artisan migrate --force`, `storage:link`, permission runtime.
+- Setup HTTPS Let's Encrypt + redirect + update `.env` produksi.
+- Setup cron push notification.
+
+Opsional:
+- Tambah `--with-deepface` untuk setup DeepFace venv.
+- Tambah `--with-mail` untuk setup Postfix/Dovecot mail server.
+- Tambah `--skip-https` atau `--skip-cron` jika ingin dipasang terpisah.
+
+Contoh deploy + mail server domain `mail.presenova.my.id`:
+
+```bash
+sudo bash scripts/setup_vps_fresh_presenova.sh \
+  --domain presenova.my.id \
+  --email adm@presenova.my.id \
+  --app-dir /var/www/presenova \
+  --db-name presenova \
+  --db-user presenova \
+  --with-mail \
+  --mail-admin-email adm@presenova.my.id \
+  --mail-host mail.presenova.my.id
+```
+
+Pre-check DNS minimum sebelum setup mail:
+- `A mail.presenova.my.id -> IP VPS mail`
+- `MX presenova.my.id -> mail.presenova.my.id (priority 10)`
+- `TXT SPF` mengizinkan host mail (`mx` atau `a:mail.presenova.my.id` / `ip4:...`)
+
+Jika hanya ingin setup mail server:
+
+```bash
+sudo bash scripts/setup_mail_server_linux.sh \
+  --domain presenova.my.id \
+  --admin-email adm@presenova.my.id \
+  --mail-host mail.presenova.my.id \
+  --letsencrypt-email adm@presenova.my.id \
+  --app-dir /var/www/presenova
+```
+
+Setelah deploy selesai, jalankan verifikasi sistem:
+
+```bash
+cd /var/www/presenova
+php artisan presenova:health-check --strict --domain=presenova.my.id
+```
+
+Jika ada mismatch sinkronisasi `student_schedule`, jalankan sinkronisasi massal:
+
+```bash
+cd /var/www/presenova
+php artisan presenova:sync-schedules --months=6
+```
+
+Sinkronisasi per siswa (contoh ID 10):
+
+```bash
+php artisan presenova:sync-schedules --student-id=10 --months=6
+```
 
 ## Konfigurasi Apache (Windows + Linux)
 Konfigurasi `DocumentRoot` wajib ke folder `public`, bukan ke `resources/views/pages`.

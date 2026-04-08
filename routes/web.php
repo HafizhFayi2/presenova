@@ -6,6 +6,7 @@ use App\Http\Controllers\Dashboard\DashboardPageController;
 use App\Http\Controllers\Dashboard\Ajax\DashboardAjaxController;
 use App\Http\Controllers\Dashboard\Print\SchedulePrintController;
 use App\Http\Controllers\HomeController;
+use App\Http\Controllers\Media\SecureMediaController;
 use App\Http\Controllers\UtilityPageController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
@@ -125,6 +126,15 @@ foreach ($prefixes as $prefix) {
         Route::match(['GET', 'POST', 'OPTIONS'], '/api/ebook_ratings.php', [ApiController::class, 'ebookRatings']);
         Route::match(['GET', 'POST', 'OPTIONS'], '/api/ebook-ratings', [ApiController::class, 'ebookRatings']);
         Route::match(['GET', 'POST'], '/dashboard/ajax/save_attendance.php', [ApiController::class, 'saveAttendance']);
+
+        $secureFaceMedia = Route::get('/media/face', [SecureMediaController::class, 'face'])
+            ->middleware(['signed:relative', 'throttle:120,1']);
+        $secureAttendanceMedia = Route::get('/media/attendance', [SecureMediaController::class, 'attendance'])
+            ->middleware(['signed:relative', 'throttle:120,1']);
+        if ($isBaseRoutes) {
+            $secureFaceMedia->name('media.face');
+            $secureAttendanceMedia->name('media.attendance');
+        }
 
         // Utility pages mapped directly to Laravel controllers.
         Route::match(['GET', 'POST'], '/call.php', [UtilityPageController::class, 'call']);

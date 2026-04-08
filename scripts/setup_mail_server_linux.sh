@@ -13,6 +13,7 @@ Options:
   --mail-host <host>           Host mail server (default: mail.<domain>)
   --letsencrypt-email <email>  Email untuk registrasi Let's Encrypt (default: admin-email)
   --app-dir <path>             Path project Laravel untuk update .env (default: parent folder script)
+  --skip-dns-check             Lewati preflight DNS check (A mail-host + MX domain)
   --skip-cert                  Lewati Let's Encrypt dan pakai self-signed certificate
   --skip-env-update            Jangan update file .env project
   --help                       Tampilkan bantuan
@@ -29,6 +30,10 @@ log() {
 fail() {
   printf 'ERROR: %s\n' "$*" >&2
   exit 1
+}
+
+warn() {
+  printf 'WARN: %s\n' "$*" >&2
 }
 
 require_cmd() {
@@ -63,6 +68,7 @@ MAIL_PASSWORD=""
 MAIL_HOST=""
 LETSENCRYPT_EMAIL=""
 APP_DIR=""
+SKIP_DNS_CHECK=0
 SKIP_CERT=0
 SKIP_ENV_UPDATE=0
 AUTO_GENERATED_PASSWORD=0
@@ -93,6 +99,10 @@ while [[ $# -gt 0 ]]; do
       APP_DIR="${2:-}"
       shift 2
       ;;
+    --skip-dns-check)
+      SKIP_DNS_CHECK=1
+      shift
+      ;;
     --skip-cert)
       SKIP_CERT=1
       shift
@@ -114,6 +124,8 @@ done
 [[ -n "${DOMAIN}" ]] || fail "--domain wajib diisi."
 [[ -n "${ADMIN_EMAIL}" ]] || fail "--admin-email wajib diisi."
 
+DOMAIN="$(printf '%s' "${DOMAIN%.}" | tr '[:upper:]' '[:lower:]')"
+
 if [[ "${EUID}" -ne 0 ]]; then
   fail "Jalankan script dengan sudo/root."
 fi
@@ -123,12 +135,15 @@ if [[ "${DOMAIN}" != "presenova.my.id" ]]; then
 fi
 
 MAIL_HOST="${MAIL_HOST:-mail.${DOMAIN}}"
+MAIL_HOST="$(printf '%s' "${MAIL_HOST%.}" | tr '[:upper:]' '[:lower:]')"
 LETSENCRYPT_EMAIL="${LETSENCRYPT_EMAIL:-${ADMIN_EMAIL}}"
 
 MAILBOX_LOCALPART="${ADMIN_EMAIL%@*}"
 MAILBOX_DOMAIN="${ADMIN_EMAIL#*@}"
 [[ -n "${MAILBOX_LOCALPART}" && "${MAILBOX_DOMAIN}" != "${ADMIN_EMAIL}" ]] || fail "Format --admin-email tidak valid."
-[[ "${MAILBOX_DOMAIN}" == "${DOMAIN}" ]] || fail "Domain email admin harus sama dengan --domain."
+if [[ "$(printf '%s' "${MAILBOX_DOMAIN}" | tr '[:upper:]' '[:lower:]')" != "${DOMAIN}" ]]; then
+  fail "Domain email admin harus sama dengan --domain."
+fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DEFAULT_APP_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
@@ -141,6 +156,7 @@ require_cmd apt-get
 require_cmd systemctl
 require_cmd sed
 require_cmd awk
+require_cmd grep
 if ! command -v debconf-set-selections >/dev/null 2>&1; then
   apt-get update -y
   apt-get install -y debconf-utils
@@ -152,7 +168,7 @@ export DEBIAN_FRONTEND=noninteractive
 echo "postfix postfix/mailname string ${DOMAIN}" | debconf-set-selections
 echo "postfix postfix/main_mailer_type select Internet Site" | debconf-set-selections
 apt-get update -y
-apt-get install -y postfix postfix-pcre libsasl2-modules dovecot-core dovecot-imapd dovecot-pop3d dovecot-lmtpd opendkim opendkim-tools certbot ca-certificates curl openssl bsd-mailx
+apt-get install -y postfix postfix-pcre libsasl2-modules dovecot-core dovecot-imapd dovecot-pop3d dovecot-lmtpd opendkim opendkim-tools certbot ca-certificates curl openssl bsd-mailx dnsutils
 
 require_cmd postconf
 require_cmd postmap
@@ -161,6 +177,35 @@ require_cmd doveconf
 require_cmd opendkim-genkey
 require_cmd certbot
 require_cmd openssl
+require_cmd dig
+
+if [[ "${SKIP_DNS_CHECK}" -eq 0 ]]; then
+  log "Preflight DNS check untuk domain mail..."
+
+  MAIL_A_RECORDS="$(dig +short A "${MAIL_HOST}" | awk 'NF {print $1}' || true)"
+  [[ -n "${MAIL_A_RECORDS}" ]] || fail "A record untuk ${MAIL_HOST} belum ditemukan. Pastikan DNS sudah diarahkan ke IP VPS."
+
+  VPS_PUBLIC_IP="$(curl -fsS https://api.ipify.org || true)"
+  if [[ -n "${VPS_PUBLIC_IP}" ]] && ! printf '%s\n' "${MAIL_A_RECORDS}" | grep -Fxq "${VPS_PUBLIC_IP}"; then
+    warn "A record ${MAIL_HOST} (${MAIL_A_RECORDS//$'\n'/, }) belum cocok dengan IP publik VPS (${VPS_PUBLIC_IP})."
+  fi
+
+  DOMAIN_MX_TARGETS="$(dig +short MX "${DOMAIN}" | awk 'NF {print tolower($2)}' | sed 's/\.$//' || true)"
+  if ! printf '%s\n' "${DOMAIN_MX_TARGETS}" | grep -Fxqi "${MAIL_HOST}"; then
+    fail "MX untuk ${DOMAIN} belum mengarah ke ${MAIL_HOST}. Perbaiki DNS dulu lalu jalankan ulang."
+  fi
+
+  SPF_RECORDS="$(dig +short TXT "${DOMAIN}" | tr -d '"' | grep -i '^v=spf1' || true)"
+  if [[ -z "${SPF_RECORDS}" ]]; then
+    warn "TXT SPF untuk ${DOMAIN} belum terdeteksi."
+  elif ! printf '%s\n' "${SPF_RECORDS}" | grep -Eiq "(mx|a:${MAIL_HOST}|ip4:)"; then
+    warn "TXT SPF terdeteksi tapi belum terlihat mengizinkan host mail (${MAIL_HOST})."
+  fi
+
+  log "DNS check OK: A(${MAIL_HOST}) dan MX(${DOMAIN} -> ${MAIL_HOST}) valid."
+else
+  warn "Preflight DNS check dilewati (--skip-dns-check)."
+fi
 
 if [[ -z "${MAIL_PASSWORD}" ]]; then
   MAIL_PASSWORD="$(openssl rand -hex 16)"
@@ -456,7 +501,7 @@ if [[ "${SKIP_ENV_UPDATE}" -eq 0 ]]; then
   if [[ -f "${ENV_FILE}" ]]; then
     log "Update konfigurasi mail di ${ENV_FILE}..."
     upsert_env "${ENV_FILE}" "MAIL_MAILER" "smtp"
-    upsert_env "${ENV_FILE}" "MAIL_HOST" "127.0.0.1"
+    upsert_env "${ENV_FILE}" "MAIL_HOST" "${MAIL_HOST}"
     upsert_env "${ENV_FILE}" "MAIL_PORT" "587"
     upsert_env "${ENV_FILE}" "MAIL_USERNAME" "${ADMIN_EMAIL}"
     upsert_env "${ENV_FILE}" "MAIL_PASSWORD" "${MAIL_PASSWORD}"
@@ -521,6 +566,10 @@ echo "Tes cepat setelah DNS propagate:"
 echo "  dig +short MX ${DOMAIN}"
 echo "  openssl s_client -connect ${MAIL_HOST}:587 -starttls smtp -servername ${MAIL_HOST} </dev/null"
 echo "  openssl s_client -connect ${MAIL_HOST}:993 -servername ${MAIL_HOST} </dev/null"
+echo
+echo "Validasi Postfix -> Dovecot (LMTP/Auth):"
+echo "  postconf -n | egrep '^(myhostname|mydomain|virtual_mailbox_domains|virtual_transport|smtpd_sasl_path|mydestination)'"
+echo "  doveconf -n | egrep '^(protocols|mail_location|ssl|disable_plaintext_auth)'"
 echo
 echo "Saran kirim test email:"
 echo "  echo 'SMTP test from ${DOMAIN}' | mail -s 'SMTP Test' ${ADMIN_EMAIL}"

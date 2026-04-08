@@ -178,6 +178,12 @@ systemctl enable --now apache2 >/dev/null 2>&1 || true
 log "Mengaktifkan module Apache yang dibutuhkan..."
 a2enmod rewrite ssl headers >/dev/null
 
+if command -v ufw >/dev/null 2>&1; then
+  log "Membuka firewall ufw untuk HTTP/HTTPS..."
+  ufw allow 80/tcp >/dev/null || true
+  ufw allow 443/tcp >/dev/null || true
+fi
+
 log "Mempersiapkan webroot ACME challenge..."
 mkdir -p "${APP_DIR}/public/.well-known/acme-challenge"
 
@@ -233,8 +239,11 @@ if [[ "${SKIP_ENV_UPDATE}" -eq 0 ]]; then
 
     upsert_env "APP_URL" "https://${DOMAIN}"
     upsert_env "SITE_URL" "https://${DOMAIN}"
+    upsert_env "APP_ENV" "production"
+    upsert_env "APP_DEBUG" "false"
     upsert_env "SESSION_SECURE_COOKIE" "true"
     upsert_env "FORCE_HTTPS" "true"
+    upsert_env "MEDIA_SIGNED_URL_TTL_MINUTES" "60"
   else
     log "Lewati update .env karena file tidak ditemukan."
   fi

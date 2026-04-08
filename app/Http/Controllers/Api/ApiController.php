@@ -999,16 +999,45 @@ class ApiController extends Controller
                 );
             }
 
+            $attendanceUrl = '';
+            if (function_exists('attendance_photo_secure_url')) {
+                $attendanceUrl = attendance_photo_secure_url($attendanceFilename, $scheduleDate);
+                if ($attendanceUrl === '') {
+                    $relativeAttendance = function_exists('attendance_relative_from_file')
+                        ? attendance_relative_from_file((string) $attendancePath)
+                        : '';
+                    if ($relativeAttendance !== '') {
+                        $attendanceUrl = attendance_photo_secure_url($relativeAttendance, $scheduleDate);
+                    }
+                }
+            }
+
+            $validationUrl = null;
+            if ($validationGenerated && function_exists('attendance_photo_secure_url')) {
+                $validationReference = $dateTimeFolder . '/' . $classFolder . '/' . $validationFilename;
+                $resolvedValidationUrl = attendance_photo_secure_url($validationReference, $scheduleDate);
+                if ($resolvedValidationUrl === '') {
+                    $relativeValidation = function_exists('attendance_relative_from_file')
+                        ? attendance_relative_from_file((string) $validationPath)
+                        : '';
+                    if ($relativeValidation !== '') {
+                        $resolvedValidationUrl = attendance_photo_secure_url($relativeValidation, $scheduleDate);
+                    }
+                }
+                $validationUrl = $resolvedValidationUrl !== '' ? $resolvedValidationUrl : null;
+            }
+
             return $this->attendanceJson($requestPath, [
                 'success' => true,
                 'message' => 'Absensi berhasil',
                 'data' => [
                     'similarity' => (float) ($matchResult['similarity'] ?? 0),
                     'match_log' => $matchLog,
-                    'attendance_path' => str_replace('\\', '/', str_replace(public_path() . DIRECTORY_SEPARATOR, '', (string) $attendancePath)),
-                    'validation_path' => $validationGenerated
-                        ? str_replace('\\', '/', str_replace(public_path() . DIRECTORY_SEPARATOR, '', (string) $validationPath))
-                        : null,
+                    'attendance_url' => $attendanceUrl,
+                    'validation_url' => $validationUrl,
+                    // Keep legacy keys non-sensitive to avoid exposing upload paths.
+                    'attendance_path' => null,
+                    'validation_path' => null,
                     'status' => $isLate ? 'OVERDUE' : 'SUCCESS',
                     'attendance_time' => $currentTime,
                     'attendance_date' => $scheduleDate,
@@ -1128,12 +1157,15 @@ class ApiController extends Controller
             (int) $student->class_id,
             6
         );
+        $totalSchedules = DB::table('student_schedule')
+            ->where('student_id', $studentId)
+            ->count();
 
         return response()->json([
             'success' => true,
             'message' => 'Sinkronisasi berhasil',
             'added' => $added,
-            'total_schedules' => $added,
+            'total_schedules' => $totalSchedules,
         ]);
     }
 
@@ -1458,31 +1490,20 @@ class ApiController extends Controller
             return '';
         }
 
-        if (preg_match('~^https?://~', $rawPhoto)) {
+        $presenceDate = trim((string) ($attendance['presence_date'] ?? ''));
+        if (function_exists('attendance_photo_secure_url')) {
+            $secureUrl = attendance_photo_secure_url($rawPhoto, $presenceDate);
+            if ($secureUrl !== '') {
+                return $secureUrl;
+            }
+        }
+
+        // Never expose direct upload paths when secure URL resolution fails.
+        if (preg_match('~^https?://~i', $rawPhoto) || str_starts_with(strtolower($rawPhoto), 'data:')) {
             return $rawPhoto;
         }
 
-        $cleanPhoto = ltrim($rawPhoto, '/');
-        $prefix = rtrim($relativePrefix, '/');
-
-        if (str_starts_with($cleanPhoto, 'uploads/')) {
-            return $prefix . '/' . $cleanPhoto;
-        }
-        if (str_starts_with($cleanPhoto, '../')) {
-            return $cleanPhoto;
-        }
-        if (!str_contains($cleanPhoto, '/')) {
-            $presenceDate = trim((string) ($attendance['presence_date'] ?? ''));
-            if ($presenceDate !== '') {
-                $dateDir = date('Y-m-d', strtotime($presenceDate));
-                return $prefix . '/uploads/attendance/' . $dateDir . '/' . $cleanPhoto;
-            }
-        }
-        if (str_starts_with($cleanPhoto, 'attendance/')) {
-            return $prefix . '/uploads/' . $cleanPhoto;
-        }
-
-        return $prefix . '/uploads/attendance/' . $cleanPhoto;
+        return '';
     }
 
     private function logActivity(int $userId, string $userType, string $action, string $details = ''): void

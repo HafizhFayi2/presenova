@@ -60,16 +60,18 @@ function resolveAttendancePhotoUrl($rawPhoto, $presenceDate = null): string {
         return '';
     }
 
-    if (strpos($rawPhoto, 'uploads/attendance') === false && !preg_match('~^https?://~', $rawPhoto)) {
-        $cleanPhoto = ltrim($rawPhoto, '/');
-        if (strpos($cleanPhoto, '/') === false && !empty($presenceDate)) {
-            $dateDir = date('Y-m-d', strtotime((string) $presenceDate));
-            return '../uploads/attendance/' . $dateDir . '/' . $cleanPhoto;
+    if (function_exists('attendance_photo_secure_url')) {
+        $secureUrl = attendance_photo_secure_url($rawPhoto, $presenceDate);
+        if ($secureUrl !== '') {
+            return $secureUrl;
         }
-        return '../uploads/attendance/' . $cleanPhoto;
     }
 
-    return $rawPhoto;
+    if (preg_match('~^https?://~i', (string) $rawPhoto) || str_starts_with(strtolower((string) $rawPhoto), 'data:')) {
+        return (string) $rawPhoto;
+    }
+
+    return '';
 }
 
 // Gunakan COALESCE untuk memastikan urutan prioritas data

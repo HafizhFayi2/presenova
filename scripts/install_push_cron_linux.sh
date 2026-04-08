@@ -79,10 +79,36 @@ fi
 
 apt_install_if_missing crontab cron
 apt_install_if_missing php php-cli
+apt_install_if_missing nodejs nodejs
+
+if can_escalate_root; then
+  run_as_root systemctl enable --now cron >/dev/null 2>&1 || true
+fi
 
 PHP_BIN="${PHP_BIN:-$(command -v php || true)}"
 if [[ -z "${PHP_BIN}" ]]; then
   fail "binary php tidak ditemukan. Set env PHP_BIN dulu."
+fi
+
+NODE_BIN="${PUSH_NODE_BIN:-$(command -v node || command -v nodejs || true)}"
+if [[ -z "${NODE_BIN}" ]]; then
+  fail "binary node tidak ditemukan."
+fi
+
+ENV_FILE="${APP_DIR}/.env"
+if [[ -f "${ENV_FILE}" ]]; then
+  if grep -qE '^PUSH_NODE_BIN=' "${ENV_FILE}"; then
+    sed -i "s|^PUSH_NODE_BIN=.*|PUSH_NODE_BIN=${NODE_BIN}|" "${ENV_FILE}"
+  else
+    printf '\nPUSH_NODE_BIN=%s\n' "${NODE_BIN}" >> "${ENV_FILE}"
+  fi
+fi
+
+WEBPUSH_DIR="${APP_DIR}/public/scripts/webpush"
+if [[ -f "${WEBPUSH_DIR}/package.json" && ! -f "${WEBPUSH_DIR}/node_modules/web-push/package.json" ]]; then
+  apt_install_if_missing npm npm
+  log "Install dependency webpush (npm --omit=dev)..."
+  (cd "${WEBPUSH_DIR}" && npm install --omit=dev)
 fi
 
 FLOCK_BIN="$(command -v flock || true)"

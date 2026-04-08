@@ -290,9 +290,8 @@ class FaceMatcherService
     }
 
     /**
-     * Konversi absolute file path di folder public menjadi URL browser.
-     * Contoh:
-     *   C:\xampp\htdocs\presenova\public\uploads\faces\a.jpg -> /presenova/uploads/faces/a.jpg
+     * Konversi file path menjadi URL browser.
+     * Untuk media sensitif (face/attendance), URL signed diprioritaskan.
      */
     public function toPublicUrl($filePath, $prefix = '..') {
         $filePath = trim((string) $filePath);
@@ -306,6 +305,41 @@ class FaceMatcherService
         }
 
         $normalized = str_replace('\\', '/', $filePath);
+        $realPath = realpath($filePath);
+        if ($realPath !== false) {
+            $normalized = str_replace('\\', '/', $realPath);
+        }
+
+        if (function_exists('face_reference_relative_from_file') && function_exists('face_reference_secure_url')) {
+            $faceRelative = face_reference_relative_from_file($normalized);
+            if ($faceRelative !== '') {
+                $secureFaceUrl = face_reference_secure_url($faceRelative);
+                if ($secureFaceUrl !== '') {
+                    return $secureFaceUrl;
+                }
+            }
+        }
+
+        if (function_exists('attendance_relative_from_file') && function_exists('attendance_photo_secure_url')) {
+            $attendanceRelative = attendance_relative_from_file($normalized);
+            if ($attendanceRelative !== '') {
+                $secureAttendanceUrl = attendance_photo_secure_url($attendanceRelative);
+                if ($secureAttendanceUrl !== '') {
+                    return $secureAttendanceUrl;
+                }
+            }
+        }
+
+        $normalizedLower = strtolower($normalized);
+        if (str_contains($normalizedLower, '/uploads/faces/')
+            || str_contains($normalizedLower, '/uploads/attendance/')
+            || str_starts_with($normalizedLower, 'uploads/faces/')
+            || str_starts_with($normalizedLower, 'uploads/attendance/')
+            || str_starts_with($normalizedLower, 'faces/')
+            || str_starts_with($normalizedLower, 'attendance/')) {
+            return '';
+        }
+
         $isAbsoluteWindows = (bool) preg_match('#^[A-Za-z]:/#', $normalized);
         $isAbsoluteUnix = strpos($normalized, '/') === 0;
 

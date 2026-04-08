@@ -213,7 +213,13 @@ class DashboardAjaxController extends Controller
             (string) ($student->photo_reference ?? '')
         );
         $hasReference = is_string($referencePath) && $referencePath !== '';
-        $referenceUrl = $hasReference ? $this->toBrowserPublicPath((string) $referencePath, '..') : '';
+        $referenceUrl = '';
+        if ($hasReference && function_exists('face_reference_secure_url')) {
+            $referenceUrl = face_reference_secure_url((string) $referencePath);
+        }
+        if ($referenceUrl === '' && $hasReference) {
+            $referenceUrl = $this->toBrowserPublicPath((string) $referencePath, '..');
+        }
 
         $similarityThreshold = (int) env('FACE_MATCH_THRESHOLD', 89);
         if ($similarityThreshold <= 0 || $similarityThreshold > 100) {
@@ -1323,34 +1329,20 @@ class DashboardAjaxController extends Controller
             return '';
         }
 
-        if (preg_match('~^https?://~', $rawPhoto)) {
-            return $rawPhoto;
-        }
-
-        $cleanPhoto = ltrim($rawPhoto, '/');
-        $prefix = rtrim($relativePrefix, '/');
-
-        if (str_starts_with($cleanPhoto, 'uploads/')) {
-            return $prefix . '/' . $cleanPhoto;
-        }
-
-        if (str_starts_with($cleanPhoto, '../')) {
-            return $cleanPhoto;
-        }
-
-        if (!str_contains($cleanPhoto, '/')) {
-            $presenceDate = trim((string) ($attendance['presence_date'] ?? ''));
-            if ($presenceDate !== '') {
-                $dateDir = date('Y-m-d', strtotime($presenceDate));
-                return $prefix . '/uploads/attendance/' . $dateDir . '/' . $cleanPhoto;
+        $presenceDate = trim((string) ($attendance['presence_date'] ?? ''));
+        if (function_exists('attendance_photo_secure_url')) {
+            $secureUrl = attendance_photo_secure_url($rawPhoto, $presenceDate);
+            if ($secureUrl !== '') {
+                return $secureUrl;
             }
         }
 
-        if (str_starts_with($cleanPhoto, 'attendance/')) {
-            return $prefix . '/uploads/' . $cleanPhoto;
+        // Never expose direct upload paths when secure URL resolution fails.
+        if (preg_match('~^https?://~i', $rawPhoto) || str_starts_with(strtolower($rawPhoto), 'data:')) {
+            return $rawPhoto;
         }
 
-        return $prefix . '/uploads/attendance/' . $cleanPhoto;
+        return '';
     }
 
     private function toBrowserPublicPath(string $path, string $prefix = '..'): string
@@ -1368,6 +1360,36 @@ class DashboardAjaxController extends Controller
         $realPath = realpath($path);
         if ($realPath !== false) {
             $normalizedPath = str_replace('\\', '/', $realPath);
+        }
+
+        if (function_exists('face_reference_relative_from_file') && function_exists('face_reference_secure_url')) {
+            $faceRelative = face_reference_relative_from_file($normalizedPath);
+            if ($faceRelative !== '') {
+                $secureFaceUrl = face_reference_secure_url($faceRelative);
+                if ($secureFaceUrl !== '') {
+                    return $secureFaceUrl;
+                }
+            }
+        }
+
+        if (function_exists('attendance_relative_from_file') && function_exists('attendance_photo_secure_url')) {
+            $attendanceRelative = attendance_relative_from_file($normalizedPath);
+            if ($attendanceRelative !== '') {
+                $secureAttendanceUrl = attendance_photo_secure_url($attendanceRelative);
+                if ($secureAttendanceUrl !== '') {
+                    return $secureAttendanceUrl;
+                }
+            }
+        }
+
+        $normalizedLower = strtolower($normalizedPath);
+        if (str_contains($normalizedLower, '/uploads/faces/')
+            || str_contains($normalizedLower, '/uploads/attendance/')
+            || str_starts_with($normalizedLower, 'uploads/faces/')
+            || str_starts_with($normalizedLower, 'uploads/attendance/')
+            || str_starts_with($normalizedLower, 'faces/')
+            || str_starts_with($normalizedLower, 'attendance/')) {
+            return '';
         }
 
         $publicRoot = realpath(public_path());
@@ -1467,4 +1489,3 @@ class DashboardAjaxController extends Controller
         return '';
     }
 }
-
