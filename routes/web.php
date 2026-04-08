@@ -6,6 +6,7 @@ use App\Http\Controllers\Dashboard\DashboardPageController;
 use App\Http\Controllers\Dashboard\Ajax\DashboardAjaxController;
 use App\Http\Controllers\Dashboard\Print\SchedulePrintController;
 use App\Http\Controllers\HomeController;
+use App\Http\Controllers\Media\SecureMediaController;
 use App\Http\Controllers\UtilityPageController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
@@ -22,10 +23,22 @@ foreach ($prefixes as $prefix) {
         $getStartedRoute = Route::get('/getstarted/index.php', [HomeController::class, 'getStarted']);
         Route::get('/public/getstarted/index.php', [HomeController::class, 'getStarted']);
         $indexRoute = Route::get('/index.php', [HomeController::class, 'index']);
+        $ebookRoute = Route::get('/presenova-ebook.html', static function () {
+            $ebookPath = base_path('Ebook/presenova-ebook.html');
+            if (!is_file($ebookPath)) {
+                abort(404);
+            }
+
+            return response()->file($ebookPath, [
+                'Content-Type' => 'text/html; charset=UTF-8',
+            ]);
+        });
+        Route::get('/ebook', static fn () => response('', 302)->header('Location', './presenova-ebook.html'));
         if ($isBaseRoutes) {
             $homeRoute->name('home');
             $getStartedRoute->name('home.getstarted');
             $indexRoute->name('home.index');
+            $ebookRoute->name('home.ebook');
         }
 
         Route::get('/laravel-health', function () {
@@ -110,7 +123,18 @@ foreach ($prefixes as $prefix) {
         Route::match(['GET', 'POST'], '/api/submit_attendance.php', [ApiController::class, 'saveAttendance']);
         Route::match(['GET', 'POST'], '/api/save_pose_frames.php', [ApiController::class, 'savePoseFrames']);
         Route::post('/api/sync_schedule.php', [ApiController::class, 'syncSchedule']);
+        Route::match(['GET', 'POST', 'OPTIONS'], '/api/ebook_ratings.php', [ApiController::class, 'ebookRatings']);
+        Route::match(['GET', 'POST', 'OPTIONS'], '/api/ebook-ratings', [ApiController::class, 'ebookRatings']);
         Route::match(['GET', 'POST'], '/dashboard/ajax/save_attendance.php', [ApiController::class, 'saveAttendance']);
+
+        $secureFaceMedia = Route::get('/media/face', [SecureMediaController::class, 'face'])
+            ->middleware(['signed:relative', 'throttle:120,1']);
+        $secureAttendanceMedia = Route::get('/media/attendance', [SecureMediaController::class, 'attendance'])
+            ->middleware(['signed:relative', 'throttle:120,1']);
+        if ($isBaseRoutes) {
+            $secureFaceMedia->name('media.face');
+            $secureAttendanceMedia->name('media.attendance');
+        }
 
         // Utility pages mapped directly to Laravel controllers.
         Route::match(['GET', 'POST'], '/call.php', [UtilityPageController::class, 'call']);

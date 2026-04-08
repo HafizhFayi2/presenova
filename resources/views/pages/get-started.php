@@ -11,12 +11,21 @@
     <link rel="manifest" href="<?php echo htmlspecialchars($assetBaseUrl, ENT_QUOTES, 'UTF-8'); ?>manifest.json?v=20260220pwa">
     <link rel="apple-touch-icon" href="<?php echo htmlspecialchars($assetBaseUrl, ENT_QUOTES, 'UTF-8'); ?>assets/images/apple-touch-icon-white background.png">
     <link rel="icon" type="image/png" sizes="32x32" href="<?php echo htmlspecialchars($assetBaseUrl, ENT_QUOTES, 'UTF-8'); ?>assets/images/favicon-32x32_login.png">
-
+    <link rel="prefetch" href="<?php echo htmlspecialchars($loginUrl, ENT_QUOTES, 'UTF-8'); ?>">
+    <link rel="dns-prefetch" href="//fonts.googleapis.com">
+    <link rel="dns-prefetch" href="//fonts.gstatic.com">
+    <link rel="dns-prefetch" href="//cdnjs.cloudflare.com">
+    <link rel="dns-prefetch" href="//cdn.jsdelivr.net">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Orbitron:wght@500;700;800&family=Sora:wght@400;600;700;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="preconnect" href="https://cdnjs.cloudflare.com">
+    <link rel="preconnect" href="https://cdn.jsdelivr.net">
+    <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Orbitron:wght@500;700;800&family=Sora:wght@400;600;700;800&display=swap" onload="this.onload=null;this.rel='stylesheet'">
+    <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Orbitron:wght@500;700;800&family=Sora:wght@400;600;700;800&display=swap"></noscript>
+    <link rel="preload" as="style" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" onload="this.onload=null;this.rel='stylesheet'">
+    <noscript><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"></noscript>
+    <link rel="preload" as="style" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" onload="this.onload=null;this.rel='stylesheet'">
+    <noscript><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"></noscript>
 
     <style>
         :root {
@@ -1591,6 +1600,187 @@
             flex-wrap: wrap;
         }
 
+        .hero-rating-stream {
+            width: 100%;
+            max-width: 940px;
+            margin-top: 22px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 12px;
+            padding: 12px 4px 8px;
+            border-radius: 12px;
+            border: none;
+            background: transparent;
+            box-shadow: none;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        .hero-rating-head {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0;
+            width: 100%;
+            text-align: center;
+        }
+
+        .hero-rating-score {
+            position: relative;
+            display: inline-flex;
+            align-items: center;
+            gap: 12px;
+            padding: 0;
+            border-radius: 0;
+            border: none;
+            background: transparent;
+            box-shadow: none;
+            overflow: hidden;
+        }
+
+        .hero-rating-score::after {
+            display: none;
+        }
+
+        .hero-rating-score.is-high {
+            box-shadow: none;
+            background: transparent;
+        }
+
+        .hero-rating-score.is-high::after {
+            display: none;
+            animation: none;
+        }
+
+        .hero-rating-score-value {
+            font-family: 'Orbitron', 'Inter', sans-serif;
+            font-size: 1.02rem;
+            font-weight: 800;
+            color: #f8fcff;
+            letter-spacing: 0.03em;
+            text-shadow: 0 0 10px rgba(171, 231, 255, 0.42);
+        }
+
+        .hero-rating-score-stars {
+            font-size: 1.2rem;
+            letter-spacing: 0.11em;
+            color: #ffd67f;
+            line-height: 1;
+            text-shadow: 0 0 14px rgba(255, 210, 110, 0.45);
+        }
+
+        .hero-rating-score.is-high .hero-rating-score-stars {
+            animation: none;
+        }
+
+        .hero-rating-slider {
+            width: 100%;
+            overflow: hidden;
+            border-radius: 10px;
+            border: none;
+            background: transparent;
+            display: flex;
+            justify-content: center;
+        }
+
+        .hero-rating-track {
+            --rating-speed: 30s;
+            display: flex;
+            align-items: stretch;
+            gap: 14px;
+            width: max-content;
+            padding: 10px 0;
+            animation: heroRatingMarquee var(--rating-speed) linear infinite;
+            will-change: transform;
+            margin-inline: auto;
+        }
+
+        .hero-rating-track.is-static {
+            width: fit-content;
+            max-width: 100%;
+            animation: none;
+            justify-content: center;
+            transform: none !important;
+            margin-inline: auto;
+        }
+
+        .hero-rating-track.is-paused {
+            animation-play-state: paused;
+        }
+
+        .hero-rating-card {
+            position: relative;
+            min-width: clamp(238px, 22vw, 308px);
+            max-width: 320px;
+            border-radius: 10px;
+            border: none;
+            background: linear-gradient(150deg, rgba(17, 45, 86, 0.62), rgba(11, 79, 110, 0.44));
+            box-shadow: 0 9px 20px rgba(0, 22, 58, 0.2);
+            padding: 10px 12px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 7px;
+            text-align: center;
+            overflow: hidden;
+        }
+
+        .hero-rating-card::after {
+            display: none;
+        }
+
+        .hero-rating-card.is-premium {
+            border-color: transparent;
+            background: linear-gradient(150deg, rgba(17, 45, 86, 0.62), rgba(11, 79, 110, 0.44));
+            box-shadow: 0 9px 20px rgba(0, 22, 58, 0.2);
+        }
+
+        .hero-rating-card.is-premium::after {
+            display: none;
+            animation: none;
+        }
+
+        .hero-rating-stars {
+            color: #ffd26e;
+            font-size: 0.9rem;
+            letter-spacing: 0.05em;
+        }
+
+        .hero-rating-text {
+            color: #eaf7ff;
+            font-size: 0.82rem;
+            line-height: 1.42;
+            min-height: 34px;
+            text-align: center;
+            word-break: break-word;
+        }
+
+        .hero-rating-time {
+            color: #93b9de;
+            font-size: 0.72rem;
+            letter-spacing: 0.02em;
+        }
+
+        .hero-rating-author {
+            color: #bfdfff;
+            font-size: 0.82rem;
+            letter-spacing: 0.02em;
+            font-weight: 700;
+        }
+
+        .hero-rating-card-empty {
+            min-width: min(540px, 100%);
+            max-width: min(540px, 100%);
+            align-items: center;
+            text-align: center;
+        }
+
+        @keyframes heroRatingMarquee {
+            from { transform: translate3d(0, 0, 0); }
+            to { transform: translate3d(-50%, 0, 0); }
+        }
+
         .hero-btn {
             text-decoration: none;
             border-radius: 999px;
@@ -1790,6 +1980,16 @@
             .hero-desc {
                 font-size: clamp(1rem, 2.6vw, 1.18rem);
             }
+
+            .hero-rating-stream {
+                margin-top: 18px;
+                width: min(1080px, calc(100vw - 24px));
+            }
+
+            .hero-rating-card {
+                min-width: 212px;
+                max-width: 252px;
+            }
         }
 
         @media (max-width: 768px) {
@@ -1970,6 +2170,42 @@
             .hero-btn {
                 width: 100%;
             }
+
+            .hero-rating-stream {
+                width: 100%;
+                margin-top: 16px;
+                padding: 11px 10px 10px;
+                border-radius: 10px;
+            }
+
+            .hero-rating-head {
+                gap: 0;
+                justify-content: center;
+            }
+
+            .hero-rating-card {
+                min-width: 182px;
+                max-width: 198px;
+                padding: 9px 10px;
+            }
+
+            .hero-rating-score {
+                padding: 0;
+                gap: 9px;
+            }
+
+            .hero-rating-score-value {
+                font-size: 0.9rem;
+            }
+
+            .hero-rating-score-stars {
+                font-size: 0.98rem;
+            }
+
+            .hero-rating-text {
+                font-size: 0.76rem;
+                min-height: 30px;
+            }
         }
     </style>
 </head>
@@ -2086,6 +2322,21 @@
                                 <span>Let's Get To Know About Us</span>
                                 <i class="fa-solid fa-arrow-right"></i>
                             </a>
+                        </div>
+                        <div class="hero-rating-stream" id="hero-rating-stream">
+                            <div class="hero-rating-head">
+                                <div class="hero-rating-score" id="hero-rating-score">
+                                    <span class="hero-rating-score-stars" id="hero-rating-score-stars">&#9734;&#9734;&#9734;&#9734;&#9734;</span>
+                                    <span class="hero-rating-score-value" id="hero-rating-score-value">- / 5</span>
+                                </div>
+                            </div>
+                            <div class="hero-rating-slider" id="hero-rating-slider">
+                                <div class="hero-rating-track is-static" id="hero-rating-track">
+                                    <article class="hero-rating-card hero-rating-card-empty">
+                                        <div class="hero-rating-text">Belum ada penilaian tersimpan.</div>
+                                    </article>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -2517,6 +2768,248 @@
                 }, { once: true });
             });
         })();
+
+        (function () {
+            const apiUrl = <?php echo json_encode($assetBaseUrl . 'api/ebook_ratings.php?limit=40'); ?>;
+            const storageKey = 'presenovaEbookRatings.v2';
+            const track = document.getElementById('hero-rating-track');
+            const slider = document.getElementById('hero-rating-slider');
+            const scoreNode = document.getElementById('hero-rating-score');
+            const scoreValueNode = document.getElementById('hero-rating-score-value');
+            const scoreStarsNode = document.getElementById('hero-rating-score-stars');
+            const STAR_FULL = '\u2605';
+            const STAR_EMPTY = '\u2606';
+            let latestRatingsCache = [];
+            let latestSourceLabel = 'database';
+            const HYDRATE_INTERVAL_MS = 20000;
+            let hydrateInFlight = false;
+
+            if (!track || !slider || !scoreNode || !scoreValueNode || !scoreStarsNode) {
+                return;
+            }
+
+            function formatTime(value) {
+                const date = new Date(value);
+                if (Number.isNaN(date.getTime())) {
+                    return '';
+                }
+
+                return date.toLocaleString('id-ID', {
+                    day: 'numeric',
+                    month: 'short',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                });
+            }
+
+            function normalizeRating(row) {
+                if (!row || typeof row !== 'object') {
+                    return null;
+                }
+
+                const star = Number.parseInt(row.star, 10);
+                if (!Number.isFinite(star) || star < 1 || star > 5) {
+                    return null;
+                }
+
+                const text = typeof row.text === 'string' ? row.text.trim().slice(0, 280) : '';
+                const nameRaw = typeof row.name === 'string' ? row.name : '';
+                const name = nameRaw.trim().slice(0, 80) || 'Anonim';
+                const timestampCandidate = Number(row.createdAt ?? Date.parse(row.created_at ?? row.time ?? ''));
+                const createdAt = Number.isFinite(timestampCandidate) && timestampCandidate > 0 ? timestampCandidate : Date.now();
+
+                return {
+                    star: star,
+                    name: name,
+                    text: text,
+                    createdAt: createdAt,
+                    time: formatTime(createdAt)
+                };
+            }
+
+
+            function readLocalRatings() {
+                try {
+                    const raw = window.localStorage.getItem(storageKey);
+                    if (!raw) {
+                        return [];
+                    }
+
+                    const parsed = JSON.parse(raw);
+                    if (!Array.isArray(parsed)) {
+                        return [];
+                    }
+
+                    return parsed
+                        .map(normalizeRating)
+                        .filter(Boolean)
+                        .sort(function (a, b) { return b.createdAt - a.createdAt; });
+                } catch (error) {
+                    return [];
+                }
+            }
+
+            function updateHeaderRating(average, count) {
+                if (!Number.isFinite(average) || count <= 0) {
+                    scoreValueNode.textContent = '- / 5';
+                    scoreStarsNode.textContent = STAR_EMPTY.repeat(5);
+                    scoreNode.classList.remove('is-high');
+                    return;
+                }
+
+                const roundedStar = Math.max(1, Math.min(5, Math.round(average)));
+                scoreValueNode.textContent = average.toFixed(1) + ' / 5';
+                scoreStarsNode.textContent = STAR_FULL.repeat(roundedStar) + STAR_EMPTY.repeat(5 - roundedStar);
+                scoreNode.classList.toggle('is-high', average > 4);
+            }
+            function createCard(rating) {
+                const card = document.createElement('article');
+                card.className = 'hero-rating-card';
+
+                const stars = document.createElement('div');
+                stars.className = 'hero-rating-stars';
+                stars.textContent = STAR_FULL.repeat(rating.star) + STAR_EMPTY.repeat(5 - rating.star);
+
+                const author = document.createElement('div');
+                author.className = 'hero-rating-author';
+                author.textContent = rating.name;
+
+                const text = document.createElement('div');
+                text.className = 'hero-rating-text';
+                text.textContent = rating.text !== '' ? rating.text : '-';
+
+                const time = document.createElement('div');
+                time.className = 'hero-rating-time';
+                time.textContent = rating.time;
+
+                card.appendChild(stars);
+                card.appendChild(author);
+                card.appendChild(text);
+                card.appendChild(time);
+                return card;
+            }
+            function renderRatings(ratings, sourceLabel) {
+                const normalized = ratings
+                    .map(normalizeRating)
+                    .filter(Boolean)
+                    .sort(function (a, b) { return b.createdAt - a.createdAt; })
+                    .slice(0, 12);
+
+                latestRatingsCache = normalized.slice();
+                latestSourceLabel = sourceLabel;
+
+                track.innerHTML = '';
+                track.classList.add('is-static');
+                track.style.removeProperty('--rating-speed');
+
+                if (!normalized.length) {
+                    const emptyCard = document.createElement('article');
+                    emptyCard.className = 'hero-rating-card hero-rating-card-empty';
+
+                    const emptyText = document.createElement('div');
+                    emptyText.className = 'hero-rating-text';
+                    emptyText.textContent = 'Belum ada penilaian yang tersimpan.';
+                    emptyCard.appendChild(emptyText);
+                    track.appendChild(emptyCard);
+                    updateHeaderRating(NaN, 0);
+                    return;
+                }
+
+                normalized.forEach(function (item) {
+                    track.appendChild(createCard(item));
+                });
+
+                const shouldSlide = normalized.length > 1 && track.scrollWidth > (slider.clientWidth + 4);
+                if (shouldSlide) {
+                    const baseWidth = track.scrollWidth;
+                    normalized.forEach(function (item) {
+                        track.appendChild(createCard(item));
+                    });
+
+                    track.classList.remove('is-static');
+                    const speed = Math.max(24, Math.round(baseWidth / 34));
+                    track.style.setProperty('--rating-speed', speed + 's');
+                }
+
+                const avg = normalized.reduce(function (sum, item) { return sum + item.star; }, 0) / normalized.length;
+                updateHeaderRating(avg, normalized.length);
+            }
+            async function fetchRatingsFromDatabase() {
+                const response = await fetch(apiUrl, {
+                    method: 'GET',
+                    headers: { 'Accept': 'application/json' },
+                    credentials: 'same-origin'
+                });
+
+                if (!response.ok) {
+                    throw new Error('Gagal memuat data rating');
+                }
+
+                const payload = await response.json();
+                if (!payload || payload.success !== true || !payload.data || !Array.isArray(payload.data.ratings)) {
+                    throw new Error(payload && payload.message ? payload.message : 'Data rating tidak valid');
+                }
+
+                return payload.data.ratings;
+            }
+
+            function setPaused(paused) {
+                track.classList.toggle('is-paused', paused);
+            }
+
+            slider.addEventListener('mouseenter', function () { setPaused(true); });
+            slider.addEventListener('mouseleave', function () { setPaused(false); });
+            slider.addEventListener('focusin', function () { setPaused(true); });
+            slider.addEventListener('focusout', function () { setPaused(false); });
+            slider.addEventListener('touchstart', function () { setPaused(true); }, { passive: true });
+            slider.addEventListener('touchend', function () { setPaused(false); }, { passive: true });
+
+            async function hydrateRatings() {
+                if (hydrateInFlight) {
+                    return;
+                }
+
+                hydrateInFlight = true;
+                try {
+                    const dbRatings = await fetchRatingsFromDatabase();
+                    renderRatings(dbRatings, 'database');
+                } catch (error) {
+                    renderRatings(readLocalRatings(), 'local');
+                } finally {
+                    hydrateInFlight = false;
+                }
+            }
+
+            window.addEventListener('storage', function (event) {
+                if (event.key === storageKey) {
+                    hydrateRatings();
+                }
+            });
+
+            let resizeTimer = null;
+            window.addEventListener('resize', function () {
+                if (resizeTimer !== null) {
+                    clearTimeout(resizeTimer);
+                }
+                resizeTimer = window.setTimeout(function () {
+                    renderRatings(latestRatingsCache, latestSourceLabel);
+                }, 140);
+            });
+
+            hydrateRatings();
+            window.addEventListener('focus', hydrateRatings);
+            window.addEventListener('visibilitychange', function () {
+                if (!document.hidden) {
+                    hydrateRatings();
+                }
+            });
+            window.setInterval(function () {
+                if (!document.hidden) {
+                    hydrateRatings();
+                }
+            }, HYDRATE_INTERVAL_MS);
+        })();
     </script>
 </body>
 </html>
+

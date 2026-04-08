@@ -1,82 +1,26 @@
+﻿-- phpMyAdmin SQL Dump
+-- version 5.2.1
+-- https://www.phpmyadmin.net/
+--
+-- Host: 127.0.0.1
+-- Generation Time: Apr 04, 2026 at 07:21 AM
+-- Server version: 10.4.32-MariaDB
+-- PHP Version: 8.2.12
+
 SET SQL_MODE = "NO_AUTO_VALUE_ON_ZERO";
 START TRANSACTION;
 SET time_zone = "+00:00";
+SET FOREIGN_KEY_CHECKS = 0;
+
+
+/*!40101 SET @OLD_CHARACTER_SET_CLIENT=@@CHARACTER_SET_CLIENT */;
+/*!40101 SET @OLD_CHARACTER_SET_RESULTS=@@CHARACTER_SET_RESULTS */;
+/*!40101 SET @OLD_COLLATION_CONNECTION=@@COLLATION_CONNECTION */;
+/*!40101 SET NAMES utf8mb4 */;
 
 --
 -- Database: `presenova`
 --
-
-DELIMITER $$
---
--- Procedures
---
-DROP PROCEDURE IF EXISTS `GenerateWeeklyStudentSchedules`$$
-CREATE PROCEDURE `GenerateWeeklyStudentSchedules` ()   BEGIN
-    -- Generate jadwal untuk 1 minggu ke depan (menyesuaikan konfigurasi jam per hari)
-    INSERT INTO student_schedule (student_id, teacher_schedule_id, schedule_date, time_in, time_out, status)
-    SELECT 
-        s.id,
-        x.schedule_id,
-        DATE_ADD(
-            CURDATE(),
-            INTERVAL ((x.day_id - (((DAYOFWEEK(CURDATE()) + 5) % 7) + 1) + 7) % 7) DAY
-        ) AS schedule_date,
-        CASE
-            WHEN x.shift_name REGEXP '^JP[0-9]+-JP[0-9]+$'
-                 AND x.jp_start > 0 AND x.jp_end >= x.jp_start THEN
-                ADDTIME(
-                    ADDTIME(x.cfg_school_start, SEC_TO_TIME(x.cfg_pre_minutes * 60)),
-                    SEC_TO_TIME(((45 * (x.jp_start - 1)) - (30 * ((x.jp_start > 5) + (x.jp_start > 9)))) * 60)
-                )
-            ELSE x.time_in
-        END AS time_in,
-        CASE
-            WHEN x.shift_name REGEXP '^JP[0-9]+-JP[0-9]+$'
-                 AND x.jp_start > 0 AND x.jp_end >= x.jp_start THEN
-                ADDTIME(
-                    ADDTIME(
-                        ADDTIME(
-                            ADDTIME(x.cfg_school_start, SEC_TO_TIME(x.cfg_pre_minutes * 60)),
-                            SEC_TO_TIME(((45 * (x.jp_start - 1)) - (30 * ((x.jp_start > 5) + (x.jp_start > 9)))) * 60)
-                        ),
-                        SEC_TO_TIME(((45 * (x.jp_end - x.jp_start + 1)) - (30 * (((x.jp_start <= 5) AND (x.jp_end >= 5)) + ((x.jp_start <= 9) AND (x.jp_end >= 9))))) * 60)
-                    ),
-                    SEC_TO_TIME(x.cfg_tolerance * 60)
-                )
-            ELSE ADDTIME(x.time_out, SEC_TO_TIME(x.cfg_tolerance * 60))
-        END AS time_out,
-        'ACTIVE'
-    FROM (
-        SELECT 
-            ts.schedule_id,
-            ts.day_id,
-            ts.class_id,
-            sh.shift_name,
-            sh.time_in,
-            sh.time_out,
-            CAST(SUBSTRING_INDEX(SUBSTRING_INDEX(sh.shift_name, '-', 1), 'JP', -1) AS UNSIGNED) AS jp_start,
-            CAST(SUBSTRING_INDEX(sh.shift_name, '-', -1) AS UNSIGNED) AS jp_end,
-            COALESCE(cfg.school_start_time, '06:30:00') AS cfg_school_start,
-            COALESCE(cfg.activity1_minutes, 0) + COALESCE(cfg.activity2_minutes, 0) AS cfg_pre_minutes,
-            COALESCE(st.time_tolerance, 0) AS cfg_tolerance
-        FROM teacher_schedule ts
-        JOIN shift sh ON ts.shift_id = sh.shift_id
-        LEFT JOIN day_schedule_config cfg ON cfg.day_id = ts.day_id
-        LEFT JOIN site st ON 1=1
-    ) x
-    JOIN student s ON x.class_id = s.class_id
-    WHERE NOT EXISTS (
-        SELECT 1 FROM student_schedule ss 
-        WHERE ss.student_id = s.id 
-        AND ss.teacher_schedule_id = x.schedule_id
-        AND ss.schedule_date = DATE_ADD(
-            CURDATE(),
-            INTERVAL ((x.day_id - (((DAYOFWEEK(CURDATE()) + 5) % 7) + 1) + 7) % 7) DAY
-        )
-    );
-END$$
-
-DELIMITER ;
 
 -- --------------------------------------------------------
 
@@ -84,6 +28,7 @@ DELIMITER ;
 -- Table structure for table `activity_logs`
 --
 
+DROP TABLE IF EXISTS `activity_logs`;
 CREATE TABLE `activity_logs` (
   `log_id` int(11) NOT NULL,
   `user_id` int(11) DEFAULT NULL,
@@ -100,14 +45,14 @@ CREATE TABLE `activity_logs` (
 --
 
 INSERT INTO `activity_logs` (`log_id`, `user_id`, `user_type`, `action`, `details`, `ip_address`, `user_agent`, `created_at`) VALUES
-(1, NULL, '', 'failed_login', 'Failed login attempt for admin: admin', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36', '2026-01-29 23:34:40'),
-(2, NULL, '', 'failed_login', 'Failed login attempt for admin: admin', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36', '2026-01-30 00:02:25'),
-(3, NULL, '', 'failed_login', 'Failed login attempt for admin: admin', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36', '2026-01-30 00:04:12'),
-(4, NULL, '', 'failed_login', 'Failed login attempt for admin: admin', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36', '2026-01-30 00:04:12'),
-(5, NULL, '', 'failed_login', 'Failed login attempt for admin: admin', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36', '2026-01-30 00:11:47'),
-(6, NULL, '', 'failed_login', 'Failed login attempt for admin: admin', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36', '2026-01-30 00:11:58'),
-(7, NULL, '', 'failed_login', 'Failed login attempt for admin: admin', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36', '2026-01-30 08:37:33'),
-(8, NULL, '', 'failed_login', 'Failed login attempt for admin: admin', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36', '2026-01-30 08:37:38'),
+(1, NULL, NULL, 'failed_login', 'Failed login attempt for admin: admin', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36', '2026-01-29 23:34:40'),
+(2, NULL, NULL, 'failed_login', 'Failed login attempt for admin: admin', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36', '2026-01-30 00:02:25'),
+(3, NULL, NULL, 'failed_login', 'Failed login attempt for admin: admin', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36', '2026-01-30 00:04:12'),
+(4, NULL, NULL, 'failed_login', 'Failed login attempt for admin: admin', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36', '2026-01-30 00:04:12'),
+(5, NULL, NULL, 'failed_login', 'Failed login attempt for admin: admin', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36', '2026-01-30 00:11:47'),
+(6, NULL, NULL, 'failed_login', 'Failed login attempt for admin: admin', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36', '2026-01-30 00:11:58'),
+(7, NULL, NULL, 'failed_login', 'Failed login attempt for admin: admin', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36', '2026-01-30 08:37:33'),
+(8, NULL, NULL, 'failed_login', 'Failed login attempt for admin: admin', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36', '2026-01-30 08:37:38'),
 (86, 1, 'admin', 'login', 'Admin login successful', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36', '2026-02-04 21:31:17'),
 (87, 1, 'admin', 'login', 'Admin login successful', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36', '2026-02-04 21:36:23'),
 (88, 1, 'admin', 'login', 'Admin login successful', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36', '2026-02-04 21:48:04'),
@@ -124,8 +69,8 @@ INSERT INTO `activity_logs` (`log_id`, `user_id`, `user_type`, `action`, `detail
 (99, 1, 'admin', 'login', 'Admin login successful', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36', '2026-02-05 22:47:54'),
 (100, 1, 'admin', 'login', 'Admin login successful', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36', '2026-02-05 22:49:49'),
 (101, 1, 'admin', 'login', 'Admin login successful', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36', '2026-02-06 10:30:41'),
-(102, 5, '', 'login', 'Guru login successful', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36', '2026-02-06 10:31:00'),
-(103, NULL, '', 'failed_login', 'Failed login attempt for admin: adm', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36', '2026-02-06 19:08:43'),
+(102, 5, NULL, 'login', 'Guru login successful', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36', '2026-02-06 10:31:00'),
+(103, NULL, NULL, 'failed_login', 'Failed login attempt for admin: adm', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36', '2026-02-06 19:08:43'),
 (104, 1, 'admin', 'login', 'Admin login successful', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36', '2026-02-06 19:08:50'),
 (105, 1, 'admin', 'login', 'Admin login successful', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36', '2026-02-06 20:32:32'),
 (106, 1, 'admin', 'login', 'Admin login successful', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36', '2026-02-06 21:22:53'),
@@ -139,9 +84,9 @@ INSERT INTO `activity_logs` (`log_id`, `user_id`, `user_type`, `action`, `detail
 (114, 1, 'admin', 'login', 'Admin login successful', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36', '2026-02-08 18:02:04'),
 (115, 1, 'admin', 'login', 'Admin login successful', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36', '2026-02-08 18:06:57'),
 (116, 1, 'admin', 'login', 'Admin login successful', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36', '2026-02-08 18:18:36'),
-(117, 6, '', 'login', 'Guru login successful', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36', '2026-02-08 18:43:41'),
+(117, 6, NULL, 'login', 'Guru login successful', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36', '2026-02-08 18:43:41'),
 (118, 1, 'admin', 'login', 'Admin login successful', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36', '2026-02-08 18:53:22'),
-(119, 6, '', 'login', 'Guru login successful', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36', '2026-02-08 18:58:03'),
+(119, 6, NULL, 'login', 'Guru login successful', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36', '2026-02-08 18:58:03'),
 (120, 1, 'admin', 'login', 'Admin login successful', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36', '2026-02-08 19:03:29'),
 (121, 1, 'admin', 'login', 'Admin login successful', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36', '2026-02-08 20:01:36'),
 (122, 1, 'admin', 'login', 'Admin login successful', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36', '2026-02-08 21:39:18'),
@@ -153,15 +98,15 @@ INSERT INTO `activity_logs` (`log_id`, `user_id`, `user_type`, `action`, `detail
 (128, 1, 'admin', 'login', 'Admin login successful', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36', '2026-02-09 10:20:47'),
 (129, 1, 'admin', 'login', 'Admin login successful', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36', '2026-02-09 10:30:32'),
 (130, 1, 'admin', 'login', 'Admin login successful', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36', '2026-02-09 10:31:54'),
-(131, NULL, '', 'failed_login', 'Failed login attempt for admin: adm', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36', '2026-02-09 10:34:33'),
+(131, NULL, NULL, 'failed_login', 'Failed login attempt for admin: adm', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36', '2026-02-09 10:34:33'),
 (132, 1, 'admin', 'login', 'Admin login successful', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36', '2026-02-09 10:34:42'),
 (133, 1, 'admin', 'login', 'Admin login successful', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36', '2026-02-09 20:51:58'),
 (134, 1, 'admin', 'login', 'Admin login successful', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36', '2026-02-09 20:53:47'),
 (135, 1, 'admin', 'login', 'Admin login successful', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36', '2026-02-09 20:59:08'),
 (136, 1, 'admin', 'login', 'Admin login successful', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36', '2026-02-10 08:19:30'),
-(137, NULL, '', 'failed_login', 'Failed login attempt for admin: adm', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36', '2026-02-10 08:45:07'),
+(137, NULL, NULL, 'failed_login', 'Failed login attempt for admin: adm', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36', '2026-02-10 08:45:07'),
 (138, 1, 'admin', 'login', 'Admin login successful', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36', '2026-02-10 08:45:17'),
-(139, NULL, '', 'failed_login', 'Failed login attempt for admin: adm', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36', '2026-02-10 08:46:55'),
+(139, NULL, NULL, 'failed_login', 'Failed login attempt for admin: adm', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36', '2026-02-10 08:46:55'),
 (140, 1, 'admin', 'login', 'Admin login successful', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36', '2026-02-10 08:47:00'),
 (141, 1, 'admin', 'login', 'Admin login successful', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36', '2026-02-10 08:48:21'),
 (142, 1, 'admin', 'login', 'Admin login successful', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36', '2026-02-10 09:22:22'),
@@ -172,7 +117,7 @@ INSERT INTO `activity_logs` (`log_id`, `user_id`, `user_type`, `action`, `detail
 (147, 1, 'admin', 'login', 'Admin login successful', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36', '2026-02-10 16:16:14'),
 (148, 10, 'student', 'attendance', '{\"schedule_id\":\"95\",\"similarity\":92,\"match_details\":{\"lbph_similarity\":0,\"lbph_confidence\":148.65,\"lbph_base_confidence\":0,\"lbph_conf_ratio\":1,\"hist_similarity\":77.82,\"hist_corr\":0.5565,\"edge_similarity\":4.23,\"edge_corr\":0.0423,\"corr_similarity\":63.2,\"corr_value\":0.2641,\"hog_similarity\":85,\"hog_value\":0.85,\"baseline_lbph\":100,\"baseline_hist\":76.3,\"baseline_edge\":84.83,\"baseline_corr\":99.89,\"baseline_hog\":99.58,\"baseline_quality\":89.86,\"variant_index\":0,\"lighting_diff\":9.69,\"aligned_ref\":true,\"aligned_cand\":true,\"quality\":69.72,\"quality_struct\":69.72,\"name_detected\":true,\"min_lbph\":70.09,\"min_corr\":71.27,\"min_hist\":45.59,\"min_hog\":71.04,\"min_quality\":63.76,\"source\":\"python-lbph\",\"threshold\":89},\"status\":\"SUCCESS\",\"attendance_path\":\"uploads\\/attendance\\/2026-02-10\\/ATT_10_20260210_163809.jpg\",\"validation_path\":\"uploads\\/attendance\\/2026-02-10\\/VAL_10_20260210_163809.jpg\"}', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36', '2026-02-10 16:38:09'),
 (149, 1, 'admin', 'login', 'Admin login successful', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36', '2026-02-10 16:39:24'),
-(150, 6, '', 'login', 'Guru login successful', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36', '2026-02-10 16:39:36'),
+(150, 6, NULL, 'login', 'Guru login successful', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36', '2026-02-10 16:39:36'),
 (151, 1, 'admin', 'login', 'Admin login successful', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36', '2026-02-10 22:29:09'),
 (152, 1, 'admin', 'login', 'Admin login successful', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36', '2026-02-11 10:11:23'),
 (153, 10, 'student', 'attendance', '{\"schedule_id\":\"150\",\"similarity\":92,\"match_details\":{\"lbph_similarity\":0,\"lbph_confidence\":123.32,\"lbph_base_confidence\":0,\"lbph_conf_ratio\":1,\"hist_similarity\":89.88,\"hist_corr\":0.7976,\"edge_similarity\":6.93,\"edge_corr\":0.0693,\"corr_similarity\":85.81,\"corr_value\":0.7162,\"hog_similarity\":89.49,\"hog_value\":0.8949,\"baseline_lbph\":100,\"baseline_hist\":76.3,\"baseline_edge\":84.83,\"baseline_corr\":99.89,\"baseline_hog\":99.58,\"baseline_quality\":89.86,\"variant_index\":0,\"lighting_diff\":4.78,\"aligned_ref\":true,\"aligned_cand\":true,\"quality\":83.79,\"quality_struct\":83.79,\"name_detected\":true,\"min_lbph\":72.32,\"min_corr\":72.87,\"min_hist\":47.78,\"min_hog\":72.63,\"min_quality\":65.2,\"source\":\"python-lbph\",\"threshold\":89},\"status\":\"SUCCESS\",\"attendance_path\":\"uploads\\/attendance\\/2026-02-11\\/hapis_10_20260211_101402.jpg\",\"validation_path\":\"uploads\\/attendance\\/2026-02-11\\/hapis_10_20260211_101402.jpg\"}', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36', '2026-02-11 10:14:04'),
@@ -181,16 +126,16 @@ INSERT INTO `activity_logs` (`log_id`, `user_id`, `user_type`, `action`, `detail
 (156, 1, 'admin', 'login', 'Admin login successful', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36', '2026-02-11 15:29:37'),
 (157, 1, 'admin', 'login', 'Admin login successful', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36', '2026-02-11 21:23:20'),
 (158, 1, 'admin', 'login', 'Admin login successful', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36', '2026-02-11 21:30:30'),
-(159, 6, '', 'login', 'Guru login successful', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36', '2026-02-11 22:03:15'),
+(159, 6, NULL, 'login', 'Guru login successful', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36', '2026-02-11 22:03:15'),
 (160, 1, 'admin', 'login', 'Admin login successful', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36', '2026-02-12 09:39:07'),
 (161, 1, 'admin', 'login', 'Admin login successful', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36', '2026-02-12 09:44:21'),
 (162, 1, 'admin', 'login', 'Admin login successful', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36', '2026-02-12 10:56:15'),
 (163, 1, 'admin', 'login', 'Admin login successful', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36', '2026-02-12 11:18:54'),
 (164, 1, 'admin', 'login', 'Admin login successful', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36', '2026-02-12 18:11:03'),
 (165, 1, 'admin', 'login', 'Admin login successful', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36', '2026-02-12 18:56:48'),
-(166, NULL, '', 'failed_login', 'Failed login attempt for admin: adm', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36', '2026-02-12 19:22:55'),
+(166, NULL, NULL, 'failed_login', 'Failed login attempt for admin: adm', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36', '2026-02-12 19:22:55'),
 (167, 1, 'admin', 'login', 'Admin login successful', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36', '2026-02-12 19:23:01'),
-(168, 6, '', 'login', 'Guru login successful', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36', '2026-02-12 21:37:10'),
+(168, 6, NULL, 'login', 'Guru login successful', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36', '2026-02-12 21:37:10'),
 (169, 1, 'admin', 'login', 'Admin login successful', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36', '2026-02-13 17:40:33'),
 (170, 1, 'admin', 'login', 'Admin login successful', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36', '2026-02-13 18:10:56'),
 (171, 1, 'admin', 'login', 'Admin login successful', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36', '2026-02-13 18:16:27'),
@@ -200,11 +145,11 @@ INSERT INTO `activity_logs` (`log_id`, `user_id`, `user_type`, `action`, `detail
 (175, 1, 'admin', 'login', 'Admin login successful', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36', '2026-02-13 23:19:30'),
 (176, 3, 'admin', 'login', 'Admin login successful', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36', '2026-02-13 23:20:41'),
 (177, 1, 'admin', 'login', 'Admin login successful', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36', '2026-02-13 23:38:52'),
-(178, 0, '', 'forgot_password_failed', 'student_not_found|ip=::1|id_hash=8d969eef6ecad3c2', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36', '2026-02-13 23:41:40'),
+(178, 0, NULL, 'forgot_password_failed', 'student_not_found|ip=::1|id_hash=8d969eef6ecad3c2', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36', '2026-02-13 23:41:40'),
 (179, 1, 'admin', 'login', 'Admin login successful', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36', '2026-02-13 23:46:59'),
-(180, 0, '', 'forgot_password_failed', 'name_mismatch|ip=::1|id_hash=8d969eef6ecad3c2', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36', '2026-02-13 23:50:45'),
-(181, 0, '', 'forgot_password_failed', 'name_mismatch|ip=::1|id_hash=8bb0cf6eb9b17d0f', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36', '2026-02-13 23:50:54'),
-(182, 0, '', 'forgot_password_success', 'student_reset|ip=::1|id_hash=8d969eef6ecad3c2', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36', '2026-02-13 23:51:17'),
+(180, 0, NULL, 'forgot_password_failed', 'name_mismatch|ip=::1|id_hash=8d969eef6ecad3c2', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36', '2026-02-13 23:50:45'),
+(181, 0, NULL, 'forgot_password_failed', 'name_mismatch|ip=::1|id_hash=8bb0cf6eb9b17d0f', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36', '2026-02-13 23:50:54'),
+(182, 0, NULL, 'forgot_password_success', 'student_reset|ip=::1|id_hash=8d969eef6ecad3c2', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36', '2026-02-13 23:51:17'),
 (183, 1, 'admin', 'login', 'Admin login successful', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36', '2026-02-14 22:36:47'),
 (184, 1, 'admin', 'login', 'Admin login successful', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36', '2026-02-14 22:39:29'),
 (185, 1, 'admin', 'login', 'Admin login successful', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36', '2026-02-16 10:48:06'),
@@ -249,7 +194,7 @@ INSERT INTO `activity_logs` (`log_id`, `user_id`, `user_type`, `action`, `detail
 (224, 3, 'admin', 'dashboard_access', 'Admin dashboard accessed', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36', '2026-02-16 22:27:09'),
 (225, 3, 'admin', 'dashboard_access', 'Admin dashboard accessed', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36', '2026-02-16 22:33:11'),
 (226, 3, 'admin', 'dashboard_access', 'Admin dashboard accessed', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36', '2026-02-16 22:44:03'),
-(227, NULL, '', 'failed_login', 'Failed login attempt for admin: hafizh', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36', '2026-02-16 22:45:12'),
+(227, NULL, NULL, 'failed_login', 'Failed login attempt for admin: hafizh', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36', '2026-02-16 22:45:12'),
 (228, 3, 'admin', 'login', 'Admin login successful', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36', '2026-02-16 22:45:19'),
 (229, 3, 'admin', 'dashboard_access', 'Admin dashboard accessed', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36', '2026-02-16 22:45:19'),
 (230, 3, 'admin', 'dashboard_access', 'Admin dashboard accessed', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36', '2026-02-16 22:50:38'),
@@ -297,7 +242,7 @@ INSERT INTO `activity_logs` (`log_id`, `user_id`, `user_type`, `action`, `detail
 (272, 3, 'admin', 'dashboard_access', 'Admin dashboard accessed', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36', '2026-02-17 21:43:09'),
 (273, 3, 'admin', 'dashboard_access', 'Admin dashboard accessed', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36', '2026-02-17 21:49:40'),
 (274, 3, 'admin', 'dashboard_access', 'Admin dashboard accessed', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36', '2026-02-17 21:55:29'),
-(275, 0, '', 'forgot_password_failed', 'student_not_found|ip=::1|id_hash=e11d8cb94b54e0a2', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36', '2026-02-17 21:58:13'),
+(275, 0, NULL, 'forgot_password_failed', 'student_not_found|ip=::1|id_hash=e11d8cb94b54e0a2', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36', '2026-02-17 21:58:13'),
 (276, 10, 'student', 'dashboard_access', 'Student dashboard accessed', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36', '2026-02-17 21:59:25'),
 (277, 3, 'admin', 'login', 'Admin login successful', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36', '2026-02-17 22:06:19'),
 (278, 3, 'admin', 'dashboard_access', 'Admin dashboard accessed', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36', '2026-02-17 22:06:23'),
@@ -307,19 +252,19 @@ INSERT INTO `activity_logs` (`log_id`, `user_id`, `user_type`, `action`, `detail
 (282, 10, 'student', 'dashboard_access', 'Student dashboard accessed', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36', '2026-02-17 22:18:44'),
 (283, 10, 'student', 'dashboard_access', 'Student dashboard accessed', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36', '2026-02-17 22:47:09'),
 (284, 10, 'student', 'dashboard_access', 'Student dashboard accessed', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36', '2026-02-17 22:59:04'),
-(285, NULL, '', 'failed_login', 'Failed login attempt for admin: operator', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36', '2026-02-18 09:29:09'),
+(285, NULL, NULL, 'failed_login', 'Failed login attempt for admin: operator', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36', '2026-02-18 09:29:09'),
 (286, 2, 'admin', 'login', 'Admin login successful', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36', '2026-02-18 09:29:14'),
 (287, 2, 'admin', 'dashboard_access', 'Admin dashboard accessed', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36', '2026-02-18 09:29:14'),
 (288, 10, 'student', 'dashboard_access', 'Student dashboard accessed', '127.0.0.1', 'curl/8.16.0', '2026-02-18 11:17:00'),
-(289, 6, '', 'dashboard_access', 'Guru dashboard accessed', '127.0.0.1', 'curl/8.16.0', '2026-02-18 11:18:23'),
-(290, 6, '', 'dashboard_access', 'Guru dashboard accessed', '127.0.0.1', 'curl/8.16.0', '2026-02-18 11:19:00'),
-(291, 6, '', 'password_auto_rotate', 'Teacher default password auto-rotated', '127.0.0.1', 'curl/8.16.0', '2026-02-18 11:19:00'),
+(289, 6, NULL, 'dashboard_access', 'Guru dashboard accessed', '127.0.0.1', 'curl/8.16.0', '2026-02-18 11:18:23'),
+(290, 6, NULL, 'dashboard_access', 'Guru dashboard accessed', '127.0.0.1', 'curl/8.16.0', '2026-02-18 11:19:00'),
+(291, 6, NULL, 'password_auto_rotate', 'Teacher default password auto-rotated', '127.0.0.1', 'curl/8.16.0', '2026-02-18 11:19:00'),
 (292, 10, 'student', 'dashboard_access', 'Student dashboard accessed', '127.0.0.1', 'curl/8.16.0', '2026-02-18 11:23:58'),
-(293, 6, '', 'dashboard_access', 'Guru dashboard accessed', '127.0.0.1', 'curl/8.16.0', '2026-02-18 11:24:00'),
+(293, 6, NULL, 'dashboard_access', 'Guru dashboard accessed', '127.0.0.1', 'curl/8.16.0', '2026-02-18 11:24:00'),
 (294, 10, 'student', 'dashboard_access', 'Student dashboard accessed', '127.0.0.1', 'curl/8.16.0', '2026-02-18 11:30:23'),
 (295, 10, 'student', 'dashboard_access', 'Student dashboard accessed', '127.0.0.1', 'curl/8.16.0', '2026-02-18 11:30:46'),
-(296, 6, '', 'dashboard_access', 'Guru dashboard accessed', '127.0.0.1', 'curl/8.16.0', '2026-02-18 11:32:06'),
-(297, 6, '', 'password_auto_rotate', 'Teacher default password auto-rotated', '127.0.0.1', 'curl/8.16.0', '2026-02-18 11:32:06'),
+(296, 6, NULL, 'dashboard_access', 'Guru dashboard accessed', '127.0.0.1', 'curl/8.16.0', '2026-02-18 11:32:06'),
+(297, 6, NULL, 'password_auto_rotate', 'Teacher default password auto-rotated', '127.0.0.1', 'curl/8.16.0', '2026-02-18 11:32:06'),
 (298, 2, 'admin', 'dashboard_access', 'Admin dashboard accessed', '::1', 'curl/8.16.0', '2026-02-18 14:54:50'),
 (299, 2, 'admin', 'dashboard_access', 'Admin dashboard accessed', '::1', 'curl/8.16.0', '2026-02-18 14:54:52'),
 (300, 2, 'admin', 'dashboard_access', 'Admin dashboard accessed', '::1', 'curl/8.16.0', '2026-02-18 14:54:52'),
@@ -335,36 +280,31 @@ INSERT INTO `activity_logs` (`log_id`, `user_id`, `user_type`, `action`, `detail
 (310, 3, 'admin', 'dashboard_access', 'Admin dashboard accessed', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36', '2026-02-18 15:19:59'),
 (311, 3, 'admin', 'login', 'Admin login successful', '::1', 'curl/8.16.0', '2026-02-18 15:27:41'),
 (312, 3, 'admin', 'dashboard_access', 'Admin dashboard accessed', '::1', 'curl/8.16.0', '2026-02-18 15:27:49'),
-(313, 7, '', 'login', 'Guru login successful', '::1', 'curl/8.16.0', '2026-02-18 15:27:58'),
-(314, 7, '', 'dashboard_access', 'Guru dashboard accessed', '::1', 'curl/8.16.0', '2026-02-18 15:28:05'),
-(315, 7, '', 'password_auto_rotate', 'Teacher default password auto-rotated', '::1', 'curl/8.16.0', '2026-02-18 15:28:05'),
-(316, 11, 'student', 'dashboard_access', 'Student dashboard accessed', '::1', 'curl/8.16.0', '2026-02-18 15:28:26'),
+(313, 7, NULL, 'login', 'Guru login successful', '::1', 'curl/8.16.0', '2026-02-18 15:27:58'),
+(314, 7, NULL, 'dashboard_access', 'Guru dashboard accessed', '::1', 'curl/8.16.0', '2026-02-18 15:28:05'),
+(315, 7, NULL, 'password_auto_rotate', 'Teacher default password auto-rotated', '::1', 'curl/8.16.0', '2026-02-18 15:28:05'),
 (317, 3, 'admin', 'dashboard_access', 'Admin dashboard accessed', '::1', 'curl/8.16.0', '2026-02-18 15:29:18'),
-(318, 11, 'student', 'dashboard_access', 'Student dashboard accessed', '::1', 'curl/8.16.0', '2026-02-18 15:29:27'),
 (319, 3, 'admin', 'login', 'Admin login successful', '::1', 'curl/8.16.0', '2026-02-18 15:31:52'),
 (320, 3, 'admin', 'login', 'Admin login successful', '::1', 'curl/8.16.0', '2026-02-18 15:34:49'),
 (321, 3, 'admin', 'dashboard_access', 'Admin dashboard accessed', '::1', 'curl/8.16.0', '2026-02-18 15:34:56'),
-(322, 7, '', 'login', 'Guru login successful', '::1', 'curl/8.16.0', '2026-02-18 15:35:06'),
-(323, 7, '', 'dashboard_access', 'Guru dashboard accessed', '::1', 'curl/8.16.0', '2026-02-18 15:35:14'),
-(324, 7, '', 'password_auto_rotate', 'Teacher default password auto-rotated', '::1', 'curl/8.16.0', '2026-02-18 15:35:14'),
-(325, 11, 'student', 'dashboard_access', 'Student dashboard accessed', '::1', 'curl/8.16.0', '2026-02-18 15:35:25');
-INSERT INTO `activity_logs` (`log_id`, `user_id`, `user_type`, `action`, `details`, `ip_address`, `user_agent`, `created_at`) VALUES
-(326, 11, 'student', 'dashboard_access', 'Student dashboard accessed', '::1', 'curl/8.16.0', '2026-02-18 15:35:40'),
+(322, 7, NULL, 'login', 'Guru login successful', '::1', 'curl/8.16.0', '2026-02-18 15:35:06'),
+(323, 7, NULL, 'dashboard_access', 'Guru dashboard accessed', '::1', 'curl/8.16.0', '2026-02-18 15:35:14'),
+(324, 7, NULL, 'password_auto_rotate', 'Teacher default password auto-rotated', '::1', 'curl/8.16.0', '2026-02-18 15:35:14'),
 (327, 3, 'admin', 'dashboard_access', 'Admin dashboard accessed', '::1', 'curl/8.16.0', '2026-02-18 15:35:40'),
-(328, 7, '', 'dashboard_access', 'Guru dashboard accessed', '::1', 'curl/8.16.0', '2026-02-18 15:35:40'),
+(328, 7, NULL, 'dashboard_access', 'Guru dashboard accessed', '::1', 'curl/8.16.0', '2026-02-18 15:35:40'),
 (329, 3, 'admin', 'login', 'Admin login successful', '::1', 'curl/8.16.0', '2026-02-18 15:36:30'),
-(330, 3, 'admin', 'login', 'Admin login successful', '::1', 'curl/8.16.0', '2026-02-18 15:40:12'),
+(330, 3, 'admin', 'login', 'Admin login successful', '::1', 'curl/8.16.0', '2026-02-18 15:40:12');
+INSERT INTO `activity_logs` (`log_id`, `user_id`, `user_type`, `action`, `details`, `ip_address`, `user_agent`, `created_at`) VALUES
 (331, 3, 'admin', 'dashboard_access', 'Admin dashboard accessed', '::1', 'curl/8.16.0', '2026-02-18 15:41:19'),
 (332, 3, 'admin', 'dashboard_access', 'Admin dashboard accessed', '::1', 'curl/8.16.0', '2026-02-18 15:43:10'),
 (333, 3, 'admin', 'login', 'Admin login successful', '::1', 'curl/8.16.0', '2026-02-18 15:43:59'),
-(334, 7, '', 'login', 'Guru login successful', '::1', 'curl/8.16.0', '2026-02-18 15:44:00'),
+(334, 7, NULL, 'login', 'Guru login successful', '::1', 'curl/8.16.0', '2026-02-18 15:44:00'),
 (335, 3, 'admin', 'login', 'Admin login successful', '::1', 'curl/8.16.0', '2026-02-18 15:45:00'),
 (336, 3, 'admin', 'dashboard_access', 'Admin dashboard accessed', '::1', 'curl/8.16.0', '2026-02-18 15:46:04'),
 (337, 3, 'admin', 'login', 'Admin login successful', '::1', 'curl/8.16.0', '2026-02-18 15:47:21'),
-(338, 7, '', 'login', 'Guru login successful', '::1', 'curl/8.16.0', '2026-02-18 15:47:21'),
+(338, 7, NULL, 'login', 'Guru login successful', '::1', 'curl/8.16.0', '2026-02-18 15:47:21'),
 (339, 3, 'admin', 'login', 'Admin login successful', '::1', 'curl/8.16.0', '2026-02-18 15:47:47'),
 (340, 3, 'admin', 'dashboard_access', 'Admin dashboard accessed', '::1', 'curl/8.16.0', '2026-02-18 15:47:48'),
-(341, 11, 'student', 'dashboard_access', 'Student dashboard accessed', '::1', 'curl/8.16.0', '2026-02-18 15:47:58'),
 (342, 3, 'admin', 'login', 'Admin login successful', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36', '2026-02-18 16:42:31'),
 (343, 3, 'admin', 'dashboard_access', 'Admin dashboard accessed', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36', '2026-02-18 16:42:31'),
 (344, 3, 'admin', 'dashboard_access', 'Admin dashboard accessed', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36', '2026-02-18 16:42:35'),
@@ -373,12 +313,11 @@ INSERT INTO `activity_logs` (`log_id`, `user_id`, `user_type`, `action`, `detail
 (347, 10, 'student', 'dashboard_access', 'Student dashboard accessed', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36', '2026-02-18 16:48:51'),
 (348, 10, 'student', 'password_changed', 'Student changed password after forced default-password policy', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36', '2026-02-18 16:50:00'),
 (349, 10, 'student', 'dashboard_access', 'Student dashboard accessed', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36', '2026-02-18 16:51:29'),
-(350, 7, '', 'dashboard_access', 'Guru dashboard accessed', '::1', 'curl/8.16.0', '2026-02-18 17:06:25'),
-(351, 7, '', 'password_auto_rotate', 'Teacher default password auto-rotated', '::1', 'curl/8.16.0', '2026-02-18 17:06:25'),
-(352, 11, 'student', 'dashboard_access', 'Student dashboard accessed', '::1', 'curl/8.16.0', '2026-02-18 17:06:25'),
+(350, 7, NULL, 'dashboard_access', 'Guru dashboard accessed', '::1', 'curl/8.16.0', '2026-02-18 17:06:25'),
+(351, 7, NULL, 'password_auto_rotate', 'Teacher default password auto-rotated', '::1', 'curl/8.16.0', '2026-02-18 17:06:25'),
 (353, 3, 'admin', 'dashboard_access', 'Admin dashboard accessed', '::1', 'curl/8.16.0', '2026-02-18 17:08:23'),
-(354, 8, '', 'dashboard_access', 'Guru dashboard accessed', '::1', 'curl/8.16.0', '2026-02-18 17:34:51'),
-(355, 8, '', 'password_auto_rotate', 'Teacher default password auto-rotated', '::1', 'curl/8.16.0', '2026-02-18 17:34:51'),
+(354, 8, NULL, 'dashboard_access', 'Guru dashboard accessed', '::1', 'curl/8.16.0', '2026-02-18 17:34:51'),
+(355, 8, NULL, 'password_auto_rotate', 'Teacher default password auto-rotated', '::1', 'curl/8.16.0', '2026-02-18 17:34:51'),
 (356, 3, 'admin', 'dashboard_access', 'Admin dashboard accessed', '::1', 'curl/8.16.0', '2026-02-18 17:36:57'),
 (357, 3, 'admin', 'dashboard_access', 'Admin dashboard accessed', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36', '2026-02-18 21:59:56'),
 (358, 3, 'admin', 'dashboard_access', 'Admin dashboard accessed', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36', '2026-02-18 22:20:41'),
@@ -431,7 +370,69 @@ INSERT INTO `activity_logs` (`log_id`, `user_id`, `user_type`, `action`, `detail
 (405, 10, 'student', 'dashboard_access', 'Student dashboard accessed', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36', '2026-02-19 21:30:39'),
 (406, 10, 'student', 'dashboard_access', 'Student dashboard accessed', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36', '2026-02-19 21:42:59'),
 (407, 10, 'student', 'dashboard_access', 'Student dashboard accessed', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36', '2026-02-19 22:09:46'),
-(408, 10, 'student', 'dashboard_access', 'Student dashboard accessed', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36', '2026-02-20 00:14:04');
+(408, 10, 'student', 'dashboard_access', 'Student dashboard accessed', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36', '2026-02-20 00:14:04'),
+(409, 10, 'student', 'dashboard_access', 'Student dashboard accessed', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36', '2026-02-21 08:40:45'),
+(410, 10, 'student', 'dashboard_access', 'Student dashboard accessed', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36', '2026-02-24 12:27:01'),
+(411, 10, 'student', 'dashboard_access', 'Student dashboard accessed', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36', '2026-02-24 12:27:53'),
+(412, 10, 'student', 'dashboard_access', 'Student dashboard accessed', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36', '2026-02-24 12:34:07'),
+(413, 1, 'admin', 'dashboard_access', 'Admin dashboard accessed', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36', '2026-03-07 11:18:31'),
+(414, 7, 'teacher', 'password_reset_by_admin', 'Password guru direset admin ke default. Guru wajib menyimpan password baru saat auto-rotate login berikutnya.', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36', '2026-03-07 11:19:53'),
+(415, 10, 'student', 'dashboard_access', 'Student dashboard accessed', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36', '2026-03-07 11:23:02'),
+(416, 10, 'student', 'dashboard_access', 'Student dashboard accessed', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36', '2026-03-07 12:36:32'),
+(417, 1, 'admin', 'dashboard_access', 'Admin dashboard accessed', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36', '2026-03-08 13:05:48'),
+(418, 10, 'student', 'dashboard_access', 'Student dashboard accessed', '192.168.1.5', 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Mobile Safari/537.36', '2026-03-11 17:35:29'),
+(419, 10, 'student', 'dashboard_access', 'Student dashboard accessed', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36', '2026-03-11 17:37:02'),
+(420, 10, 'student', 'dashboard_access', 'Student dashboard accessed', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36', '2026-03-11 17:45:31'),
+(421, 10, 'student', 'dashboard_access', 'Student dashboard accessed', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36', '2026-03-11 18:27:48'),
+(422, 10, 'student', 'dashboard_access', 'Student dashboard accessed', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36', '2026-03-11 18:59:08'),
+(423, 10, 'student', 'dashboard_access', 'Student dashboard accessed', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36', '2026-03-11 19:54:38'),
+(424, 10, 'student', 'dashboard_access', 'Student dashboard accessed', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36', '2026-03-13 20:51:24'),
+(425, 10, 'student', 'dashboard_access', 'Student dashboard accessed', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36', '2026-03-29 10:01:04'),
+(426, 10, 'student', 'dashboard_access', 'Student dashboard accessed', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36', '2026-03-29 10:13:50'),
+(427, 10, 'student', 'dashboard_access', 'Student dashboard accessed', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36', '2026-03-29 13:14:30'),
+(428, 1, 'admin', 'dashboard_access', 'Admin dashboard accessed', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36', '2026-03-29 13:15:11'),
+(429, 10, 'student', 'dashboard_access', 'Student dashboard accessed', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36', '2026-03-29 13:17:05'),
+(430, 10, 'student', 'dashboard_access', 'Student dashboard accessed', '192.168.1.3', 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Mobile Safari/537.36', '2026-04-01 10:19:58'),
+(431, 1, 'admin', 'dashboard_access', 'Admin dashboard accessed', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36', '2026-04-01 10:20:34'),
+(432, 10, 'student', 'dashboard_access', 'Student dashboard accessed', '192.168.1.3', 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Mobile Safari/537.36', '2026-04-01 17:42:43'),
+(433, 10, 'student', 'dashboard_access', 'Student dashboard accessed', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36', '2026-04-01 17:59:23'),
+(434, 10, 'student', 'dashboard_access', 'Student dashboard accessed', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36', '2026-04-01 18:00:54'),
+(435, 10, 'student', 'password_changed', 'Student changed password after forced default-password policy', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36', '2026-04-01 18:01:34'),
+(436, 10, 'student', 'dashboard_access', 'Student dashboard accessed', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36', '2026-04-01 18:01:49'),
+(437, 1, 'admin', 'dashboard_access', 'Admin dashboard accessed', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36', '2026-04-01 18:02:28'),
+(438, 10, 'student', 'dashboard_access', 'Student dashboard accessed', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36', '2026-04-02 20:23:43'),
+(439, 10, 'student', 'dashboard_access', 'Student dashboard accessed', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36', '2026-04-02 20:23:45'),
+(440, 10, 'student', 'dashboard_access', 'Student dashboard accessed', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36', '2026-04-02 20:55:32'),
+(441, 1, 'admin', 'dashboard_access', 'Admin dashboard accessed', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36', '2026-04-02 23:21:02'),
+(442, 1, 'admin', 'default_location_changed', 'Default lokasi berubah SMKN 1 Cikarang Selatan -> testing oleh admin/location_quick_action', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36', '2026-04-02 23:21:26'),
+(443, 10, 'student', 'dashboard_access', 'Student dashboard accessed', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36', '2026-04-02 23:21:39'),
+(444, 1, 'admin', 'dashboard_access', 'Admin dashboard accessed', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36', '2026-04-03 11:56:29');
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `cache`
+--
+
+DROP TABLE IF EXISTS `cache`;
+CREATE TABLE `cache` (
+  `key` varchar(255) NOT NULL,
+  `value` mediumtext NOT NULL,
+  `expiration` int(11) NOT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `cache_locks`
+--
+
+DROP TABLE IF EXISTS `cache_locks`;
+CREATE TABLE `cache_locks` (
+  `key` varchar(255) NOT NULL,
+  `owner` varchar(255) NOT NULL,
+  `expiration` int(11) NOT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- --------------------------------------------------------
 
@@ -439,6 +440,7 @@ INSERT INTO `activity_logs` (`log_id`, `user_id`, `user_type`, `action`, `detail
 -- Table structure for table `class`
 --
 
+DROP TABLE IF EXISTS `class`;
 CREATE TABLE `class` (
   `class_id` int(11) NOT NULL,
   `class_name` varchar(30) DEFAULT NULL,
@@ -460,6 +462,7 @@ INSERT INTO `class` (`class_id`, `class_name`, `jurusan_id`) VALUES
 -- Table structure for table `day`
 --
 
+DROP TABLE IF EXISTS `day`;
 CREATE TABLE `day` (
   `day_id` int(11) NOT NULL,
   `day_code` varchar(10) DEFAULT NULL,
@@ -487,6 +490,7 @@ INSERT INTO `day` (`day_id`, `day_code`, `day_name`, `day_order`, `is_active`) V
 -- Table structure for table `day_schedule_config`
 --
 
+DROP TABLE IF EXISTS `day_schedule_config`;
 CREATE TABLE `day_schedule_config` (
   `day_id` int(11) NOT NULL,
   `school_start_time` time NOT NULL DEFAULT '06:30:00',
@@ -505,7 +509,7 @@ CREATE TABLE `day_schedule_config` (
 INSERT INTO `day_schedule_config` (`day_id`, `school_start_time`, `activity1_label`, `activity1_minutes`, `activity2_label`, `activity2_minutes`, `created_at`, `updated_at`) VALUES
 (1, '06:30:00', 'Upacara', 45, NULL, 0, '2026-02-09 13:10:16', '2026-02-10 01:46:10'),
 (2, '13:30:00', 'Pengisian', 30, NULL, 0, '2026-02-09 13:10:16', '2026-02-10 08:54:14'),
-(3, '10:30:00', 'Pengisian', 30, NULL, 0, '2026-02-09 13:10:16', '2026-02-11 08:30:38'),
+(3, '09:30:00', 'Pengisian', 30, NULL, 0, '2026-02-09 13:10:16', '2026-04-01 03:21:11'),
 (4, '17:28:00', 'Pengisian', 30, NULL, 0, '2026-02-09 13:10:16', '2026-02-19 10:55:47'),
 (5, '06:30:00', 'Pengisian', 30, NULL, 0, '2026-02-09 13:10:16', '2026-02-09 13:53:35'),
 (6, '06:30:00', '', 0, '', 0, '2026-02-09 13:10:16', '2026-02-09 13:10:16'),
@@ -514,9 +518,90 @@ INSERT INTO `day_schedule_config` (`day_id`, `school_start_time`, `activity1_lab
 -- --------------------------------------------------------
 
 --
+-- Table structure for table `ebook_ratings`
+--
+
+DROP TABLE IF EXISTS `ebook_ratings`;
+CREATE TABLE `ebook_ratings` (
+  `id` bigint(20) UNSIGNED NOT NULL,
+  `star` tinyint(3) UNSIGNED NOT NULL,
+  `reviewer_name` varchar(80) DEFAULT NULL,
+  `review_text` varchar(280) DEFAULT NULL,
+  `improvement_suggestion` varchar(280) DEFAULT NULL,
+  `source_page` varchar(64) DEFAULT NULL,
+  `ip_address` varchar(45) DEFAULT NULL,
+  `user_agent` varchar(255) DEFAULT NULL,
+  `created_at` datetime NOT NULL DEFAULT current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+--
+-- Dumping data for table `ebook_ratings`
+--
+
+INSERT INTO `ebook_ratings` (`id`, `star`, `reviewer_name`, `review_text`, `improvement_suggestion`, `source_page`, `ip_address`, `user_agent`, `created_at`) VALUES
+(6, 5, 'secret', 'waw, amazing ideas', 'waw, amazing ideas', 'presenova-ebook.html', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36', '2026-04-01 20:32:19');
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `failed_jobs`
+--
+
+DROP TABLE IF EXISTS `failed_jobs`;
+CREATE TABLE `failed_jobs` (
+  `id` bigint(20) UNSIGNED NOT NULL,
+  `uuid` varchar(255) NOT NULL,
+  `connection` text NOT NULL,
+  `queue` text NOT NULL,
+  `payload` longtext NOT NULL,
+  `exception` longtext NOT NULL,
+  `failed_at` timestamp NOT NULL DEFAULT current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `jobs`
+--
+
+DROP TABLE IF EXISTS `jobs`;
+CREATE TABLE `jobs` (
+  `id` bigint(20) UNSIGNED NOT NULL,
+  `queue` varchar(255) NOT NULL,
+  `payload` longtext NOT NULL,
+  `attempts` tinyint(3) UNSIGNED NOT NULL,
+  `reserved_at` int(10) UNSIGNED DEFAULT NULL,
+  `available_at` int(10) UNSIGNED NOT NULL,
+  `created_at` int(10) UNSIGNED NOT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `job_batches`
+--
+
+DROP TABLE IF EXISTS `job_batches`;
+CREATE TABLE `job_batches` (
+  `id` varchar(255) NOT NULL,
+  `name` varchar(255) NOT NULL,
+  `total_jobs` int(11) NOT NULL,
+  `pending_jobs` int(11) NOT NULL,
+  `failed_jobs` int(11) NOT NULL,
+  `failed_job_ids` longtext NOT NULL,
+  `options` mediumtext DEFAULT NULL,
+  `cancelled_at` int(11) DEFAULT NULL,
+  `created_at` int(11) NOT NULL,
+  `finished_at` int(11) DEFAULT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- --------------------------------------------------------
+
+--
 -- Table structure for table `jurusan`
 --
 
+DROP TABLE IF EXISTS `jurusan`;
 CREATE TABLE `jurusan` (
   `jurusan_id` int(11) NOT NULL,
   `code` varchar(20) DEFAULT NULL,
@@ -541,6 +626,7 @@ INSERT INTO `jurusan` (`jurusan_id`, `code`, `name`, `jurusan_scanner`) VALUES
 -- Table structure for table `master_data_audit_logs`
 --
 
+DROP TABLE IF EXISTS `master_data_audit_logs`;
 CREATE TABLE `master_data_audit_logs` (
   `id` bigint(20) UNSIGNED NOT NULL,
   `actor_id` varchar(64) DEFAULT NULL,
@@ -571,7 +657,10 @@ INSERT INTO `master_data_audit_logs` (`id`, `actor_id`, `actor_role`, `entity_ty
 (11, '10', 'student', 'credential', '10', 'change_password_forced', '{\"password\":\"masked\"}', '{\"password\":\"masked\"}', '{\"ip_address\":\"::1\",\"user_agent\":\"Mozilla\\/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit\\/537.36 (KHTML, like Gecko) Chrome\\/144.0.0.0 Safari\\/537.36\",\"source\":\"siswa\\/change_password\"}', '2026-02-18 22:56:42'),
 (12, '13', 'guru', 'credential', '13', 'auto_rotate_default_password', '{\"password\":\"default_masked\"}', '{\"password\":\"random_masked\"}', '{\"ip_address\":\"::1\",\"user_agent\":\"Mozilla\\/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit\\/537.36 (KHTML, like Gecko) Chrome\\/144.0.0.0 Safari\\/537.36\",\"source\":\"dashboard\\/guru\",\"sync\":\"admin_masked_only\"}', '2026-02-19 05:43:32'),
 (13, '2', 'admin', 'credential', '13', 'reset_teacher_password_default', '{\"password\":\"masked\"}', '{\"password\":\"masked\"}', '{\"ip_address\":\"::1\",\"user_agent\":\"Mozilla\\/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit\\/537.36 (KHTML, like Gecko) Chrome\\/144.0.0.0 Safari\\/537.36\",\"target\":\"teacher\",\"reset_to\":\"guru123\"}', '2026-02-19 06:06:39'),
-(14, '13', 'guru', 'credential', '13', 'auto_rotate_default_password', '{\"password\":\"default_masked\"}', '{\"password\":\"random_masked\"}', '{\"ip_address\":\"::1\",\"user_agent\":\"Mozilla\\/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit\\/537.36 (KHTML, like Gecko) Chrome\\/144.0.0.0 Safari\\/537.36\",\"source\":\"dashboard\\/guru\",\"sync\":\"admin_masked_only\"}', '2026-02-19 06:07:02');
+(14, '13', 'guru', 'credential', '13', 'auto_rotate_default_password', '{\"password\":\"default_masked\"}', '{\"password\":\"random_masked\"}', '{\"ip_address\":\"::1\",\"user_agent\":\"Mozilla\\/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit\\/537.36 (KHTML, like Gecko) Chrome\\/144.0.0.0 Safari\\/537.36\",\"source\":\"dashboard\\/guru\",\"sync\":\"admin_masked_only\"}', '2026-02-19 06:07:02'),
+(15, '1', 'admin', 'credential', '7', 'reset_teacher_password_default', '{\"password\":\"masked\"}', '{\"password\":\"masked\"}', '{\"ip_address\":\"::1\",\"user_agent\":\"Mozilla\\/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit\\/537.36 (KHTML, like Gecko) Chrome\\/145.0.0.0 Safari\\/537.36\",\"target\":\"teacher\",\"reset_to\":\"guru123\"}', '2026-03-07 11:19:53'),
+(16, '7', 'guru', 'credential', '7', 'auto_rotate_default_password', '{\"password\":\"default_masked\"}', '{\"password\":\"random_masked\"}', '{\"ip_address\":\"::1\",\"user_agent\":\"Mozilla\\/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit\\/537.36 (KHTML, like Gecko) Chrome\\/145.0.0.0 Safari\\/537.36\",\"source\":\"dashboard\\/guru\",\"sync\":\"admin_masked_only\"}', '2026-03-07 11:20:05'),
+(17, '10', 'student', 'credential', '10', 'change_password_forced', '{\"password\":\"masked\"}', '{\"password\":\"masked\"}', '{\"ip_address\":\"::1\",\"user_agent\":\"Mozilla\\/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit\\/537.36 (KHTML, like Gecko) Chrome\\/146.0.0.0 Safari\\/537.36\",\"source\":\"siswa\\/change_password\"}', '2026-04-01 18:01:34');
 
 -- --------------------------------------------------------
 
@@ -579,6 +668,7 @@ INSERT INTO `master_data_audit_logs` (`id`, `actor_id`, `actor_role`, `entity_ty
 -- Table structure for table `migrations`
 --
 
+DROP TABLE IF EXISTS `migrations`;
 CREATE TABLE `migrations` (
   `id` int(10) UNSIGNED NOT NULL,
   `migration` varchar(255) NOT NULL,
@@ -590,24 +680,25 @@ CREATE TABLE `migrations` (
 --
 
 INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES
-(1, '2026_02_18_000100_create_master_data_audit_logs_table', 1);
+(1, '2026_02_18_000100_create_master_data_audit_logs_table', 1),
+(2, '0001_01_01_000000_create_users_table', 2),
+(3, '0001_01_01_000001_create_cache_table', 2),
+(4, '0001_01_01_000002_create_jobs_table', 2),
+(5, '2026_04_01_000200_create_ebook_ratings_table', 3),
+(6, '2026_04_01_000300_add_reviewer_fields_to_ebook_ratings_table', 4);
 
 -- --------------------------------------------------------
 
 --
--- Table structure for table `notifications`
+-- Table structure for table `password_reset_tokens`
 --
 
-CREATE TABLE `notifications` (
-  `id` varchar(36) NOT NULL,
-  `type` varchar(255) NOT NULL,
-  `notifiable_type` varchar(255) NOT NULL,
-  `notifiable_id` bigint(20) unsigned NOT NULL,
-  `data` text NOT NULL,
-  `read_at` timestamp NULL DEFAULT NULL,
-  `created_at` timestamp NULL DEFAULT NULL,
-  `updated_at` timestamp NULL DEFAULT NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+DROP TABLE IF EXISTS `password_reset_tokens`;
+CREATE TABLE `password_reset_tokens` (
+  `email` varchar(255) NOT NULL,
+  `token` varchar(255) NOT NULL,
+  `created_at` timestamp NULL DEFAULT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- --------------------------------------------------------
 
@@ -615,6 +706,7 @@ CREATE TABLE `notifications` (
 -- Table structure for table `presence`
 --
 
+DROP TABLE IF EXISTS `presence`;
 CREATE TABLE `presence` (
   `presence_id` int(11) NOT NULL,
   `student_id` int(11) DEFAULT NULL,
@@ -652,6 +744,7 @@ INSERT INTO `presence` (`presence_id`, `student_id`, `student_schedule_id`, `pre
 -- Table structure for table `present_status`
 --
 
+DROP TABLE IF EXISTS `present_status`;
 CREATE TABLE `present_status` (
   `present_id` int(11) NOT NULL,
   `present_name` varchar(20) DEFAULT NULL
@@ -673,6 +766,7 @@ INSERT INTO `present_status` (`present_id`, `present_name`) VALUES
 -- Table structure for table `push_notification_logs`
 --
 
+DROP TABLE IF EXISTS `push_notification_logs`;
 CREATE TABLE `push_notification_logs` (
   `id` int(11) NOT NULL,
   `student_id` int(11) NOT NULL,
@@ -685,12 +779,32 @@ CREATE TABLE `push_notification_logs` (
   `created_at` datetime DEFAULT current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
+--
+-- Dumping data for table `push_notification_logs`
+--
+
+INSERT INTO `push_notification_logs` (`id`, `student_id`, `student_schedule_id`, `type`, `scheduled_at`, `sent_at`, `status`, `error_message`, `created_at`) VALUES
+(1, 10, NULL, 'password_changed', '2026-04-01 17:59:54', '2026-04-01 17:59:54', 'FAILED', 'Push service not configured', '2026-04-01 17:59:54'),
+(2, 10, NULL, 'password_changed', '2026-04-01 18:00:33', '2026-04-01 18:00:33', 'FAILED', 'Push service not configured', '2026-04-01 18:00:33'),
+(3, 10, NULL, 'password_changed', '2026-04-01 18:01:34', '2026-04-01 18:01:34', 'FAILED', 'Push service not configured', '2026-04-01 18:01:34'),
+(4, 10, NULL, 'system_error', '2026-04-02 20:23:41', '2026-04-02 20:23:43', 'FAILED', 'Push service not configured', '2026-04-02 20:23:43'),
+(5, 10, NULL, 'system_error', '2026-04-02 22:42:45', '2026-04-02 22:42:45', 'FAILED', 'Push service not configured', '2026-04-02 22:42:45'),
+(6, 10, NULL, 'system_error', '2026-04-02 22:48:54', '2026-04-02 22:48:54', 'FAILED', 'Push service not configured', '2026-04-02 22:48:54'),
+(7, 10, NULL, 'system_error', '2026-04-02 22:49:01', '2026-04-02 22:49:01', 'FAILED', 'Push service not configured', '2026-04-02 22:49:01'),
+(8, 10, NULL, 'system_error', '2026-04-02 22:49:03', '2026-04-02 22:49:03', 'FAILED', 'Push service not configured', '2026-04-02 22:49:03'),
+(9, 10, NULL, 'system_error', '2026-04-02 22:49:05', '2026-04-02 22:49:05', 'FAILED', 'Push service not configured', '2026-04-02 22:49:05'),
+(10, 10, NULL, 'system_error', '2026-04-02 22:49:08', '2026-04-02 22:49:08', 'FAILED', 'Push service not configured', '2026-04-02 22:49:08'),
+(11, 10, NULL, 'system_error', '2026-04-02 22:49:19', '2026-04-02 22:49:19', 'FAILED', 'Push service not configured', '2026-04-02 22:49:19'),
+(12, 10, NULL, 'system_error', '2026-04-02 23:10:10', '2026-04-02 23:10:10', 'FAILED', 'Push service not configured', '2026-04-02 23:10:10'),
+(13, 10, NULL, 'default_location_changed', '2026-04-02 23:21:26', '2026-04-02 23:21:26', 'FAILED', 'Push service not configured', '2026-04-02 23:21:26');
+
 -- --------------------------------------------------------
 
 --
 -- Table structure for table `push_tokens`
 --
 
+DROP TABLE IF EXISTS `push_tokens`;
 CREATE TABLE `push_tokens` (
   `id` int(11) NOT NULL,
   `student_id` int(11) NOT NULL,
@@ -711,7 +825,7 @@ CREATE TABLE `push_tokens` (
 --
 
 INSERT INTO `push_tokens` (`id`, `student_id`, `endpoint`, `p256dh`, `auth`, `content_encoding`, `browser`, `platform`, `user_agent`, `is_active`, `created_at`, `updated_at`) VALUES
-(2, 10, 'https://fcm.googleapis.com/fcm/send/f6xCMIpfg5U:APA91bF3W9Ru7ZlXmhBKh_qzVX6P9MHtgT4ctPZ-hkdRKGj3xF_-QLALJTH3ZyzF7tSilx133Lha7SQJwJ_pe5dsIks9zc8SwY3X9E32rsOFwQbOJbI52O1v3kIgniEHMhMRZSx2EjLC', 'BKTh3HhMUbBYtTr1wsPO1bgxje-gQl0ROfa9sVf8NWEqnt_aXJd3W4_D2RxrOO6dRgg6lBee_IzWAE0F8chZFLo', '-lDBQOyJrJOXB5JLqd6esA', NULL, 'Chrome', '\"Windows\"', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36', 'Y', '2026-02-19 05:37:37', '2026-02-19 22:10:08');
+(2, 10, 'https://fcm.googleapis.com/fcm/send/f6xCMIpfg5U:APA91bF3W9Ru7ZlXmhBKh_qzVX6P9MHtgT4ctPZ-hkdRKGj3xF_-QLALJTH3ZyzF7tSilx133Lha7SQJwJ_pe5dsIks9zc8SwY3X9E32rsOFwQbOJbI52O1v3kIgniEHMhMRZSx2EjLC', 'BKTh3HhMUbBYtTr1wsPO1bgxje-gQl0ROfa9sVf8NWEqnt_aXJd3W4_D2RxrOO6dRgg6lBee_IzWAE0F8chZFLo', '-lDBQOyJrJOXB5JLqd6esA', NULL, 'Chrome', '\"Windows\"', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36', 'Y', '2026-02-19 05:37:37', '2026-02-21 08:40:58');
 
 -- --------------------------------------------------------
 
@@ -719,6 +833,7 @@ INSERT INTO `push_tokens` (`id`, `student_id`, `endpoint`, `p256dh`, `auth`, `co
 -- Table structure for table `school_location`
 --
 
+DROP TABLE IF EXISTS `school_location`;
 CREATE TABLE `school_location` (
   `location_id` int(11) NOT NULL,
   `location_name` varchar(150) NOT NULL,
@@ -742,9 +857,26 @@ INSERT INTO `school_location` (`location_id`, `location_name`, `latitude`, `long
 -- --------------------------------------------------------
 
 --
+-- Table structure for table `sessions`
+--
+
+DROP TABLE IF EXISTS `sessions`;
+CREATE TABLE `sessions` (
+  `id` varchar(255) NOT NULL,
+  `user_id` bigint(20) UNSIGNED DEFAULT NULL,
+  `ip_address` varchar(45) DEFAULT NULL,
+  `user_agent` text DEFAULT NULL,
+  `payload` longtext NOT NULL,
+  `last_activity` int(11) NOT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- --------------------------------------------------------
+
+--
 -- Table structure for table `shift`
 --
 
+DROP TABLE IF EXISTS `shift`;
 CREATE TABLE `shift` (
   `shift_id` int(11) NOT NULL,
   `shift_name` varchar(50) DEFAULT NULL,
@@ -774,6 +906,7 @@ INSERT INTO `shift` (`shift_id`, `shift_name`, `time_in`, `time_out`) VALUES
 -- Table structure for table `site`
 --
 
+DROP TABLE IF EXISTS `site`;
 CREATE TABLE `site` (
   `site_id` int(4) NOT NULL,
   `site_url` varchar(255) NOT NULL,
@@ -795,7 +928,7 @@ CREATE TABLE `site` (
 --
 
 INSERT INTO `site` (`site_id`, `site_url`, `site_name`, `site_phone`, `site_address`, `site_description`, `site_logo`, `site_email`, `site_email_domain`, `time_tolerance`, `enable_gps_validation`, `enable_photo_validation`, `default_location_id`) VALUES
-(1, 'http://localhost/presenova/', 'presenova', '0811-1444-240', 'Jl. Ciantra, Sukadami, Cikarang Selatan', 'Sistem Absensi Online dengan Foto Selfie & GPS Validation', 'presenova.png', 'adm@presenova.my.id', 'presenova.my.id', 15, 'Y', 'Y', 1);
+(1, 'http://localhost/presenova/', 'presenova', '0811-1444-240', 'Jl. Ciantra, Sukadami, Cikarang Selatan', 'Sistem Absensi Online dengan Foto Selfie & GPS Validation', 'presenova.png', 'admin@presenova.my.id', 'presenova.my.id', 15, 'Y', 'Y', 4);
 
 -- --------------------------------------------------------
 
@@ -803,6 +936,7 @@ INSERT INTO `site` (`site_id`, `site_url`, `site_name`, `site_phone`, `site_addr
 -- Table structure for table `student`
 --
 
+DROP TABLE IF EXISTS `student`;
 CREATE TABLE `student` (
   `id` int(11) NOT NULL,
   `student_code` varchar(20) DEFAULT NULL,
@@ -827,8 +961,8 @@ CREATE TABLE `student` (
 --
 
 INSERT INTO `student` (`id`, `student_code`, `student_nisn`, `student_password`, `student_name`, `class_id`, `jurusan_id`, `photo`, `photo_reference`, `face_embedding`, `last_face_update`, `location_id`, `created_login`, `created_cookies`, `email`, `phone`) VALUES
-(10, 'SW999', '123456', '6516f379c4bef706d9ebbc15c42e106d215810c265381acee6a87eaf741e1b8a', 'hapis', 15, 7, NULL, 'xii-tjkt-a/hapis/123456-hapis.jpg', NULL, NULL, 1, '2026-02-19 21:42:59', '-', 'hzfpgamin@gmail.com', '083871643026'),
-(11, 'SW0002', '1234567', '7c33357c27162ee8de3b595a2a844d2b1812c1260c2f1e961f9af0fa77fa0102', 'FF', 15, 7, NULL, 'xii-tjkt-a/ff/1234567-ff.jpg', NULL, NULL, 1, '2026-02-18 17:07:57', '-', NULL, NULL);
+(10, 'SW999', '123456', '6516f379c4bef706d9ebbc15c42e106d215810c265381acee6a87eaf741e1b8a', 'hapis', 15, 7, NULL, 'xii-tjkt-a/hapis/123456-hapis.jpg', NULL, NULL, 1, '2026-04-02 23:21:38', '-', 'hzfpgamin@gmail.com', '083871643026'),
+(20, 'SW21W7', '12345', '3726e36a5db2e8c0905f9d22cfa56696bb3b8bfd22e3b5e42719ece828a867d1', 'DUMMY1', 15, 7, NULL, NULL, NULL, NULL, 1, '2026-04-03 11:57:56', '-', NULL, NULL);
 
 -- --------------------------------------------------------
 
@@ -836,6 +970,7 @@ INSERT INTO `student` (`id`, `student_code`, `student_nisn`, `student_password`,
 -- Table structure for table `student_schedule`
 --
 
+DROP TABLE IF EXISTS `student_schedule`;
 CREATE TABLE `student_schedule` (
   `student_schedule_id` int(11) NOT NULL,
   `student_id` int(11) NOT NULL,
@@ -880,366 +1015,453 @@ INSERT INTO `student_schedule` (`student_schedule_id`, `student_id`, `teacher_sc
 (66, 10, 1, '2026-07-27', '07:15:00', '15:30:00', 'ACTIVE', '2026-02-09 13:52:23', '2026-02-10 01:46:10'),
 (67, 10, 1, '2026-08-03', '07:15:00', '15:30:00', 'ACTIVE', '2026-02-09 13:52:23', '2026-02-10 01:46:10'),
 (68, 10, 1, '2026-08-10', '07:15:00', '15:30:00', 'ACTIVE', '2026-02-10 01:20:45', '2026-02-10 01:46:10'),
-(69, 11, 1, '2026-02-16', '07:15:00', '15:30:00', 'ACTIVE', '2026-02-10 01:45:41', '2026-02-10 01:46:10'),
-(70, 11, 1, '2026-02-23', '07:15:00', '15:30:00', 'ACTIVE', '2026-02-10 01:45:41', '2026-02-10 01:46:10'),
-(71, 11, 1, '2026-03-02', '07:15:00', '15:30:00', 'ACTIVE', '2026-02-10 01:45:41', '2026-02-10 01:46:10'),
-(72, 11, 1, '2026-03-09', '07:15:00', '15:30:00', 'ACTIVE', '2026-02-10 01:45:41', '2026-02-10 01:46:10'),
-(73, 11, 1, '2026-03-16', '07:15:00', '15:30:00', 'ACTIVE', '2026-02-10 01:45:41', '2026-02-10 01:46:10'),
-(74, 11, 1, '2026-03-23', '07:15:00', '15:30:00', 'ACTIVE', '2026-02-10 01:45:41', '2026-02-10 01:46:10'),
-(75, 11, 1, '2026-03-30', '07:15:00', '15:30:00', 'ACTIVE', '2026-02-10 01:45:41', '2026-02-10 01:46:10'),
-(76, 11, 1, '2026-04-06', '07:15:00', '15:30:00', 'ACTIVE', '2026-02-10 01:45:41', '2026-02-10 01:46:10'),
-(77, 11, 1, '2026-04-13', '07:15:00', '15:30:00', 'ACTIVE', '2026-02-10 01:45:41', '2026-02-10 01:46:10'),
-(78, 11, 1, '2026-04-20', '07:15:00', '15:30:00', 'ACTIVE', '2026-02-10 01:45:41', '2026-02-10 01:46:10'),
-(79, 11, 1, '2026-04-27', '07:15:00', '15:30:00', 'ACTIVE', '2026-02-10 01:45:41', '2026-02-10 01:46:10'),
-(80, 11, 1, '2026-05-04', '07:15:00', '15:30:00', 'ACTIVE', '2026-02-10 01:45:41', '2026-02-10 01:46:10'),
-(81, 11, 1, '2026-05-11', '07:15:00', '15:30:00', 'ACTIVE', '2026-02-10 01:45:41', '2026-02-10 01:46:10'),
-(82, 11, 1, '2026-05-18', '07:15:00', '15:30:00', 'ACTIVE', '2026-02-10 01:45:41', '2026-02-10 01:46:10'),
-(83, 11, 1, '2026-05-25', '07:15:00', '15:30:00', 'ACTIVE', '2026-02-10 01:45:41', '2026-02-10 01:46:10'),
-(84, 11, 1, '2026-06-01', '07:15:00', '15:30:00', 'ACTIVE', '2026-02-10 01:45:41', '2026-02-10 01:46:10'),
-(85, 11, 1, '2026-06-08', '07:15:00', '15:30:00', 'ACTIVE', '2026-02-10 01:45:41', '2026-02-10 01:46:10'),
-(86, 11, 1, '2026-06-15', '07:15:00', '15:30:00', 'ACTIVE', '2026-02-10 01:45:41', '2026-02-10 01:46:10'),
-(87, 11, 1, '2026-06-22', '07:15:00', '15:30:00', 'ACTIVE', '2026-02-10 01:45:41', '2026-02-10 01:46:10'),
-(88, 11, 1, '2026-06-29', '07:15:00', '15:30:00', 'ACTIVE', '2026-02-10 01:45:41', '2026-02-10 01:46:10'),
-(89, 11, 1, '2026-07-06', '07:15:00', '15:30:00', 'ACTIVE', '2026-02-10 01:45:41', '2026-02-10 01:46:10'),
-(90, 11, 1, '2026-07-13', '07:15:00', '15:30:00', 'ACTIVE', '2026-02-10 01:45:41', '2026-02-10 01:46:10'),
-(91, 11, 1, '2026-07-20', '07:15:00', '15:30:00', 'ACTIVE', '2026-02-10 01:45:41', '2026-02-10 01:46:10'),
-(92, 11, 1, '2026-07-27', '07:15:00', '15:30:00', 'ACTIVE', '2026-02-10 01:45:41', '2026-02-10 01:46:10'),
-(93, 11, 1, '2026-08-03', '07:15:00', '15:30:00', 'ACTIVE', '2026-02-10 01:45:41', '2026-02-10 01:46:10'),
-(94, 11, 1, '2026-08-10', '07:15:00', '15:30:00', 'ACTIVE', '2026-02-10 01:45:41', '2026-02-10 01:46:10'),
 (95, 10, 2, '2026-02-10', '14:00:00', '22:15:00', 'COMPLETED', '2026-02-10 01:46:32', '2026-02-10 09:38:09'),
-(96, 11, 2, '2026-02-10', '14:00:00', '22:15:00', 'ACTIVE', '2026-02-10 01:46:32', '2026-02-10 08:54:14'),
 (97, 10, 2, '2026-02-17', '14:00:00', '22:15:00', 'ACTIVE', '2026-02-10 01:46:32', '2026-02-10 08:54:14'),
-(98, 11, 2, '2026-02-17', '14:00:00', '22:15:00', 'ACTIVE', '2026-02-10 01:46:32', '2026-02-10 08:54:14'),
 (99, 10, 2, '2026-02-24', '14:00:00', '22:15:00', 'ACTIVE', '2026-02-10 01:46:32', '2026-02-10 08:54:14'),
-(100, 11, 2, '2026-02-24', '14:00:00', '22:15:00', 'ACTIVE', '2026-02-10 01:46:32', '2026-02-10 08:54:14'),
 (101, 10, 2, '2026-03-03', '14:00:00', '22:15:00', 'ACTIVE', '2026-02-10 01:46:32', '2026-02-10 08:54:14'),
-(102, 11, 2, '2026-03-03', '14:00:00', '22:15:00', 'ACTIVE', '2026-02-10 01:46:32', '2026-02-10 08:54:14'),
 (103, 10, 2, '2026-03-10', '14:00:00', '22:15:00', 'ACTIVE', '2026-02-10 01:46:32', '2026-02-10 08:54:14'),
-(104, 11, 2, '2026-03-10', '14:00:00', '22:15:00', 'ACTIVE', '2026-02-10 01:46:32', '2026-02-10 08:54:14'),
 (105, 10, 2, '2026-03-17', '14:00:00', '22:15:00', 'ACTIVE', '2026-02-10 01:46:32', '2026-02-10 08:54:14'),
-(106, 11, 2, '2026-03-17', '14:00:00', '22:15:00', 'ACTIVE', '2026-02-10 01:46:32', '2026-02-10 08:54:14'),
 (107, 10, 2, '2026-03-24', '14:00:00', '22:15:00', 'ACTIVE', '2026-02-10 01:46:32', '2026-02-10 08:54:14'),
-(108, 11, 2, '2026-03-24', '14:00:00', '22:15:00', 'ACTIVE', '2026-02-10 01:46:32', '2026-02-10 08:54:14'),
 (109, 10, 2, '2026-03-31', '14:00:00', '22:15:00', 'ACTIVE', '2026-02-10 01:46:32', '2026-02-10 08:54:14'),
-(110, 11, 2, '2026-03-31', '14:00:00', '22:15:00', 'ACTIVE', '2026-02-10 01:46:32', '2026-02-10 08:54:14'),
 (111, 10, 2, '2026-04-07', '14:00:00', '22:15:00', 'ACTIVE', '2026-02-10 01:46:32', '2026-02-10 08:54:14'),
-(112, 11, 2, '2026-04-07', '14:00:00', '22:15:00', 'ACTIVE', '2026-02-10 01:46:32', '2026-02-10 08:54:14'),
 (113, 10, 2, '2026-04-14', '14:00:00', '22:15:00', 'ACTIVE', '2026-02-10 01:46:32', '2026-02-10 08:54:14'),
-(114, 11, 2, '2026-04-14', '14:00:00', '22:15:00', 'ACTIVE', '2026-02-10 01:46:32', '2026-02-10 08:54:14'),
 (115, 10, 2, '2026-04-21', '14:00:00', '22:15:00', 'ACTIVE', '2026-02-10 01:46:32', '2026-02-10 08:54:14'),
-(116, 11, 2, '2026-04-21', '14:00:00', '22:15:00', 'ACTIVE', '2026-02-10 01:46:32', '2026-02-10 08:54:14'),
 (117, 10, 2, '2026-04-28', '14:00:00', '22:15:00', 'ACTIVE', '2026-02-10 01:46:32', '2026-02-10 08:54:14'),
-(118, 11, 2, '2026-04-28', '14:00:00', '22:15:00', 'ACTIVE', '2026-02-10 01:46:32', '2026-02-10 08:54:14'),
 (119, 10, 2, '2026-05-05', '14:00:00', '22:15:00', 'ACTIVE', '2026-02-10 01:46:32', '2026-02-10 08:54:14'),
-(120, 11, 2, '2026-05-05', '14:00:00', '22:15:00', 'ACTIVE', '2026-02-10 01:46:32', '2026-02-10 08:54:14'),
 (121, 10, 2, '2026-05-12', '14:00:00', '22:15:00', 'ACTIVE', '2026-02-10 01:46:32', '2026-02-10 08:54:14'),
-(122, 11, 2, '2026-05-12', '14:00:00', '22:15:00', 'ACTIVE', '2026-02-10 01:46:32', '2026-02-10 08:54:14'),
 (123, 10, 2, '2026-05-19', '14:00:00', '22:15:00', 'ACTIVE', '2026-02-10 01:46:32', '2026-02-10 08:54:14'),
-(124, 11, 2, '2026-05-19', '14:00:00', '22:15:00', 'ACTIVE', '2026-02-10 01:46:32', '2026-02-10 08:54:14'),
 (125, 10, 2, '2026-05-26', '14:00:00', '22:15:00', 'ACTIVE', '2026-02-10 01:46:32', '2026-02-10 08:54:14'),
-(126, 11, 2, '2026-05-26', '14:00:00', '22:15:00', 'ACTIVE', '2026-02-10 01:46:32', '2026-02-10 08:54:14'),
 (127, 10, 2, '2026-06-02', '14:00:00', '22:15:00', 'ACTIVE', '2026-02-10 01:46:32', '2026-02-10 08:54:14'),
-(128, 11, 2, '2026-06-02', '14:00:00', '22:15:00', 'ACTIVE', '2026-02-10 01:46:32', '2026-02-10 08:54:14'),
 (129, 10, 2, '2026-06-09', '14:00:00', '22:15:00', 'ACTIVE', '2026-02-10 01:46:32', '2026-02-10 08:54:14'),
-(130, 11, 2, '2026-06-09', '14:00:00', '22:15:00', 'ACTIVE', '2026-02-10 01:46:32', '2026-02-10 08:54:14'),
 (131, 10, 2, '2026-06-16', '14:00:00', '22:15:00', 'ACTIVE', '2026-02-10 01:46:32', '2026-02-10 08:54:14'),
-(132, 11, 2, '2026-06-16', '14:00:00', '22:15:00', 'ACTIVE', '2026-02-10 01:46:32', '2026-02-10 08:54:14'),
 (133, 10, 2, '2026-06-23', '14:00:00', '22:15:00', 'ACTIVE', '2026-02-10 01:46:32', '2026-02-10 08:54:14'),
-(134, 11, 2, '2026-06-23', '14:00:00', '22:15:00', 'ACTIVE', '2026-02-10 01:46:32', '2026-02-10 08:54:14'),
 (135, 10, 2, '2026-06-30', '14:00:00', '22:15:00', 'ACTIVE', '2026-02-10 01:46:32', '2026-02-10 08:54:14'),
-(136, 11, 2, '2026-06-30', '14:00:00', '22:15:00', 'ACTIVE', '2026-02-10 01:46:32', '2026-02-10 08:54:14'),
 (137, 10, 2, '2026-07-07', '14:00:00', '22:15:00', 'ACTIVE', '2026-02-10 01:46:32', '2026-02-10 08:54:14'),
-(138, 11, 2, '2026-07-07', '14:00:00', '22:15:00', 'ACTIVE', '2026-02-10 01:46:32', '2026-02-10 08:54:14'),
 (139, 10, 2, '2026-07-14', '14:00:00', '22:15:00', 'ACTIVE', '2026-02-10 01:46:32', '2026-02-10 08:54:14'),
-(140, 11, 2, '2026-07-14', '14:00:00', '22:15:00', 'ACTIVE', '2026-02-10 01:46:32', '2026-02-10 08:54:14'),
 (141, 10, 2, '2026-07-21', '14:00:00', '22:15:00', 'ACTIVE', '2026-02-10 01:46:32', '2026-02-10 08:54:14'),
-(142, 11, 2, '2026-07-21', '14:00:00', '22:15:00', 'ACTIVE', '2026-02-10 01:46:32', '2026-02-10 08:54:14'),
 (143, 10, 2, '2026-07-28', '14:00:00', '22:15:00', 'ACTIVE', '2026-02-10 01:46:32', '2026-02-10 08:54:14'),
-(144, 11, 2, '2026-07-28', '14:00:00', '22:15:00', 'ACTIVE', '2026-02-10 01:46:32', '2026-02-10 08:54:14'),
 (145, 10, 2, '2026-08-04', '14:00:00', '22:15:00', 'ACTIVE', '2026-02-10 01:46:32', '2026-02-10 08:54:14'),
-(146, 11, 2, '2026-08-04', '14:00:00', '22:15:00', 'ACTIVE', '2026-02-10 01:46:32', '2026-02-10 08:54:14'),
 (147, 10, 2, '2026-08-11', '14:00:00', '22:15:00', 'ACTIVE', '2026-02-11 03:11:30', '2026-02-11 03:11:30'),
-(148, 11, 2, '2026-08-11', '14:00:00', '22:15:00', 'ACTIVE', '2026-02-11 03:11:30', '2026-02-11 03:11:30'),
 (150, 10, 3, '2026-02-11', '07:00:00', '15:15:00', 'COMPLETED', '2026-02-11 03:12:48', '2026-02-11 03:14:04'),
-(151, 11, 3, '2026-02-11', '11:00:00', '14:15:00', 'ACTIVE', '2026-02-11 03:12:48', '2026-02-11 08:30:51'),
 (152, 10, 3, '2026-02-18', '11:00:00', '14:15:00', 'ACTIVE', '2026-02-11 03:12:48', '2026-02-11 08:30:51'),
-(153, 11, 3, '2026-02-18', '11:00:00', '14:15:00', 'ACTIVE', '2026-02-11 03:12:48', '2026-02-11 08:30:51'),
 (154, 10, 3, '2026-02-25', '11:00:00', '14:15:00', 'ACTIVE', '2026-02-11 03:12:48', '2026-02-11 08:30:51'),
-(155, 11, 3, '2026-02-25', '11:00:00', '14:15:00', 'ACTIVE', '2026-02-11 03:12:48', '2026-02-11 08:30:51'),
 (156, 10, 3, '2026-03-04', '11:00:00', '14:15:00', 'ACTIVE', '2026-02-11 03:12:48', '2026-02-11 08:30:51'),
-(157, 11, 3, '2026-03-04', '11:00:00', '14:15:00', 'ACTIVE', '2026-02-11 03:12:48', '2026-02-11 08:30:51'),
 (158, 10, 3, '2026-03-11', '11:00:00', '14:15:00', 'ACTIVE', '2026-02-11 03:12:48', '2026-02-11 08:30:51'),
-(159, 11, 3, '2026-03-11', '11:00:00', '14:15:00', 'ACTIVE', '2026-02-11 03:12:48', '2026-02-11 08:30:51'),
 (160, 10, 3, '2026-03-18', '11:00:00', '14:15:00', 'ACTIVE', '2026-02-11 03:12:48', '2026-02-11 08:30:51'),
-(161, 11, 3, '2026-03-18', '11:00:00', '14:15:00', 'ACTIVE', '2026-02-11 03:12:48', '2026-02-11 08:30:51'),
 (162, 10, 3, '2026-03-25', '11:00:00', '14:15:00', 'ACTIVE', '2026-02-11 03:12:48', '2026-02-11 08:30:51'),
-(163, 11, 3, '2026-03-25', '11:00:00', '14:15:00', 'ACTIVE', '2026-02-11 03:12:48', '2026-02-11 08:30:51'),
-(164, 10, 3, '2026-04-01', '11:00:00', '14:15:00', 'ACTIVE', '2026-02-11 03:12:48', '2026-02-11 08:30:51'),
-(165, 11, 3, '2026-04-01', '11:00:00', '14:15:00', 'ACTIVE', '2026-02-11 03:12:48', '2026-02-11 08:30:51'),
-(166, 10, 3, '2026-04-08', '11:00:00', '14:15:00', 'ACTIVE', '2026-02-11 03:12:48', '2026-02-11 08:30:51'),
-(167, 11, 3, '2026-04-08', '11:00:00', '14:15:00', 'ACTIVE', '2026-02-11 03:12:48', '2026-02-11 08:30:51'),
-(168, 10, 3, '2026-04-15', '11:00:00', '14:15:00', 'ACTIVE', '2026-02-11 03:12:48', '2026-02-11 08:30:51'),
-(169, 11, 3, '2026-04-15', '11:00:00', '14:15:00', 'ACTIVE', '2026-02-11 03:12:48', '2026-02-11 08:30:51'),
-(170, 10, 3, '2026-04-22', '11:00:00', '14:15:00', 'ACTIVE', '2026-02-11 03:12:48', '2026-02-11 08:30:51'),
-(171, 11, 3, '2026-04-22', '11:00:00', '14:15:00', 'ACTIVE', '2026-02-11 03:12:48', '2026-02-11 08:30:51'),
-(172, 10, 3, '2026-04-29', '11:00:00', '14:15:00', 'ACTIVE', '2026-02-11 03:12:48', '2026-02-11 08:30:51'),
-(173, 11, 3, '2026-04-29', '11:00:00', '14:15:00', 'ACTIVE', '2026-02-11 03:12:48', '2026-02-11 08:30:51'),
-(174, 10, 3, '2026-05-06', '11:00:00', '14:15:00', 'ACTIVE', '2026-02-11 03:12:48', '2026-02-11 08:30:51'),
-(175, 11, 3, '2026-05-06', '11:00:00', '14:15:00', 'ACTIVE', '2026-02-11 03:12:48', '2026-02-11 08:30:51'),
-(176, 10, 3, '2026-05-13', '11:00:00', '14:15:00', 'ACTIVE', '2026-02-11 03:12:48', '2026-02-11 08:30:51'),
-(177, 11, 3, '2026-05-13', '11:00:00', '14:15:00', 'ACTIVE', '2026-02-11 03:12:48', '2026-02-11 08:30:51'),
-(178, 10, 3, '2026-05-20', '11:00:00', '14:15:00', 'ACTIVE', '2026-02-11 03:12:48', '2026-02-11 08:30:51'),
-(179, 11, 3, '2026-05-20', '11:00:00', '14:15:00', 'ACTIVE', '2026-02-11 03:12:48', '2026-02-11 08:30:51'),
-(180, 10, 3, '2026-05-27', '11:00:00', '14:15:00', 'ACTIVE', '2026-02-11 03:12:48', '2026-02-11 08:30:51'),
-(181, 11, 3, '2026-05-27', '11:00:00', '14:15:00', 'ACTIVE', '2026-02-11 03:12:48', '2026-02-11 08:30:51'),
-(182, 10, 3, '2026-06-03', '11:00:00', '14:15:00', 'ACTIVE', '2026-02-11 03:12:48', '2026-02-11 08:30:51'),
-(183, 11, 3, '2026-06-03', '11:00:00', '14:15:00', 'ACTIVE', '2026-02-11 03:12:48', '2026-02-11 08:30:51'),
-(184, 10, 3, '2026-06-10', '11:00:00', '14:15:00', 'ACTIVE', '2026-02-11 03:12:48', '2026-02-11 08:30:51'),
-(185, 11, 3, '2026-06-10', '11:00:00', '14:15:00', 'ACTIVE', '2026-02-11 03:12:48', '2026-02-11 08:30:51'),
-(186, 10, 3, '2026-06-17', '11:00:00', '14:15:00', 'ACTIVE', '2026-02-11 03:12:48', '2026-02-11 08:30:51'),
-(187, 11, 3, '2026-06-17', '11:00:00', '14:15:00', 'ACTIVE', '2026-02-11 03:12:48', '2026-02-11 08:30:51'),
-(188, 10, 3, '2026-06-24', '11:00:00', '14:15:00', 'ACTIVE', '2026-02-11 03:12:48', '2026-02-11 08:30:51'),
-(189, 11, 3, '2026-06-24', '11:00:00', '14:15:00', 'ACTIVE', '2026-02-11 03:12:48', '2026-02-11 08:30:51'),
-(190, 10, 3, '2026-07-01', '11:00:00', '14:15:00', 'ACTIVE', '2026-02-11 03:12:48', '2026-02-11 08:30:51'),
-(191, 11, 3, '2026-07-01', '11:00:00', '14:15:00', 'ACTIVE', '2026-02-11 03:12:48', '2026-02-11 08:30:51'),
-(192, 10, 3, '2026-07-08', '11:00:00', '14:15:00', 'ACTIVE', '2026-02-11 03:12:48', '2026-02-11 08:30:51'),
-(193, 11, 3, '2026-07-08', '11:00:00', '14:15:00', 'ACTIVE', '2026-02-11 03:12:48', '2026-02-11 08:30:51'),
-(194, 10, 3, '2026-07-15', '11:00:00', '14:15:00', 'ACTIVE', '2026-02-11 03:12:48', '2026-02-11 08:30:51'),
-(195, 11, 3, '2026-07-15', '11:00:00', '14:15:00', 'ACTIVE', '2026-02-11 03:12:48', '2026-02-11 08:30:51'),
-(196, 10, 3, '2026-07-22', '11:00:00', '14:15:00', 'ACTIVE', '2026-02-11 03:12:48', '2026-02-11 08:30:51'),
-(197, 11, 3, '2026-07-22', '11:00:00', '14:15:00', 'ACTIVE', '2026-02-11 03:12:48', '2026-02-11 08:30:51'),
-(198, 10, 3, '2026-07-29', '11:00:00', '14:15:00', 'ACTIVE', '2026-02-11 03:12:48', '2026-02-11 08:30:51'),
-(199, 11, 3, '2026-07-29', '11:00:00', '14:15:00', 'ACTIVE', '2026-02-11 03:12:48', '2026-02-11 08:30:51'),
-(200, 10, 3, '2026-08-05', '11:00:00', '14:15:00', 'ACTIVE', '2026-02-11 03:12:48', '2026-02-11 08:30:51'),
-(201, 11, 3, '2026-08-05', '11:00:00', '14:15:00', 'ACTIVE', '2026-02-11 03:12:48', '2026-02-11 08:30:51'),
+(164, 10, 3, '2026-04-01', '10:00:00', '13:15:00', 'ACTIVE', '2026-02-11 03:12:48', '2026-04-01 03:21:11'),
+(166, 10, 3, '2026-04-08', '10:00:00', '13:15:00', 'ACTIVE', '2026-02-11 03:12:48', '2026-04-01 03:21:11'),
+(168, 10, 3, '2026-04-15', '10:00:00', '13:15:00', 'ACTIVE', '2026-02-11 03:12:48', '2026-04-01 03:21:11'),
+(170, 10, 3, '2026-04-22', '10:00:00', '13:15:00', 'ACTIVE', '2026-02-11 03:12:48', '2026-04-01 03:21:11'),
+(172, 10, 3, '2026-04-29', '10:00:00', '13:15:00', 'ACTIVE', '2026-02-11 03:12:48', '2026-04-01 03:21:11'),
+(174, 10, 3, '2026-05-06', '10:00:00', '13:15:00', 'ACTIVE', '2026-02-11 03:12:48', '2026-04-01 03:21:11'),
+(176, 10, 3, '2026-05-13', '10:00:00', '13:15:00', 'ACTIVE', '2026-02-11 03:12:48', '2026-04-01 03:21:11'),
+(178, 10, 3, '2026-05-20', '10:00:00', '13:15:00', 'ACTIVE', '2026-02-11 03:12:48', '2026-04-01 03:21:11'),
+(180, 10, 3, '2026-05-27', '10:00:00', '13:15:00', 'ACTIVE', '2026-02-11 03:12:48', '2026-04-01 03:21:11'),
+(182, 10, 3, '2026-06-03', '10:00:00', '13:15:00', 'ACTIVE', '2026-02-11 03:12:48', '2026-04-01 03:21:11'),
+(184, 10, 3, '2026-06-10', '10:00:00', '13:15:00', 'ACTIVE', '2026-02-11 03:12:48', '2026-04-01 03:21:11'),
+(186, 10, 3, '2026-06-17', '10:00:00', '13:15:00', 'ACTIVE', '2026-02-11 03:12:48', '2026-04-01 03:21:11'),
+(188, 10, 3, '2026-06-24', '10:00:00', '13:15:00', 'ACTIVE', '2026-02-11 03:12:48', '2026-04-01 03:21:11'),
+(190, 10, 3, '2026-07-01', '10:00:00', '13:15:00', 'ACTIVE', '2026-02-11 03:12:48', '2026-04-01 03:21:11'),
+(192, 10, 3, '2026-07-08', '10:00:00', '13:15:00', 'ACTIVE', '2026-02-11 03:12:48', '2026-04-01 03:21:11'),
+(194, 10, 3, '2026-07-15', '10:00:00', '13:15:00', 'ACTIVE', '2026-02-11 03:12:48', '2026-04-01 03:21:11'),
+(196, 10, 3, '2026-07-22', '10:00:00', '13:15:00', 'ACTIVE', '2026-02-11 03:12:48', '2026-04-01 03:21:11'),
+(198, 10, 3, '2026-07-29', '10:00:00', '13:15:00', 'ACTIVE', '2026-02-11 03:12:48', '2026-04-01 03:21:11'),
+(200, 10, 3, '2026-08-05', '10:00:00', '13:15:00', 'ACTIVE', '2026-02-11 03:12:48', '2026-04-01 03:21:11'),
 (202, 10, 4, '2026-02-11', '14:15:00', '19:15:00', 'ACTIVE', '2026-02-11 08:24:40', '2026-02-11 08:31:01'),
-(203, 11, 4, '2026-02-11', '14:15:00', '19:15:00', 'ACTIVE', '2026-02-11 08:24:40', '2026-02-11 08:31:01'),
 (204, 10, 4, '2026-02-18', '14:15:00', '19:15:00', 'ACTIVE', '2026-02-11 08:24:40', '2026-02-11 08:31:01'),
-(205, 11, 4, '2026-02-18', '14:15:00', '19:15:00', 'ACTIVE', '2026-02-11 08:24:40', '2026-02-11 08:31:01'),
 (206, 10, 4, '2026-02-25', '14:15:00', '19:15:00', 'ACTIVE', '2026-02-11 08:24:40', '2026-02-11 08:31:01'),
-(207, 11, 4, '2026-02-25', '14:15:00', '19:15:00', 'ACTIVE', '2026-02-11 08:24:40', '2026-02-11 08:31:01'),
 (208, 10, 4, '2026-03-04', '14:15:00', '19:15:00', 'ACTIVE', '2026-02-11 08:24:40', '2026-02-11 08:31:01'),
-(209, 11, 4, '2026-03-04', '14:15:00', '19:15:00', 'ACTIVE', '2026-02-11 08:24:40', '2026-02-11 08:31:01'),
 (210, 10, 4, '2026-03-11', '14:15:00', '19:15:00', 'ACTIVE', '2026-02-11 08:24:40', '2026-02-11 08:31:01'),
-(211, 11, 4, '2026-03-11', '14:15:00', '19:15:00', 'ACTIVE', '2026-02-11 08:24:40', '2026-02-11 08:31:01'),
 (212, 10, 4, '2026-03-18', '14:15:00', '19:15:00', 'ACTIVE', '2026-02-11 08:24:40', '2026-02-11 08:31:01'),
-(213, 11, 4, '2026-03-18', '14:15:00', '19:15:00', 'ACTIVE', '2026-02-11 08:24:40', '2026-02-11 08:31:01'),
 (214, 10, 4, '2026-03-25', '14:15:00', '19:15:00', 'ACTIVE', '2026-02-11 08:24:40', '2026-02-11 08:31:01'),
-(215, 11, 4, '2026-03-25', '14:15:00', '19:15:00', 'ACTIVE', '2026-02-11 08:24:40', '2026-02-11 08:31:01'),
-(216, 10, 4, '2026-04-01', '14:15:00', '19:15:00', 'ACTIVE', '2026-02-11 08:24:40', '2026-02-11 08:31:01'),
-(217, 11, 4, '2026-04-01', '14:15:00', '19:15:00', 'ACTIVE', '2026-02-11 08:24:40', '2026-02-11 08:31:01'),
-(218, 10, 4, '2026-04-08', '14:15:00', '19:15:00', 'ACTIVE', '2026-02-11 08:24:40', '2026-02-11 08:31:01'),
-(219, 11, 4, '2026-04-08', '14:15:00', '19:15:00', 'ACTIVE', '2026-02-11 08:24:40', '2026-02-11 08:31:01'),
-(220, 10, 4, '2026-04-15', '14:15:00', '19:15:00', 'ACTIVE', '2026-02-11 08:24:40', '2026-02-11 08:31:01'),
-(221, 11, 4, '2026-04-15', '14:15:00', '19:15:00', 'ACTIVE', '2026-02-11 08:24:40', '2026-02-11 08:31:01'),
-(222, 10, 4, '2026-04-22', '14:15:00', '19:15:00', 'ACTIVE', '2026-02-11 08:24:40', '2026-02-11 08:31:01'),
-(223, 11, 4, '2026-04-22', '14:15:00', '19:15:00', 'ACTIVE', '2026-02-11 08:24:40', '2026-02-11 08:31:01'),
-(224, 10, 4, '2026-04-29', '14:15:00', '19:15:00', 'ACTIVE', '2026-02-11 08:24:40', '2026-02-11 08:31:01'),
-(225, 11, 4, '2026-04-29', '14:15:00', '19:15:00', 'ACTIVE', '2026-02-11 08:24:40', '2026-02-11 08:31:01'),
-(226, 10, 4, '2026-05-06', '14:15:00', '19:15:00', 'ACTIVE', '2026-02-11 08:24:40', '2026-02-11 08:31:01'),
-(227, 11, 4, '2026-05-06', '14:15:00', '19:15:00', 'ACTIVE', '2026-02-11 08:24:40', '2026-02-11 08:31:01'),
-(228, 10, 4, '2026-05-13', '14:15:00', '19:15:00', 'ACTIVE', '2026-02-11 08:24:40', '2026-02-11 08:31:01'),
-(229, 11, 4, '2026-05-13', '14:15:00', '19:15:00', 'ACTIVE', '2026-02-11 08:24:40', '2026-02-11 08:31:01'),
-(230, 10, 4, '2026-05-20', '14:15:00', '19:15:00', 'ACTIVE', '2026-02-11 08:24:40', '2026-02-11 08:31:01'),
-(231, 11, 4, '2026-05-20', '14:15:00', '19:15:00', 'ACTIVE', '2026-02-11 08:24:40', '2026-02-11 08:31:01'),
-(232, 10, 4, '2026-05-27', '14:15:00', '19:15:00', 'ACTIVE', '2026-02-11 08:24:40', '2026-02-11 08:31:01'),
-(233, 11, 4, '2026-05-27', '14:15:00', '19:15:00', 'ACTIVE', '2026-02-11 08:24:40', '2026-02-11 08:31:01'),
-(234, 10, 4, '2026-06-03', '14:15:00', '19:15:00', 'ACTIVE', '2026-02-11 08:24:40', '2026-02-11 08:31:01'),
-(235, 11, 4, '2026-06-03', '14:15:00', '19:15:00', 'ACTIVE', '2026-02-11 08:24:40', '2026-02-11 08:31:01'),
-(236, 10, 4, '2026-06-10', '14:15:00', '19:15:00', 'ACTIVE', '2026-02-11 08:24:40', '2026-02-11 08:31:01'),
-(237, 11, 4, '2026-06-10', '14:15:00', '19:15:00', 'ACTIVE', '2026-02-11 08:24:40', '2026-02-11 08:31:01'),
-(238, 10, 4, '2026-06-17', '14:15:00', '19:15:00', 'ACTIVE', '2026-02-11 08:24:40', '2026-02-11 08:31:01'),
-(239, 11, 4, '2026-06-17', '14:15:00', '19:15:00', 'ACTIVE', '2026-02-11 08:24:40', '2026-02-11 08:31:01'),
-(240, 10, 4, '2026-06-24', '14:15:00', '19:15:00', 'ACTIVE', '2026-02-11 08:24:40', '2026-02-11 08:31:01'),
-(241, 11, 4, '2026-06-24', '14:15:00', '19:15:00', 'ACTIVE', '2026-02-11 08:24:40', '2026-02-11 08:31:01'),
-(242, 10, 4, '2026-07-01', '14:15:00', '19:15:00', 'ACTIVE', '2026-02-11 08:24:40', '2026-02-11 08:31:01'),
-(243, 11, 4, '2026-07-01', '14:15:00', '19:15:00', 'ACTIVE', '2026-02-11 08:24:40', '2026-02-11 08:31:01'),
-(244, 10, 4, '2026-07-08', '14:15:00', '19:15:00', 'ACTIVE', '2026-02-11 08:24:40', '2026-02-11 08:31:01'),
-(245, 11, 4, '2026-07-08', '14:15:00', '19:15:00', 'ACTIVE', '2026-02-11 08:24:40', '2026-02-11 08:31:01'),
-(246, 10, 4, '2026-07-15', '14:15:00', '19:15:00', 'ACTIVE', '2026-02-11 08:24:40', '2026-02-11 08:31:01'),
-(247, 11, 4, '2026-07-15', '14:15:00', '19:15:00', 'ACTIVE', '2026-02-11 08:24:40', '2026-02-11 08:31:01'),
-(248, 10, 4, '2026-07-22', '14:15:00', '19:15:00', 'ACTIVE', '2026-02-11 08:24:40', '2026-02-11 08:31:01'),
-(249, 11, 4, '2026-07-22', '14:15:00', '19:15:00', 'ACTIVE', '2026-02-11 08:24:40', '2026-02-11 08:31:01'),
-(250, 10, 4, '2026-07-29', '14:15:00', '19:15:00', 'ACTIVE', '2026-02-11 08:24:40', '2026-02-11 08:31:01'),
-(251, 11, 4, '2026-07-29', '14:15:00', '19:15:00', 'ACTIVE', '2026-02-11 08:24:40', '2026-02-11 08:31:01'),
-(252, 10, 4, '2026-08-05', '14:15:00', '19:15:00', 'ACTIVE', '2026-02-11 08:24:40', '2026-02-11 08:31:01'),
-(253, 11, 4, '2026-08-05', '14:15:00', '19:15:00', 'ACTIVE', '2026-02-11 08:24:40', '2026-02-11 08:31:01'),
-(254, 10, 3, '2026-08-12', '11:00:00', '14:15:00', 'ACTIVE', '2026-02-12 02:40:13', '2026-02-12 02:40:13'),
-(255, 11, 3, '2026-08-12', '11:00:00', '14:15:00', 'ACTIVE', '2026-02-12 02:40:13', '2026-02-12 02:40:13'),
-(257, 10, 4, '2026-08-12', '14:15:00', '19:15:00', 'ACTIVE', '2026-02-12 02:40:13', '2026-02-12 02:40:13'),
-(258, 11, 4, '2026-08-12', '14:15:00', '19:15:00', 'ACTIVE', '2026-02-12 02:40:13', '2026-02-12 02:40:13'),
+(216, 10, 4, '2026-04-01', '13:15:00', '18:15:00', 'ACTIVE', '2026-02-11 08:24:40', '2026-04-01 03:21:11'),
+(218, 10, 4, '2026-04-08', '13:15:00', '18:15:00', 'ACTIVE', '2026-02-11 08:24:40', '2026-04-01 03:21:11'),
+(220, 10, 4, '2026-04-15', '13:15:00', '18:15:00', 'ACTIVE', '2026-02-11 08:24:40', '2026-04-01 03:21:11'),
+(222, 10, 4, '2026-04-22', '13:15:00', '18:15:00', 'ACTIVE', '2026-02-11 08:24:40', '2026-04-01 03:21:11'),
+(224, 10, 4, '2026-04-29', '13:15:00', '18:15:00', 'ACTIVE', '2026-02-11 08:24:40', '2026-04-01 03:21:11'),
+(226, 10, 4, '2026-05-06', '13:15:00', '18:15:00', 'ACTIVE', '2026-02-11 08:24:40', '2026-04-01 03:21:11'),
+(228, 10, 4, '2026-05-13', '13:15:00', '18:15:00', 'ACTIVE', '2026-02-11 08:24:40', '2026-04-01 03:21:11'),
+(230, 10, 4, '2026-05-20', '13:15:00', '18:15:00', 'ACTIVE', '2026-02-11 08:24:40', '2026-04-01 03:21:11'),
+(232, 10, 4, '2026-05-27', '13:15:00', '18:15:00', 'ACTIVE', '2026-02-11 08:24:40', '2026-04-01 03:21:11'),
+(234, 10, 4, '2026-06-03', '13:15:00', '18:15:00', 'ACTIVE', '2026-02-11 08:24:40', '2026-04-01 03:21:11'),
+(236, 10, 4, '2026-06-10', '13:15:00', '18:15:00', 'ACTIVE', '2026-02-11 08:24:40', '2026-04-01 03:21:11'),
+(238, 10, 4, '2026-06-17', '13:15:00', '18:15:00', 'ACTIVE', '2026-02-11 08:24:40', '2026-04-01 03:21:11'),
+(240, 10, 4, '2026-06-24', '13:15:00', '18:15:00', 'ACTIVE', '2026-02-11 08:24:40', '2026-04-01 03:21:11'),
+(242, 10, 4, '2026-07-01', '13:15:00', '18:15:00', 'ACTIVE', '2026-02-11 08:24:40', '2026-04-01 03:21:11'),
+(244, 10, 4, '2026-07-08', '13:15:00', '18:15:00', 'ACTIVE', '2026-02-11 08:24:40', '2026-04-01 03:21:11'),
+(246, 10, 4, '2026-07-15', '13:15:00', '18:15:00', 'ACTIVE', '2026-02-11 08:24:40', '2026-04-01 03:21:11'),
+(248, 10, 4, '2026-07-22', '13:15:00', '18:15:00', 'ACTIVE', '2026-02-11 08:24:40', '2026-04-01 03:21:11'),
+(250, 10, 4, '2026-07-29', '13:15:00', '18:15:00', 'ACTIVE', '2026-02-11 08:24:40', '2026-04-01 03:21:11'),
+(252, 10, 4, '2026-08-05', '13:15:00', '18:15:00', 'ACTIVE', '2026-02-11 08:24:40', '2026-04-01 03:21:11'),
+(254, 10, 3, '2026-08-12', '10:00:00', '13:15:00', 'ACTIVE', '2026-02-12 02:40:13', '2026-04-01 03:21:11'),
+(257, 10, 4, '2026-08-12', '13:15:00', '18:15:00', 'ACTIVE', '2026-02-12 02:40:13', '2026-04-01 03:21:11'),
 (260, 10, 5, '2026-02-12', '19:00:00', '03:15:00', 'ACTIVE', '2026-02-12 02:42:45', '2026-02-12 11:56:54'),
-(261, 11, 5, '2026-02-12', '19:00:00', '03:15:00', 'ACTIVE', '2026-02-12 02:42:45', '2026-02-12 11:56:54'),
 (262, 10, 5, '2026-02-19', '17:58:00', '02:13:00', 'ACTIVE', '2026-02-12 02:42:45', '2026-02-19 10:55:47'),
-(263, 11, 5, '2026-02-19', '17:58:00', '02:13:00', 'ACTIVE', '2026-02-12 02:42:45', '2026-02-19 10:55:47'),
 (264, 10, 5, '2026-02-26', '17:58:00', '02:13:00', 'ACTIVE', '2026-02-12 02:42:45', '2026-02-19 10:55:47'),
-(265, 11, 5, '2026-02-26', '17:58:00', '02:13:00', 'ACTIVE', '2026-02-12 02:42:45', '2026-02-19 10:55:47'),
 (266, 10, 5, '2026-03-05', '17:58:00', '02:13:00', 'ACTIVE', '2026-02-12 02:42:45', '2026-02-19 10:55:47'),
-(267, 11, 5, '2026-03-05', '17:58:00', '02:13:00', 'ACTIVE', '2026-02-12 02:42:45', '2026-02-19 10:55:47'),
 (268, 10, 5, '2026-03-12', '17:58:00', '02:13:00', 'ACTIVE', '2026-02-12 02:42:45', '2026-02-19 10:55:47'),
-(269, 11, 5, '2026-03-12', '17:58:00', '02:13:00', 'ACTIVE', '2026-02-12 02:42:45', '2026-02-19 10:55:47'),
 (270, 10, 5, '2026-03-19', '17:58:00', '02:13:00', 'ACTIVE', '2026-02-12 02:42:45', '2026-02-19 10:55:47'),
-(271, 11, 5, '2026-03-19', '17:58:00', '02:13:00', 'ACTIVE', '2026-02-12 02:42:45', '2026-02-19 10:55:47'),
 (272, 10, 5, '2026-03-26', '17:58:00', '02:13:00', 'ACTIVE', '2026-02-12 02:42:45', '2026-02-19 10:55:47'),
-(273, 11, 5, '2026-03-26', '17:58:00', '02:13:00', 'ACTIVE', '2026-02-12 02:42:45', '2026-02-19 10:55:47'),
 (274, 10, 5, '2026-04-02', '17:58:00', '02:13:00', 'ACTIVE', '2026-02-12 02:42:45', '2026-02-19 10:55:47'),
-(275, 11, 5, '2026-04-02', '17:58:00', '02:13:00', 'ACTIVE', '2026-02-12 02:42:45', '2026-02-19 10:55:47'),
 (276, 10, 5, '2026-04-09', '17:58:00', '02:13:00', 'ACTIVE', '2026-02-12 02:42:45', '2026-02-19 10:55:47'),
-(277, 11, 5, '2026-04-09', '17:58:00', '02:13:00', 'ACTIVE', '2026-02-12 02:42:45', '2026-02-19 10:55:47'),
 (278, 10, 5, '2026-04-16', '17:58:00', '02:13:00', 'ACTIVE', '2026-02-12 02:42:45', '2026-02-19 10:55:47'),
-(279, 11, 5, '2026-04-16', '17:58:00', '02:13:00', 'ACTIVE', '2026-02-12 02:42:45', '2026-02-19 10:55:47'),
 (280, 10, 5, '2026-04-23', '17:58:00', '02:13:00', 'ACTIVE', '2026-02-12 02:42:45', '2026-02-19 10:55:47'),
-(281, 11, 5, '2026-04-23', '17:58:00', '02:13:00', 'ACTIVE', '2026-02-12 02:42:45', '2026-02-19 10:55:47'),
 (282, 10, 5, '2026-04-30', '17:58:00', '02:13:00', 'ACTIVE', '2026-02-12 02:42:45', '2026-02-19 10:55:47'),
-(283, 11, 5, '2026-04-30', '17:58:00', '02:13:00', 'ACTIVE', '2026-02-12 02:42:45', '2026-02-19 10:55:47'),
 (284, 10, 5, '2026-05-07', '17:58:00', '02:13:00', 'ACTIVE', '2026-02-12 02:42:45', '2026-02-19 10:55:47'),
-(285, 11, 5, '2026-05-07', '17:58:00', '02:13:00', 'ACTIVE', '2026-02-12 02:42:45', '2026-02-19 10:55:47'),
 (286, 10, 5, '2026-05-14', '17:58:00', '02:13:00', 'ACTIVE', '2026-02-12 02:42:45', '2026-02-19 10:55:47'),
-(287, 11, 5, '2026-05-14', '17:58:00', '02:13:00', 'ACTIVE', '2026-02-12 02:42:45', '2026-02-19 10:55:47'),
 (288, 10, 5, '2026-05-21', '17:58:00', '02:13:00', 'ACTIVE', '2026-02-12 02:42:45', '2026-02-19 10:55:47'),
-(289, 11, 5, '2026-05-21', '17:58:00', '02:13:00', 'ACTIVE', '2026-02-12 02:42:45', '2026-02-19 10:55:47'),
 (290, 10, 5, '2026-05-28', '17:58:00', '02:13:00', 'ACTIVE', '2026-02-12 02:42:45', '2026-02-19 10:55:47'),
-(291, 11, 5, '2026-05-28', '17:58:00', '02:13:00', 'ACTIVE', '2026-02-12 02:42:45', '2026-02-19 10:55:47'),
 (292, 10, 5, '2026-06-04', '17:58:00', '02:13:00', 'ACTIVE', '2026-02-12 02:42:45', '2026-02-19 10:55:47'),
-(293, 11, 5, '2026-06-04', '17:58:00', '02:13:00', 'ACTIVE', '2026-02-12 02:42:45', '2026-02-19 10:55:47'),
 (294, 10, 5, '2026-06-11', '17:58:00', '02:13:00', 'ACTIVE', '2026-02-12 02:42:45', '2026-02-19 10:55:47'),
-(295, 11, 5, '2026-06-11', '17:58:00', '02:13:00', 'ACTIVE', '2026-02-12 02:42:45', '2026-02-19 10:55:47'),
 (296, 10, 5, '2026-06-18', '17:58:00', '02:13:00', 'ACTIVE', '2026-02-12 02:42:45', '2026-02-19 10:55:47'),
-(297, 11, 5, '2026-06-18', '17:58:00', '02:13:00', 'ACTIVE', '2026-02-12 02:42:45', '2026-02-19 10:55:47'),
 (298, 10, 5, '2026-06-25', '17:58:00', '02:13:00', 'ACTIVE', '2026-02-12 02:42:45', '2026-02-19 10:55:47'),
-(299, 11, 5, '2026-06-25', '17:58:00', '02:13:00', 'ACTIVE', '2026-02-12 02:42:45', '2026-02-19 10:55:47'),
 (300, 10, 5, '2026-07-02', '17:58:00', '02:13:00', 'ACTIVE', '2026-02-12 02:42:45', '2026-02-19 10:55:47'),
-(301, 11, 5, '2026-07-02', '17:58:00', '02:13:00', 'ACTIVE', '2026-02-12 02:42:45', '2026-02-19 10:55:47'),
 (302, 10, 5, '2026-07-09', '17:58:00', '02:13:00', 'ACTIVE', '2026-02-12 02:42:45', '2026-02-19 10:55:47'),
-(303, 11, 5, '2026-07-09', '17:58:00', '02:13:00', 'ACTIVE', '2026-02-12 02:42:45', '2026-02-19 10:55:47'),
 (304, 10, 5, '2026-07-16', '17:58:00', '02:13:00', 'ACTIVE', '2026-02-12 02:42:45', '2026-02-19 10:55:47'),
-(305, 11, 5, '2026-07-16', '17:58:00', '02:13:00', 'ACTIVE', '2026-02-12 02:42:45', '2026-02-19 10:55:47'),
 (306, 10, 5, '2026-07-23', '17:58:00', '02:13:00', 'ACTIVE', '2026-02-12 02:42:45', '2026-02-19 10:55:47'),
-(307, 11, 5, '2026-07-23', '17:58:00', '02:13:00', 'ACTIVE', '2026-02-12 02:42:45', '2026-02-19 10:55:47'),
 (308, 10, 5, '2026-07-30', '17:58:00', '02:13:00', 'ACTIVE', '2026-02-12 02:42:45', '2026-02-19 10:55:47'),
-(309, 11, 5, '2026-07-30', '17:58:00', '02:13:00', 'ACTIVE', '2026-02-12 02:42:45', '2026-02-19 10:55:47'),
 (310, 10, 5, '2026-08-06', '17:58:00', '02:13:00', 'ACTIVE', '2026-02-12 02:42:45', '2026-02-19 10:55:47'),
-(311, 11, 5, '2026-08-06', '17:58:00', '02:13:00', 'ACTIVE', '2026-02-12 02:42:45', '2026-02-19 10:55:47'),
 (312, 10, 6, '2026-02-12', '19:00:00', '03:15:00', 'ACTIVE', '2026-02-12 11:56:16', '2026-02-12 11:56:54'),
-(313, 11, 6, '2026-02-12', '19:00:00', '03:15:00', 'ACTIVE', '2026-02-12 11:56:16', '2026-02-12 11:56:54'),
 (314, 10, 6, '2026-02-19', '17:58:00', '02:13:00', 'ACTIVE', '2026-02-12 11:56:16', '2026-02-19 10:55:47'),
-(315, 11, 6, '2026-02-19', '17:58:00', '02:13:00', 'ACTIVE', '2026-02-12 11:56:16', '2026-02-19 10:55:47'),
 (316, 10, 6, '2026-02-26', '17:58:00', '02:13:00', 'ACTIVE', '2026-02-12 11:56:16', '2026-02-19 10:55:47'),
-(317, 11, 6, '2026-02-26', '17:58:00', '02:13:00', 'ACTIVE', '2026-02-12 11:56:16', '2026-02-19 10:55:47'),
 (318, 10, 6, '2026-03-05', '17:58:00', '02:13:00', 'ACTIVE', '2026-02-12 11:56:16', '2026-02-19 10:55:47'),
-(319, 11, 6, '2026-03-05', '17:58:00', '02:13:00', 'ACTIVE', '2026-02-12 11:56:16', '2026-02-19 10:55:47'),
 (320, 10, 6, '2026-03-12', '17:58:00', '02:13:00', 'ACTIVE', '2026-02-12 11:56:16', '2026-02-19 10:55:47'),
-(321, 11, 6, '2026-03-12', '17:58:00', '02:13:00', 'ACTIVE', '2026-02-12 11:56:16', '2026-02-19 10:55:47'),
 (322, 10, 6, '2026-03-19', '17:58:00', '02:13:00', 'ACTIVE', '2026-02-12 11:56:16', '2026-02-19 10:55:47'),
-(323, 11, 6, '2026-03-19', '17:58:00', '02:13:00', 'ACTIVE', '2026-02-12 11:56:16', '2026-02-19 10:55:47'),
 (324, 10, 6, '2026-03-26', '17:58:00', '02:13:00', 'ACTIVE', '2026-02-12 11:56:16', '2026-02-19 10:55:47'),
-(325, 11, 6, '2026-03-26', '17:58:00', '02:13:00', 'ACTIVE', '2026-02-12 11:56:16', '2026-02-19 10:55:47'),
 (326, 10, 6, '2026-04-02', '17:58:00', '02:13:00', 'ACTIVE', '2026-02-12 11:56:16', '2026-02-19 10:55:47'),
-(327, 11, 6, '2026-04-02', '17:58:00', '02:13:00', 'ACTIVE', '2026-02-12 11:56:16', '2026-02-19 10:55:47'),
 (328, 10, 6, '2026-04-09', '17:58:00', '02:13:00', 'ACTIVE', '2026-02-12 11:56:16', '2026-02-19 10:55:47'),
-(329, 11, 6, '2026-04-09', '17:58:00', '02:13:00', 'ACTIVE', '2026-02-12 11:56:16', '2026-02-19 10:55:47'),
 (330, 10, 6, '2026-04-16', '17:58:00', '02:13:00', 'ACTIVE', '2026-02-12 11:56:16', '2026-02-19 10:55:47'),
-(331, 11, 6, '2026-04-16', '17:58:00', '02:13:00', 'ACTIVE', '2026-02-12 11:56:16', '2026-02-19 10:55:47'),
 (332, 10, 6, '2026-04-23', '17:58:00', '02:13:00', 'ACTIVE', '2026-02-12 11:56:16', '2026-02-19 10:55:47'),
-(333, 11, 6, '2026-04-23', '17:58:00', '02:13:00', 'ACTIVE', '2026-02-12 11:56:16', '2026-02-19 10:55:47'),
 (334, 10, 6, '2026-04-30', '17:58:00', '02:13:00', 'ACTIVE', '2026-02-12 11:56:16', '2026-02-19 10:55:47'),
-(335, 11, 6, '2026-04-30', '17:58:00', '02:13:00', 'ACTIVE', '2026-02-12 11:56:16', '2026-02-19 10:55:47'),
 (336, 10, 6, '2026-05-07', '17:58:00', '02:13:00', 'ACTIVE', '2026-02-12 11:56:16', '2026-02-19 10:55:47'),
-(337, 11, 6, '2026-05-07', '17:58:00', '02:13:00', 'ACTIVE', '2026-02-12 11:56:16', '2026-02-19 10:55:47'),
 (338, 10, 6, '2026-05-14', '17:58:00', '02:13:00', 'ACTIVE', '2026-02-12 11:56:16', '2026-02-19 10:55:47'),
-(339, 11, 6, '2026-05-14', '17:58:00', '02:13:00', 'ACTIVE', '2026-02-12 11:56:16', '2026-02-19 10:55:47'),
 (340, 10, 6, '2026-05-21', '17:58:00', '02:13:00', 'ACTIVE', '2026-02-12 11:56:16', '2026-02-19 10:55:47'),
-(341, 11, 6, '2026-05-21', '17:58:00', '02:13:00', 'ACTIVE', '2026-02-12 11:56:16', '2026-02-19 10:55:47'),
 (342, 10, 6, '2026-05-28', '17:58:00', '02:13:00', 'ACTIVE', '2026-02-12 11:56:16', '2026-02-19 10:55:47'),
-(343, 11, 6, '2026-05-28', '17:58:00', '02:13:00', 'ACTIVE', '2026-02-12 11:56:16', '2026-02-19 10:55:47'),
 (344, 10, 6, '2026-06-04', '17:58:00', '02:13:00', 'ACTIVE', '2026-02-12 11:56:16', '2026-02-19 10:55:47'),
-(345, 11, 6, '2026-06-04', '17:58:00', '02:13:00', 'ACTIVE', '2026-02-12 11:56:16', '2026-02-19 10:55:47'),
 (346, 10, 6, '2026-06-11', '17:58:00', '02:13:00', 'ACTIVE', '2026-02-12 11:56:16', '2026-02-19 10:55:47'),
-(347, 11, 6, '2026-06-11', '17:58:00', '02:13:00', 'ACTIVE', '2026-02-12 11:56:16', '2026-02-19 10:55:47'),
 (348, 10, 6, '2026-06-18', '17:58:00', '02:13:00', 'ACTIVE', '2026-02-12 11:56:16', '2026-02-19 10:55:47'),
-(349, 11, 6, '2026-06-18', '17:58:00', '02:13:00', 'ACTIVE', '2026-02-12 11:56:16', '2026-02-19 10:55:47'),
 (350, 10, 6, '2026-06-25', '17:58:00', '02:13:00', 'ACTIVE', '2026-02-12 11:56:16', '2026-02-19 10:55:47'),
-(351, 11, 6, '2026-06-25', '17:58:00', '02:13:00', 'ACTIVE', '2026-02-12 11:56:16', '2026-02-19 10:55:47'),
 (352, 10, 6, '2026-07-02', '17:58:00', '02:13:00', 'ACTIVE', '2026-02-12 11:56:16', '2026-02-19 10:55:47'),
-(353, 11, 6, '2026-07-02', '17:58:00', '02:13:00', 'ACTIVE', '2026-02-12 11:56:16', '2026-02-19 10:55:47'),
 (354, 10, 6, '2026-07-09', '17:58:00', '02:13:00', 'ACTIVE', '2026-02-12 11:56:16', '2026-02-19 10:55:47'),
-(355, 11, 6, '2026-07-09', '17:58:00', '02:13:00', 'ACTIVE', '2026-02-12 11:56:16', '2026-02-19 10:55:47'),
 (356, 10, 6, '2026-07-16', '17:58:00', '02:13:00', 'ACTIVE', '2026-02-12 11:56:16', '2026-02-19 10:55:47'),
-(357, 11, 6, '2026-07-16', '17:58:00', '02:13:00', 'ACTIVE', '2026-02-12 11:56:16', '2026-02-19 10:55:47'),
 (358, 10, 6, '2026-07-23', '17:58:00', '02:13:00', 'ACTIVE', '2026-02-12 11:56:16', '2026-02-19 10:55:47'),
-(359, 11, 6, '2026-07-23', '17:58:00', '02:13:00', 'ACTIVE', '2026-02-12 11:56:16', '2026-02-19 10:55:47'),
 (360, 10, 6, '2026-07-30', '17:58:00', '02:13:00', 'ACTIVE', '2026-02-12 11:56:16', '2026-02-19 10:55:47'),
-(361, 11, 6, '2026-07-30', '17:58:00', '02:13:00', 'ACTIVE', '2026-02-12 11:56:16', '2026-02-19 10:55:47'),
 (362, 10, 6, '2026-08-06', '17:58:00', '02:13:00', 'ACTIVE', '2026-02-12 11:56:16', '2026-02-19 10:55:47'),
-(363, 11, 6, '2026-08-06', '17:58:00', '02:13:00', 'ACTIVE', '2026-02-12 11:56:16', '2026-02-19 10:55:47'),
 (364, 10, 5, '2026-08-13', '17:58:00', '02:13:00', 'ACTIVE', '2026-02-13 01:31:01', '2026-02-19 10:55:47'),
 (365, 10, 6, '2026-08-13', '17:58:00', '02:13:00', 'ACTIVE', '2026-02-13 01:31:01', '2026-02-19 10:55:47'),
-(366, 11, 5, '2026-08-13', '17:58:00', '02:13:00', 'ACTIVE', '2026-02-13 10:40:38', '2026-02-19 10:55:47'),
-(367, 11, 6, '2026-08-13', '17:58:00', '02:13:00', 'ACTIVE', '2026-02-13 10:40:38', '2026-02-19 10:55:47'),
 (368, 10, 7, '2026-02-16', '12:00:00', '15:30:00', 'ACTIVE', '2026-02-16 05:47:20', '2026-02-16 05:47:20'),
-(369, 11, 7, '2026-02-16', '12:00:00', '15:30:00', 'ACTIVE', '2026-02-16 05:47:20', '2026-02-16 05:47:20'),
 (370, 10, 7, '2026-02-23', '12:00:00', '15:30:00', 'ACTIVE', '2026-02-16 05:47:20', '2026-02-16 05:47:20'),
-(371, 11, 7, '2026-02-23', '12:00:00', '15:30:00', 'ACTIVE', '2026-02-16 05:47:20', '2026-02-16 05:47:20'),
 (372, 10, 7, '2026-03-02', '12:00:00', '15:30:00', 'ACTIVE', '2026-02-16 05:47:20', '2026-02-16 05:47:20'),
-(373, 11, 7, '2026-03-02', '12:00:00', '15:30:00', 'ACTIVE', '2026-02-16 05:47:20', '2026-02-16 05:47:20'),
 (374, 10, 7, '2026-03-09', '12:00:00', '15:30:00', 'ACTIVE', '2026-02-16 05:47:20', '2026-02-16 05:47:20'),
-(375, 11, 7, '2026-03-09', '12:00:00', '15:30:00', 'ACTIVE', '2026-02-16 05:47:20', '2026-02-16 05:47:20'),
 (376, 10, 7, '2026-03-16', '12:00:00', '15:30:00', 'ACTIVE', '2026-02-16 05:47:20', '2026-02-16 05:47:20'),
-(377, 11, 7, '2026-03-16', '12:00:00', '15:30:00', 'ACTIVE', '2026-02-16 05:47:20', '2026-02-16 05:47:20'),
 (378, 10, 7, '2026-03-23', '12:00:00', '15:30:00', 'ACTIVE', '2026-02-16 05:47:20', '2026-02-16 05:47:20'),
-(379, 11, 7, '2026-03-23', '12:00:00', '15:30:00', 'ACTIVE', '2026-02-16 05:47:20', '2026-02-16 05:47:20'),
 (380, 10, 7, '2026-03-30', '12:00:00', '15:30:00', 'ACTIVE', '2026-02-16 05:47:20', '2026-02-16 05:47:20'),
-(381, 11, 7, '2026-03-30', '12:00:00', '15:30:00', 'ACTIVE', '2026-02-16 05:47:20', '2026-02-16 05:47:20'),
 (382, 10, 7, '2026-04-06', '12:00:00', '15:30:00', 'ACTIVE', '2026-02-16 05:47:20', '2026-02-16 05:47:20'),
-(383, 11, 7, '2026-04-06', '12:00:00', '15:30:00', 'ACTIVE', '2026-02-16 05:47:20', '2026-02-16 05:47:20'),
 (384, 10, 7, '2026-04-13', '12:00:00', '15:30:00', 'ACTIVE', '2026-02-16 05:47:20', '2026-02-16 05:47:20'),
-(385, 11, 7, '2026-04-13', '12:00:00', '15:30:00', 'ACTIVE', '2026-02-16 05:47:20', '2026-02-16 05:47:20'),
 (386, 10, 7, '2026-04-20', '12:00:00', '15:30:00', 'ACTIVE', '2026-02-16 05:47:20', '2026-02-16 05:47:20'),
-(387, 11, 7, '2026-04-20', '12:00:00', '15:30:00', 'ACTIVE', '2026-02-16 05:47:20', '2026-02-16 05:47:20'),
 (388, 10, 7, '2026-04-27', '12:00:00', '15:30:00', 'ACTIVE', '2026-02-16 05:47:20', '2026-02-16 05:47:20'),
-(389, 11, 7, '2026-04-27', '12:00:00', '15:30:00', 'ACTIVE', '2026-02-16 05:47:20', '2026-02-16 05:47:20'),
 (390, 10, 7, '2026-05-04', '12:00:00', '15:30:00', 'ACTIVE', '2026-02-16 05:47:20', '2026-02-16 05:47:20'),
-(391, 11, 7, '2026-05-04', '12:00:00', '15:30:00', 'ACTIVE', '2026-02-16 05:47:20', '2026-02-16 05:47:20'),
 (392, 10, 7, '2026-05-11', '12:00:00', '15:30:00', 'ACTIVE', '2026-02-16 05:47:20', '2026-02-16 05:47:20'),
-(393, 11, 7, '2026-05-11', '12:00:00', '15:30:00', 'ACTIVE', '2026-02-16 05:47:20', '2026-02-16 05:47:20'),
 (394, 10, 7, '2026-05-18', '12:00:00', '15:30:00', 'ACTIVE', '2026-02-16 05:47:20', '2026-02-16 05:47:20'),
-(395, 11, 7, '2026-05-18', '12:00:00', '15:30:00', 'ACTIVE', '2026-02-16 05:47:20', '2026-02-16 05:47:20'),
 (396, 10, 7, '2026-05-25', '12:00:00', '15:30:00', 'ACTIVE', '2026-02-16 05:47:20', '2026-02-16 05:47:20'),
-(397, 11, 7, '2026-05-25', '12:00:00', '15:30:00', 'ACTIVE', '2026-02-16 05:47:20', '2026-02-16 05:47:20'),
 (398, 10, 7, '2026-06-01', '12:00:00', '15:30:00', 'ACTIVE', '2026-02-16 05:47:20', '2026-02-16 05:47:20'),
-(399, 11, 7, '2026-06-01', '12:00:00', '15:30:00', 'ACTIVE', '2026-02-16 05:47:20', '2026-02-16 05:47:20'),
 (400, 10, 7, '2026-06-08', '12:00:00', '15:30:00', 'ACTIVE', '2026-02-16 05:47:20', '2026-02-16 05:47:20'),
-(401, 11, 7, '2026-06-08', '12:00:00', '15:30:00', 'ACTIVE', '2026-02-16 05:47:20', '2026-02-16 05:47:20'),
 (402, 10, 7, '2026-06-15', '12:00:00', '15:30:00', 'ACTIVE', '2026-02-16 05:47:20', '2026-02-16 05:47:20'),
-(403, 11, 7, '2026-06-15', '12:00:00', '15:30:00', 'ACTIVE', '2026-02-16 05:47:20', '2026-02-16 05:47:20'),
 (404, 10, 7, '2026-06-22', '12:00:00', '15:30:00', 'ACTIVE', '2026-02-16 05:47:20', '2026-02-16 05:47:20'),
-(405, 11, 7, '2026-06-22', '12:00:00', '15:30:00', 'ACTIVE', '2026-02-16 05:47:20', '2026-02-16 05:47:20'),
 (406, 10, 7, '2026-06-29', '12:00:00', '15:30:00', 'ACTIVE', '2026-02-16 05:47:20', '2026-02-16 05:47:20'),
-(407, 11, 7, '2026-06-29', '12:00:00', '15:30:00', 'ACTIVE', '2026-02-16 05:47:20', '2026-02-16 05:47:20'),
 (408, 10, 7, '2026-07-06', '12:00:00', '15:30:00', 'ACTIVE', '2026-02-16 05:47:20', '2026-02-16 05:47:20'),
-(409, 11, 7, '2026-07-06', '12:00:00', '15:30:00', 'ACTIVE', '2026-02-16 05:47:20', '2026-02-16 05:47:20'),
 (410, 10, 7, '2026-07-13', '12:00:00', '15:30:00', 'ACTIVE', '2026-02-16 05:47:20', '2026-02-16 05:47:20'),
-(411, 11, 7, '2026-07-13', '12:00:00', '15:30:00', 'ACTIVE', '2026-02-16 05:47:20', '2026-02-16 05:47:20'),
 (412, 10, 7, '2026-07-20', '12:00:00', '15:30:00', 'ACTIVE', '2026-02-16 05:47:20', '2026-02-16 05:47:20'),
-(413, 11, 7, '2026-07-20', '12:00:00', '15:30:00', 'ACTIVE', '2026-02-16 05:47:20', '2026-02-16 05:47:20'),
 (414, 10, 7, '2026-07-27', '12:00:00', '15:30:00', 'ACTIVE', '2026-02-16 05:47:20', '2026-02-16 05:47:20'),
-(415, 11, 7, '2026-07-27', '12:00:00', '15:30:00', 'ACTIVE', '2026-02-16 05:47:20', '2026-02-16 05:47:20'),
 (416, 10, 7, '2026-08-03', '12:00:00', '15:30:00', 'ACTIVE', '2026-02-16 05:47:20', '2026-02-16 05:47:20'),
-(417, 11, 7, '2026-08-03', '12:00:00', '15:30:00', 'ACTIVE', '2026-02-16 05:47:20', '2026-02-16 05:47:20'),
 (418, 10, 7, '2026-08-10', '12:00:00', '15:30:00', 'ACTIVE', '2026-02-16 05:47:20', '2026-02-16 05:47:20'),
-(419, 11, 7, '2026-08-10', '12:00:00', '15:30:00', 'ACTIVE', '2026-02-16 05:47:20', '2026-02-16 05:47:20'),
 (784, 10, 1, '2026-08-17', '07:15:00', '15:30:00', 'ACTIVE', '2026-02-17 01:53:05', '2026-02-17 01:53:05'),
-(785, 11, 1, '2026-08-17', '07:15:00', '15:30:00', 'ACTIVE', '2026-02-17 01:53:05', '2026-02-17 01:53:05'),
 (787, 10, 7, '2026-08-17', '12:00:00', '15:30:00', 'ACTIVE', '2026-02-17 01:53:05', '2026-02-17 01:53:05'),
-(788, 11, 7, '2026-08-17', '12:00:00', '15:30:00', 'ACTIVE', '2026-02-17 01:53:05', '2026-02-17 01:53:05'),
 (790, 10, 2, '2026-08-18', '14:00:00', '22:15:00', 'ACTIVE', '2026-02-18 09:42:45', '2026-02-18 09:42:45'),
-(791, 11, 2, '2026-08-18', '14:00:00', '22:15:00', 'ACTIVE', '2026-02-18 09:42:45', '2026-02-18 09:42:45'),
-(975, 10, 3, '2026-08-19', '11:00:00', '14:15:00', 'ACTIVE', '2026-02-18 17:11:18', '2026-02-18 17:11:18'),
-(976, 11, 3, '2026-08-19', '11:00:00', '14:15:00', 'ACTIVE', '2026-02-18 17:11:18', '2026-02-18 17:11:18'),
-(978, 10, 4, '2026-08-19', '14:15:00', '19:15:00', 'ACTIVE', '2026-02-18 17:11:18', '2026-02-18 17:11:18'),
-(979, 11, 4, '2026-08-19', '14:15:00', '19:15:00', 'ACTIVE', '2026-02-18 17:11:18', '2026-02-18 17:11:18'),
+(975, 10, 3, '2026-08-19', '10:00:00', '13:15:00', 'ACTIVE', '2026-02-18 17:11:18', '2026-04-01 03:21:11'),
+(978, 10, 4, '2026-08-19', '13:15:00', '18:15:00', 'ACTIVE', '2026-02-18 17:11:18', '2026-04-01 03:21:11'),
 (980, 10, 5, '2026-08-20', '17:58:00', '02:13:00', 'ACTIVE', '2026-02-19 17:14:06', '2026-02-19 17:14:06'),
-(981, 10, 6, '2026-08-20', '17:58:00', '02:13:00', 'ACTIVE', '2026-02-19 17:14:06', '2026-02-19 17:14:06');
+(981, 10, 6, '2026-08-20', '17:58:00', '02:13:00', 'ACTIVE', '2026-02-19 17:14:06', '2026-02-19 17:14:06'),
+(982, 10, 1, '2026-08-24', '07:15:00', '15:30:00', 'ACTIVE', '2026-02-24 05:27:01', '2026-02-24 05:27:01'),
+(983, 10, 7, '2026-08-24', '12:00:00', '15:30:00', 'ACTIVE', '2026-02-24 05:27:02', '2026-02-24 05:27:02'),
+(985, 10, 1, '2026-08-31', '07:15:00', '15:30:00', 'ACTIVE', '2026-03-07 04:18:33', '2026-03-07 04:18:33'),
+(988, 10, 1, '2026-09-07', '07:15:00', '15:30:00', 'ACTIVE', '2026-03-07 04:18:33', '2026-03-07 04:18:33'),
+(991, 10, 2, '2026-08-25', '14:00:00', '22:15:00', 'ACTIVE', '2026-03-07 04:18:33', '2026-03-07 04:18:33'),
+(994, 10, 2, '2026-09-01', '14:00:00', '22:15:00', 'ACTIVE', '2026-03-07 04:18:33', '2026-03-07 04:18:33'),
+(997, 10, 3, '2026-08-26', '10:00:00', '13:15:00', 'ACTIVE', '2026-03-07 04:18:33', '2026-04-01 03:21:11'),
+(1000, 10, 3, '2026-09-02', '10:00:00', '13:15:00', 'ACTIVE', '2026-03-07 04:18:33', '2026-04-01 03:21:11'),
+(1003, 10, 4, '2026-08-26', '13:15:00', '18:15:00', 'ACTIVE', '2026-03-07 04:18:33', '2026-04-01 03:21:11'),
+(1006, 10, 4, '2026-09-02', '13:15:00', '18:15:00', 'ACTIVE', '2026-03-07 04:18:33', '2026-04-01 03:21:11'),
+(1010, 10, 5, '2026-08-27', '17:58:00', '02:13:00', 'ACTIVE', '2026-03-07 04:18:33', '2026-03-07 04:18:33'),
+(1013, 10, 5, '2026-09-03', '17:58:00', '02:13:00', 'ACTIVE', '2026-03-07 04:18:33', '2026-03-07 04:18:33'),
+(1017, 10, 6, '2026-08-27', '17:58:00', '02:13:00', 'ACTIVE', '2026-03-07 04:18:34', '2026-03-07 04:18:34'),
+(1020, 10, 6, '2026-09-03', '17:58:00', '02:13:00', 'ACTIVE', '2026-03-07 04:18:34', '2026-03-07 04:18:34'),
+(1024, 10, 7, '2026-08-31', '12:00:00', '15:30:00', 'ACTIVE', '2026-03-07 04:18:34', '2026-03-07 04:18:34'),
+(1027, 10, 7, '2026-09-07', '12:00:00', '15:30:00', 'ACTIVE', '2026-03-07 04:18:34', '2026-03-07 04:18:34'),
+(1029, 10, 2, '2026-09-08', '14:00:00', '22:15:00', 'ACTIVE', '2026-03-08 06:05:49', '2026-03-08 06:05:49'),
+(1031, 10, 3, '2026-09-09', '10:00:00', '13:15:00', 'ACTIVE', '2026-03-11 10:35:29', '2026-04-01 03:21:11'),
+(1032, 10, 4, '2026-09-09', '13:15:00', '18:15:00', 'ACTIVE', '2026-03-11 10:35:29', '2026-04-01 03:21:11'),
+(1033, 10, 5, '2026-09-10', '17:58:00', '02:13:00', 'ACTIVE', '2026-03-11 10:35:30', '2026-03-11 10:35:30'),
+(1034, 10, 6, '2026-09-10', '17:58:00', '02:13:00', 'ACTIVE', '2026-03-11 10:35:30', '2026-03-11 10:35:30'),
+(1035, 10, 1, '2026-09-14', '07:15:00', '15:30:00', 'ACTIVE', '2026-03-29 03:01:04', '2026-03-29 03:01:04'),
+(1036, 10, 1, '2026-09-21', '07:15:00', '15:30:00', 'ACTIVE', '2026-03-29 03:01:04', '2026-03-29 03:01:04'),
+(1037, 10, 1, '2026-09-28', '07:15:00', '15:30:00', 'ACTIVE', '2026-03-29 03:01:04', '2026-03-29 03:01:04'),
+(1038, 10, 2, '2026-09-15', '14:00:00', '22:15:00', 'ACTIVE', '2026-03-29 03:01:04', '2026-03-29 03:01:04'),
+(1039, 10, 2, '2026-09-22', '14:00:00', '22:15:00', 'ACTIVE', '2026-03-29 03:01:04', '2026-03-29 03:01:04'),
+(1040, 10, 2, '2026-09-29', '14:00:00', '22:15:00', 'ACTIVE', '2026-03-29 03:01:04', '2026-03-29 03:01:04'),
+(1041, 10, 3, '2026-09-16', '10:00:00', '13:15:00', 'ACTIVE', '2026-03-29 03:01:04', '2026-04-01 03:21:11'),
+(1042, 10, 3, '2026-09-23', '10:00:00', '13:15:00', 'ACTIVE', '2026-03-29 03:01:04', '2026-04-01 03:21:11'),
+(1043, 10, 4, '2026-09-16', '13:15:00', '18:15:00', 'ACTIVE', '2026-03-29 03:01:04', '2026-04-01 03:21:11'),
+(1044, 10, 4, '2026-09-23', '13:15:00', '18:15:00', 'ACTIVE', '2026-03-29 03:01:04', '2026-04-01 03:21:11'),
+(1045, 10, 5, '2026-09-17', '17:58:00', '02:13:00', 'ACTIVE', '2026-03-29 03:01:04', '2026-03-29 03:01:04'),
+(1046, 10, 5, '2026-09-24', '17:58:00', '02:13:00', 'ACTIVE', '2026-03-29 03:01:04', '2026-03-29 03:01:04'),
+(1047, 10, 6, '2026-09-17', '17:58:00', '02:13:00', 'ACTIVE', '2026-03-29 03:01:04', '2026-03-29 03:01:04'),
+(1048, 10, 6, '2026-09-24', '17:58:00', '02:13:00', 'ACTIVE', '2026-03-29 03:01:04', '2026-03-29 03:01:04'),
+(1049, 10, 7, '2026-09-14', '12:00:00', '15:30:00', 'ACTIVE', '2026-03-29 03:01:04', '2026-03-29 03:01:04'),
+(1050, 10, 7, '2026-09-21', '12:00:00', '15:30:00', 'ACTIVE', '2026-03-29 03:01:04', '2026-03-29 03:01:04'),
+(1051, 10, 7, '2026-09-28', '12:00:00', '15:30:00', 'ACTIVE', '2026-03-29 03:01:04', '2026-03-29 03:01:04'),
+(1073, 10, 3, '2026-09-30', '10:00:00', '13:15:00', 'ACTIVE', '2026-04-01 03:19:59', '2026-04-01 03:21:11'),
+(1074, 10, 4, '2026-09-30', '13:15:00', '18:15:00', 'ACTIVE', '2026-04-01 03:19:59', '2026-04-01 03:21:11'),
+(1075, 10, 5, '2026-10-01', '17:58:00', '02:13:00', 'ACTIVE', '2026-04-01 03:19:59', '2026-04-01 03:19:59'),
+(1076, 10, 6, '2026-10-01', '17:58:00', '02:13:00', 'ACTIVE', '2026-04-01 03:19:59', '2026-04-01 03:19:59'),
+(1081, 20, 1, '2026-04-06', '07:15:00', '15:30:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1082, 20, 1, '2026-04-13', '07:15:00', '15:30:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1083, 20, 1, '2026-04-20', '07:15:00', '15:30:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1084, 20, 1, '2026-04-27', '07:15:00', '15:30:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1085, 20, 1, '2026-05-04', '07:15:00', '15:30:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1086, 20, 1, '2026-05-11', '07:15:00', '15:30:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1087, 20, 1, '2026-05-18', '07:15:00', '15:30:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1088, 20, 1, '2026-05-25', '07:15:00', '15:30:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1089, 20, 1, '2026-06-01', '07:15:00', '15:30:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1090, 20, 1, '2026-06-08', '07:15:00', '15:30:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1091, 20, 1, '2026-06-15', '07:15:00', '15:30:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1092, 20, 1, '2026-06-22', '07:15:00', '15:30:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1093, 20, 1, '2026-06-29', '07:15:00', '15:30:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1094, 20, 1, '2026-07-06', '07:15:00', '15:30:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1095, 20, 1, '2026-07-13', '07:15:00', '15:30:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1096, 20, 1, '2026-07-20', '07:15:00', '15:30:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1097, 20, 1, '2026-07-27', '07:15:00', '15:30:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1098, 20, 1, '2026-08-03', '07:15:00', '15:30:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1099, 20, 1, '2026-08-10', '07:15:00', '15:30:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1100, 20, 1, '2026-08-17', '07:15:00', '15:30:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1101, 20, 1, '2026-08-24', '07:15:00', '15:30:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1102, 20, 1, '2026-08-31', '07:15:00', '15:30:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1103, 20, 1, '2026-09-07', '07:15:00', '15:30:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1104, 20, 1, '2026-09-14', '07:15:00', '15:30:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1105, 20, 1, '2026-09-21', '07:15:00', '15:30:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1106, 20, 1, '2026-09-28', '07:15:00', '15:30:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1107, 20, 2, '2026-04-07', '14:00:00', '22:15:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1108, 20, 2, '2026-04-14', '14:00:00', '22:15:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1109, 20, 2, '2026-04-21', '14:00:00', '22:15:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1110, 20, 2, '2026-04-28', '14:00:00', '22:15:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1111, 20, 2, '2026-05-05', '14:00:00', '22:15:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1112, 20, 2, '2026-05-12', '14:00:00', '22:15:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1113, 20, 2, '2026-05-19', '14:00:00', '22:15:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1114, 20, 2, '2026-05-26', '14:00:00', '22:15:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1115, 20, 2, '2026-06-02', '14:00:00', '22:15:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1116, 20, 2, '2026-06-09', '14:00:00', '22:15:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1117, 20, 2, '2026-06-16', '14:00:00', '22:15:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1118, 20, 2, '2026-06-23', '14:00:00', '22:15:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1119, 20, 2, '2026-06-30', '14:00:00', '22:15:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1120, 20, 2, '2026-07-07', '14:00:00', '22:15:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1121, 20, 2, '2026-07-14', '14:00:00', '22:15:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1122, 20, 2, '2026-07-21', '14:00:00', '22:15:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1123, 20, 2, '2026-07-28', '14:00:00', '22:15:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1124, 20, 2, '2026-08-04', '14:00:00', '22:15:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1125, 20, 2, '2026-08-11', '14:00:00', '22:15:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1126, 20, 2, '2026-08-18', '14:00:00', '22:15:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1127, 20, 2, '2026-08-25', '14:00:00', '22:15:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1128, 20, 2, '2026-09-01', '14:00:00', '22:15:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1129, 20, 2, '2026-09-08', '14:00:00', '22:15:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1130, 20, 2, '2026-09-15', '14:00:00', '22:15:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1131, 20, 2, '2026-09-22', '14:00:00', '22:15:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1132, 20, 2, '2026-09-29', '14:00:00', '22:15:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1133, 20, 3, '2026-04-08', '10:00:00', '13:15:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1134, 20, 3, '2026-04-15', '10:00:00', '13:15:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1135, 20, 3, '2026-04-22', '10:00:00', '13:15:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1136, 20, 3, '2026-04-29', '10:00:00', '13:15:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1137, 20, 3, '2026-05-06', '10:00:00', '13:15:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1138, 20, 3, '2026-05-13', '10:00:00', '13:15:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1139, 20, 3, '2026-05-20', '10:00:00', '13:15:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1140, 20, 3, '2026-05-27', '10:00:00', '13:15:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1141, 20, 3, '2026-06-03', '10:00:00', '13:15:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1142, 20, 3, '2026-06-10', '10:00:00', '13:15:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1143, 20, 3, '2026-06-17', '10:00:00', '13:15:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1144, 20, 3, '2026-06-24', '10:00:00', '13:15:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1145, 20, 3, '2026-07-01', '10:00:00', '13:15:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1146, 20, 3, '2026-07-08', '10:00:00', '13:15:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1147, 20, 3, '2026-07-15', '10:00:00', '13:15:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1148, 20, 3, '2026-07-22', '10:00:00', '13:15:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1149, 20, 3, '2026-07-29', '10:00:00', '13:15:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1150, 20, 3, '2026-08-05', '10:00:00', '13:15:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1151, 20, 3, '2026-08-12', '10:00:00', '13:15:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1152, 20, 3, '2026-08-19', '10:00:00', '13:15:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1153, 20, 3, '2026-08-26', '10:00:00', '13:15:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1154, 20, 3, '2026-09-02', '10:00:00', '13:15:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1155, 20, 3, '2026-09-09', '10:00:00', '13:15:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1156, 20, 3, '2026-09-16', '10:00:00', '13:15:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1157, 20, 3, '2026-09-23', '10:00:00', '13:15:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1158, 20, 3, '2026-09-30', '10:00:00', '13:15:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1159, 20, 4, '2026-04-08', '13:15:00', '18:15:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1160, 20, 4, '2026-04-15', '13:15:00', '18:15:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1161, 20, 4, '2026-04-22', '13:15:00', '18:15:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1162, 20, 4, '2026-04-29', '13:15:00', '18:15:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1163, 20, 4, '2026-05-06', '13:15:00', '18:15:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1164, 20, 4, '2026-05-13', '13:15:00', '18:15:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1165, 20, 4, '2026-05-20', '13:15:00', '18:15:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1166, 20, 4, '2026-05-27', '13:15:00', '18:15:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1167, 20, 4, '2026-06-03', '13:15:00', '18:15:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1168, 20, 4, '2026-06-10', '13:15:00', '18:15:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1169, 20, 4, '2026-06-17', '13:15:00', '18:15:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1170, 20, 4, '2026-06-24', '13:15:00', '18:15:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1171, 20, 4, '2026-07-01', '13:15:00', '18:15:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1172, 20, 4, '2026-07-08', '13:15:00', '18:15:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1173, 20, 4, '2026-07-15', '13:15:00', '18:15:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1174, 20, 4, '2026-07-22', '13:15:00', '18:15:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1175, 20, 4, '2026-07-29', '13:15:00', '18:15:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1176, 20, 4, '2026-08-05', '13:15:00', '18:15:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1177, 20, 4, '2026-08-12', '13:15:00', '18:15:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1178, 20, 4, '2026-08-19', '13:15:00', '18:15:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1179, 20, 4, '2026-08-26', '13:15:00', '18:15:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1180, 20, 4, '2026-09-02', '13:15:00', '18:15:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1181, 20, 4, '2026-09-09', '13:15:00', '18:15:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1182, 20, 4, '2026-09-16', '13:15:00', '18:15:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1183, 20, 4, '2026-09-23', '13:15:00', '18:15:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1184, 20, 4, '2026-09-30', '13:15:00', '18:15:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1185, 20, 5, '2026-04-09', '17:58:00', '02:13:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1186, 20, 5, '2026-04-16', '17:58:00', '02:13:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1187, 20, 5, '2026-04-23', '17:58:00', '02:13:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1188, 20, 5, '2026-04-30', '17:58:00', '02:13:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1189, 20, 5, '2026-05-07', '17:58:00', '02:13:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1190, 20, 5, '2026-05-14', '17:58:00', '02:13:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1191, 20, 5, '2026-05-21', '17:58:00', '02:13:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1192, 20, 5, '2026-05-28', '17:58:00', '02:13:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1193, 20, 5, '2026-06-04', '17:58:00', '02:13:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1194, 20, 5, '2026-06-11', '17:58:00', '02:13:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1195, 20, 5, '2026-06-18', '17:58:00', '02:13:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1196, 20, 5, '2026-06-25', '17:58:00', '02:13:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1197, 20, 5, '2026-07-02', '17:58:00', '02:13:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1198, 20, 5, '2026-07-09', '17:58:00', '02:13:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1199, 20, 5, '2026-07-16', '17:58:00', '02:13:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1200, 20, 5, '2026-07-23', '17:58:00', '02:13:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1201, 20, 5, '2026-07-30', '17:58:00', '02:13:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1202, 20, 5, '2026-08-06', '17:58:00', '02:13:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1203, 20, 5, '2026-08-13', '17:58:00', '02:13:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1204, 20, 5, '2026-08-20', '17:58:00', '02:13:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1205, 20, 5, '2026-08-27', '17:58:00', '02:13:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1206, 20, 5, '2026-09-03', '17:58:00', '02:13:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1207, 20, 5, '2026-09-10', '17:58:00', '02:13:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1208, 20, 5, '2026-09-17', '17:58:00', '02:13:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1209, 20, 5, '2026-09-24', '17:58:00', '02:13:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1210, 20, 5, '2026-10-01', '17:58:00', '02:13:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1211, 20, 6, '2026-04-09', '17:58:00', '02:13:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1212, 20, 6, '2026-04-16', '17:58:00', '02:13:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1213, 20, 6, '2026-04-23', '17:58:00', '02:13:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1214, 20, 6, '2026-04-30', '17:58:00', '02:13:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1215, 20, 6, '2026-05-07', '17:58:00', '02:13:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1216, 20, 6, '2026-05-14', '17:58:00', '02:13:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1217, 20, 6, '2026-05-21', '17:58:00', '02:13:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1218, 20, 6, '2026-05-28', '17:58:00', '02:13:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1219, 20, 6, '2026-06-04', '17:58:00', '02:13:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1220, 20, 6, '2026-06-11', '17:58:00', '02:13:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1221, 20, 6, '2026-06-18', '17:58:00', '02:13:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1222, 20, 6, '2026-06-25', '17:58:00', '02:13:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1223, 20, 6, '2026-07-02', '17:58:00', '02:13:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1224, 20, 6, '2026-07-09', '17:58:00', '02:13:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1225, 20, 6, '2026-07-16', '17:58:00', '02:13:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1226, 20, 6, '2026-07-23', '17:58:00', '02:13:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1227, 20, 6, '2026-07-30', '17:58:00', '02:13:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1228, 20, 6, '2026-08-06', '17:58:00', '02:13:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1229, 20, 6, '2026-08-13', '17:58:00', '02:13:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1230, 20, 6, '2026-08-20', '17:58:00', '02:13:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1231, 20, 6, '2026-08-27', '17:58:00', '02:13:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1232, 20, 6, '2026-09-03', '17:58:00', '02:13:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1233, 20, 6, '2026-09-10', '17:58:00', '02:13:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1234, 20, 6, '2026-09-17', '17:58:00', '02:13:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1235, 20, 6, '2026-09-24', '17:58:00', '02:13:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1236, 20, 6, '2026-10-01', '17:58:00', '02:13:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1237, 20, 7, '2026-04-06', '12:00:00', '15:30:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1238, 20, 7, '2026-04-13', '12:00:00', '15:30:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1239, 20, 7, '2026-04-20', '12:00:00', '15:30:00', 'ACTIVE', '2026-04-03 04:57:22', '2026-04-03 04:57:22'),
+(1240, 20, 7, '2026-04-27', '12:00:00', '15:30:00', 'ACTIVE', '2026-04-03 04:57:23', '2026-04-03 04:57:23'),
+(1241, 20, 7, '2026-05-04', '12:00:00', '15:30:00', 'ACTIVE', '2026-04-03 04:57:23', '2026-04-03 04:57:23'),
+(1242, 20, 7, '2026-05-11', '12:00:00', '15:30:00', 'ACTIVE', '2026-04-03 04:57:23', '2026-04-03 04:57:23'),
+(1243, 20, 7, '2026-05-18', '12:00:00', '15:30:00', 'ACTIVE', '2026-04-03 04:57:23', '2026-04-03 04:57:23'),
+(1244, 20, 7, '2026-05-25', '12:00:00', '15:30:00', 'ACTIVE', '2026-04-03 04:57:23', '2026-04-03 04:57:23'),
+(1245, 20, 7, '2026-06-01', '12:00:00', '15:30:00', 'ACTIVE', '2026-04-03 04:57:23', '2026-04-03 04:57:23'),
+(1246, 20, 7, '2026-06-08', '12:00:00', '15:30:00', 'ACTIVE', '2026-04-03 04:57:23', '2026-04-03 04:57:23'),
+(1247, 20, 7, '2026-06-15', '12:00:00', '15:30:00', 'ACTIVE', '2026-04-03 04:57:23', '2026-04-03 04:57:23'),
+(1248, 20, 7, '2026-06-22', '12:00:00', '15:30:00', 'ACTIVE', '2026-04-03 04:57:23', '2026-04-03 04:57:23'),
+(1249, 20, 7, '2026-06-29', '12:00:00', '15:30:00', 'ACTIVE', '2026-04-03 04:57:23', '2026-04-03 04:57:23'),
+(1250, 20, 7, '2026-07-06', '12:00:00', '15:30:00', 'ACTIVE', '2026-04-03 04:57:23', '2026-04-03 04:57:23'),
+(1251, 20, 7, '2026-07-13', '12:00:00', '15:30:00', 'ACTIVE', '2026-04-03 04:57:23', '2026-04-03 04:57:23'),
+(1252, 20, 7, '2026-07-20', '12:00:00', '15:30:00', 'ACTIVE', '2026-04-03 04:57:23', '2026-04-03 04:57:23'),
+(1253, 20, 7, '2026-07-27', '12:00:00', '15:30:00', 'ACTIVE', '2026-04-03 04:57:23', '2026-04-03 04:57:23'),
+(1254, 20, 7, '2026-08-03', '12:00:00', '15:30:00', 'ACTIVE', '2026-04-03 04:57:23', '2026-04-03 04:57:23'),
+(1255, 20, 7, '2026-08-10', '12:00:00', '15:30:00', 'ACTIVE', '2026-04-03 04:57:23', '2026-04-03 04:57:23'),
+(1256, 20, 7, '2026-08-17', '12:00:00', '15:30:00', 'ACTIVE', '2026-04-03 04:57:23', '2026-04-03 04:57:23'),
+(1257, 20, 7, '2026-08-24', '12:00:00', '15:30:00', 'ACTIVE', '2026-04-03 04:57:23', '2026-04-03 04:57:23'),
+(1258, 20, 7, '2026-08-31', '12:00:00', '15:30:00', 'ACTIVE', '2026-04-03 04:57:23', '2026-04-03 04:57:23'),
+(1259, 20, 7, '2026-09-07', '12:00:00', '15:30:00', 'ACTIVE', '2026-04-03 04:57:23', '2026-04-03 04:57:23'),
+(1260, 20, 7, '2026-09-14', '12:00:00', '15:30:00', 'ACTIVE', '2026-04-03 04:57:23', '2026-04-03 04:57:23'),
+(1261, 20, 7, '2026-09-21', '12:00:00', '15:30:00', 'ACTIVE', '2026-04-03 04:57:23', '2026-04-03 04:57:23'),
+(1262, 20, 7, '2026-09-28', '12:00:00', '15:30:00', 'ACTIVE', '2026-04-03 04:57:23', '2026-04-03 04:57:23'),
+(1263, 10, 8, '2026-04-03', '07:00:00', '15:15:00', 'ACTIVE', '2026-04-03 04:57:42', '2026-04-03 04:57:42'),
+(1264, 20, 8, '2026-04-03', '07:00:00', '15:15:00', 'ACTIVE', '2026-04-03 04:57:42', '2026-04-03 04:57:42'),
+(1265, 10, 8, '2026-04-10', '07:00:00', '15:15:00', 'ACTIVE', '2026-04-03 04:57:42', '2026-04-03 04:57:42'),
+(1266, 20, 8, '2026-04-10', '07:00:00', '15:15:00', 'ACTIVE', '2026-04-03 04:57:42', '2026-04-03 04:57:42'),
+(1267, 10, 8, '2026-04-17', '07:00:00', '15:15:00', 'ACTIVE', '2026-04-03 04:57:42', '2026-04-03 04:57:42'),
+(1268, 20, 8, '2026-04-17', '07:00:00', '15:15:00', 'ACTIVE', '2026-04-03 04:57:42', '2026-04-03 04:57:42'),
+(1269, 10, 8, '2026-04-24', '07:00:00', '15:15:00', 'ACTIVE', '2026-04-03 04:57:42', '2026-04-03 04:57:42'),
+(1270, 20, 8, '2026-04-24', '07:00:00', '15:15:00', 'ACTIVE', '2026-04-03 04:57:42', '2026-04-03 04:57:42'),
+(1271, 10, 8, '2026-05-01', '07:00:00', '15:15:00', 'ACTIVE', '2026-04-03 04:57:42', '2026-04-03 04:57:42'),
+(1272, 20, 8, '2026-05-01', '07:00:00', '15:15:00', 'ACTIVE', '2026-04-03 04:57:42', '2026-04-03 04:57:42'),
+(1273, 10, 8, '2026-05-08', '07:00:00', '15:15:00', 'ACTIVE', '2026-04-03 04:57:42', '2026-04-03 04:57:42'),
+(1274, 20, 8, '2026-05-08', '07:00:00', '15:15:00', 'ACTIVE', '2026-04-03 04:57:42', '2026-04-03 04:57:42'),
+(1275, 10, 8, '2026-05-15', '07:00:00', '15:15:00', 'ACTIVE', '2026-04-03 04:57:42', '2026-04-03 04:57:42'),
+(1276, 20, 8, '2026-05-15', '07:00:00', '15:15:00', 'ACTIVE', '2026-04-03 04:57:42', '2026-04-03 04:57:42'),
+(1277, 10, 8, '2026-05-22', '07:00:00', '15:15:00', 'ACTIVE', '2026-04-03 04:57:42', '2026-04-03 04:57:42'),
+(1278, 20, 8, '2026-05-22', '07:00:00', '15:15:00', 'ACTIVE', '2026-04-03 04:57:42', '2026-04-03 04:57:42'),
+(1279, 10, 8, '2026-05-29', '07:00:00', '15:15:00', 'ACTIVE', '2026-04-03 04:57:42', '2026-04-03 04:57:42'),
+(1280, 20, 8, '2026-05-29', '07:00:00', '15:15:00', 'ACTIVE', '2026-04-03 04:57:42', '2026-04-03 04:57:42'),
+(1281, 10, 8, '2026-06-05', '07:00:00', '15:15:00', 'ACTIVE', '2026-04-03 04:57:42', '2026-04-03 04:57:42'),
+(1282, 20, 8, '2026-06-05', '07:00:00', '15:15:00', 'ACTIVE', '2026-04-03 04:57:42', '2026-04-03 04:57:42'),
+(1283, 10, 8, '2026-06-12', '07:00:00', '15:15:00', 'ACTIVE', '2026-04-03 04:57:42', '2026-04-03 04:57:42'),
+(1284, 20, 8, '2026-06-12', '07:00:00', '15:15:00', 'ACTIVE', '2026-04-03 04:57:42', '2026-04-03 04:57:42'),
+(1285, 10, 8, '2026-06-19', '07:00:00', '15:15:00', 'ACTIVE', '2026-04-03 04:57:42', '2026-04-03 04:57:42'),
+(1286, 20, 8, '2026-06-19', '07:00:00', '15:15:00', 'ACTIVE', '2026-04-03 04:57:42', '2026-04-03 04:57:42'),
+(1287, 10, 8, '2026-06-26', '07:00:00', '15:15:00', 'ACTIVE', '2026-04-03 04:57:42', '2026-04-03 04:57:42'),
+(1288, 20, 8, '2026-06-26', '07:00:00', '15:15:00', 'ACTIVE', '2026-04-03 04:57:42', '2026-04-03 04:57:42'),
+(1289, 10, 8, '2026-07-03', '07:00:00', '15:15:00', 'ACTIVE', '2026-04-03 04:57:42', '2026-04-03 04:57:42'),
+(1290, 20, 8, '2026-07-03', '07:00:00', '15:15:00', 'ACTIVE', '2026-04-03 04:57:42', '2026-04-03 04:57:42'),
+(1291, 10, 8, '2026-07-10', '07:00:00', '15:15:00', 'ACTIVE', '2026-04-03 04:57:42', '2026-04-03 04:57:42'),
+(1292, 20, 8, '2026-07-10', '07:00:00', '15:15:00', 'ACTIVE', '2026-04-03 04:57:42', '2026-04-03 04:57:42'),
+(1293, 10, 8, '2026-07-17', '07:00:00', '15:15:00', 'ACTIVE', '2026-04-03 04:57:42', '2026-04-03 04:57:42'),
+(1294, 20, 8, '2026-07-17', '07:00:00', '15:15:00', 'ACTIVE', '2026-04-03 04:57:42', '2026-04-03 04:57:42'),
+(1295, 10, 8, '2026-07-24', '07:00:00', '15:15:00', 'ACTIVE', '2026-04-03 04:57:42', '2026-04-03 04:57:42'),
+(1296, 20, 8, '2026-07-24', '07:00:00', '15:15:00', 'ACTIVE', '2026-04-03 04:57:42', '2026-04-03 04:57:42'),
+(1297, 10, 8, '2026-07-31', '07:00:00', '15:15:00', 'ACTIVE', '2026-04-03 04:57:42', '2026-04-03 04:57:42'),
+(1298, 20, 8, '2026-07-31', '07:00:00', '15:15:00', 'ACTIVE', '2026-04-03 04:57:42', '2026-04-03 04:57:42'),
+(1299, 10, 8, '2026-08-07', '07:00:00', '15:15:00', 'ACTIVE', '2026-04-03 04:57:42', '2026-04-03 04:57:42'),
+(1300, 20, 8, '2026-08-07', '07:00:00', '15:15:00', 'ACTIVE', '2026-04-03 04:57:42', '2026-04-03 04:57:42'),
+(1301, 10, 8, '2026-08-14', '07:00:00', '15:15:00', 'ACTIVE', '2026-04-03 04:57:42', '2026-04-03 04:57:42'),
+(1302, 20, 8, '2026-08-14', '07:00:00', '15:15:00', 'ACTIVE', '2026-04-03 04:57:42', '2026-04-03 04:57:42'),
+(1303, 10, 8, '2026-08-21', '07:00:00', '15:15:00', 'ACTIVE', '2026-04-03 04:57:42', '2026-04-03 04:57:42'),
+(1304, 20, 8, '2026-08-21', '07:00:00', '15:15:00', 'ACTIVE', '2026-04-03 04:57:42', '2026-04-03 04:57:42'),
+(1305, 10, 8, '2026-08-28', '07:00:00', '15:15:00', 'ACTIVE', '2026-04-03 04:57:42', '2026-04-03 04:57:42'),
+(1306, 20, 8, '2026-08-28', '07:00:00', '15:15:00', 'ACTIVE', '2026-04-03 04:57:42', '2026-04-03 04:57:42'),
+(1307, 10, 8, '2026-09-04', '07:00:00', '15:15:00', 'ACTIVE', '2026-04-03 04:57:42', '2026-04-03 04:57:42'),
+(1308, 20, 8, '2026-09-04', '07:00:00', '15:15:00', 'ACTIVE', '2026-04-03 04:57:42', '2026-04-03 04:57:42'),
+(1309, 10, 8, '2026-09-11', '07:00:00', '15:15:00', 'ACTIVE', '2026-04-03 04:57:42', '2026-04-03 04:57:42'),
+(1310, 20, 8, '2026-09-11', '07:00:00', '15:15:00', 'ACTIVE', '2026-04-03 04:57:42', '2026-04-03 04:57:42');
+INSERT INTO `student_schedule` (`student_schedule_id`, `student_id`, `teacher_schedule_id`, `schedule_date`, `time_in`, `time_out`, `status`, `created_at`, `updated_at`) VALUES
+(1311, 10, 8, '2026-09-18', '07:00:00', '15:15:00', 'ACTIVE', '2026-04-03 04:57:42', '2026-04-03 04:57:42'),
+(1312, 20, 8, '2026-09-18', '07:00:00', '15:15:00', 'ACTIVE', '2026-04-03 04:57:42', '2026-04-03 04:57:42'),
+(1313, 10, 8, '2026-09-25', '07:00:00', '15:15:00', 'ACTIVE', '2026-04-03 04:57:42', '2026-04-03 04:57:42'),
+(1314, 20, 8, '2026-09-25', '07:00:00', '15:15:00', 'ACTIVE', '2026-04-03 04:57:42', '2026-04-03 04:57:42'),
+(1315, 10, 8, '2026-10-02', '07:00:00', '15:15:00', 'ACTIVE', '2026-04-03 04:57:42', '2026-04-03 04:57:42'),
+(1316, 20, 8, '2026-10-02', '07:00:00', '15:15:00', 'ACTIVE', '2026-04-03 04:57:42', '2026-04-03 04:57:42');
 
 -- --------------------------------------------------------
 
@@ -1247,6 +1469,7 @@ INSERT INTO `student_schedule` (`student_schedule_id`, `student_id`, `teacher_sc
 -- Table structure for table `teacher`
 --
 
+DROP TABLE IF EXISTS `teacher`;
 CREATE TABLE `teacher` (
   `id` int(11) NOT NULL,
   `teacher_code` varchar(20) DEFAULT NULL,
@@ -1268,7 +1491,7 @@ CREATE TABLE `teacher` (
 
 INSERT INTO `teacher` (`id`, `teacher_code`, `teacher_username`, `teacher_password`, `teacher_name`, `subject`, `teacher_type`, `photo`, `photo_reference`, `location_id`, `created_login`, `created_cookies`) VALUES
 (6, 'GR001', 'raga', '7a6ab157edfbfe77d6a35872a220a1a9a828205f0527d06245da0bf2d9d427e2', 'RAGA', 'KIMIA', 'KEJURUAN', NULL, NULL, 1, '2026-02-12 21:37:10', '-'),
-(7, 'GR002', 'aldino', '9869b4ee74de9adef912d4cf892243f21b873bff08e638796508d277642a98ec', 'ALDINO', 'PSIKOLOGI', 'KEJURUAN', NULL, NULL, 1, '2026-02-18 17:06:16', '-'),
+(7, 'GR002', 'aldino', '961ad889b45c570d3534d6b3e97c9e730d9b3a317dd9588b01411b9bbacab54e', 'ALDINO', 'PSIKOLOGI', 'KEJURUAN', NULL, NULL, 1, '2026-04-01 10:28:18', '-'),
 (8, 'GR003', 'aulia', '970a787364239a31d969e86a01b4a003cc90c715b992e9dff7421c217ebd0de6', 'AULIA', 'inggris', 'UMUM', NULL, NULL, 1, '2026-02-18 17:32:47', '-'),
 (12, 'GR999', 'dirga', '0e29b20ef87c0a11048f89363aff2dc914808f445dd3cb1d407baa26eef14ea7', 'DIRGAS', 'BIOLOGI', 'KEJURUAN', NULL, NULL, 1, NULL, '-'),
 (13, 'GR004', 'jjj', 'c42344f1996f5b35921c80ea1ec5e2de362409e30558def43c7e560470088863', 'jjj', 'ask', 'KEJURUAN', NULL, NULL, 1, '2026-02-19 06:07:01', '-');
@@ -1279,6 +1502,7 @@ INSERT INTO `teacher` (`id`, `teacher_code`, `teacher_username`, `teacher_passwo
 -- Table structure for table `teacher_schedule`
 --
 
+DROP TABLE IF EXISTS `teacher_schedule`;
 CREATE TABLE `teacher_schedule` (
   `schedule_id` int(11) NOT NULL,
   `teacher_id` int(11) DEFAULT NULL,
@@ -1299,7 +1523,8 @@ INSERT INTO `teacher_schedule` (`schedule_id`, `teacher_id`, `class_id`, `subjec
 (4, 6, 15, 'KIMIA', 3, 16),
 (5, 7, 15, 'PSIKOLOGI', 4, 8),
 (6, 8, 15, 'inggris', 4, 8),
-(7, 8, 15, 'inggris', 1, 17);
+(7, 8, 15, 'inggris', 1, 17),
+(8, 12, 15, 'BIOLOGI', 5, 8);
 
 -- --------------------------------------------------------
 
@@ -1307,6 +1532,7 @@ INSERT INTO `teacher_schedule` (`schedule_id`, `teacher_id`, `class_id`, `subjec
 -- Table structure for table `user`
 --
 
+DROP TABLE IF EXISTS `user`;
 CREATE TABLE `user` (
   `user_id` int(11) NOT NULL,
   `username` varchar(60) NOT NULL,
@@ -1328,9 +1554,27 @@ CREATE TABLE `user` (
 --
 
 INSERT INTO `user` (`user_id`, `username`, `email`, `password`, `fullname`, `registered`, `created_login`, `last_login`, `session`, `ip`, `browser`, `level`, `is_active`) VALUES
-(1, 'adm', 'adm@presenova.my.id', '0e8910802f4d94f33b73469695c7ac7783941e8134c24005e706d6760a228276', 'Administrator', '2026-01-29 23:34:21', '2026-01-29 23:34:21', '2026-02-16 19:00:00', '-', '127.0.0.1', 'Chrome', 1, 'N'),
+(1, 'adm', 'admin@presenova.my.id', '0e8910802f4d94f33b73469695c7ac7783941e8134c24005e706d6760a228276', 'Administrator', '2026-01-29 23:34:21', '2026-01-29 23:34:21', '2026-04-03 11:56:26', '-', '127.0.0.1', 'Chrome', 1, 'Y'),
 (2, 'operator', 'operator@smkn1cikarang.sch.id', 'ec276d4c3452a528915c218e1b878d0e8119c5b1142215817747d1e784bb0a8b', 'Operator', '2026-01-29 23:34:21', '2026-01-29 23:34:21', '2026-02-19 05:53:00', '-', '127.0.0.1', 'Chrome', 2, 'Y'),
-(3, 'hafizh', 'hafizhoffcll@gmail.com', 'ec276d4c3452a528915c218e1b878d0e8119c5b1142215817747d1e784bb0a8b', 'hafizh', '2026-02-13 23:19:55', NULL, '2026-02-19 21:22:36', '-', '0', 'Unknown', 1, 'Y');
+(3, 'hafizh', 'hafizhoffcll@gmail.com', '43f3dd9c9276243b646f3219ccc5c3cfe2e01c1b38b6630be459a8d9858c55be', 'hafizh', '2026-02-13 23:19:55', NULL, '2026-02-19 21:22:36', '-', '0', 'Unknown', 1, 'Y');
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `users`
+--
+
+DROP TABLE IF EXISTS `users`;
+CREATE TABLE `users` (
+  `id` bigint(20) UNSIGNED NOT NULL,
+  `name` varchar(255) NOT NULL,
+  `email` varchar(255) NOT NULL,
+  `email_verified_at` timestamp NULL DEFAULT NULL,
+  `password` varchar(255) NOT NULL,
+  `remember_token` varchar(100) DEFAULT NULL,
+  `created_at` timestamp NULL DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- --------------------------------------------------------
 
@@ -1338,6 +1582,7 @@ INSERT INTO `user` (`user_id`, `username`, `email`, `password`, `fullname`, `reg
 -- Table structure for table `user_level`
 --
 
+DROP TABLE IF EXISTS `user_level`;
 CREATE TABLE `user_level` (
   `level_id` int(11) NOT NULL,
   `level_name` varchar(50) DEFAULT NULL
@@ -1357,6 +1602,8 @@ INSERT INTO `user_level` (`level_id`, `level_name`) VALUES
 -- Stand-in structure for view `v_student_schedule_integration`
 -- (See below for the actual view)
 --
+DROP VIEW IF EXISTS `v_student_schedule_integration`;
+DROP TABLE IF EXISTS `v_student_schedule_integration`;
 CREATE TABLE `v_student_schedule_integration` (
 `teacher_schedule_id` int(11)
 ,`teacher_id` int(11)
@@ -1380,7 +1627,6 @@ CREATE TABLE `v_student_schedule_integration` (
 -- Structure for view `v_student_schedule_integration`
 --
 DROP TABLE IF EXISTS `v_student_schedule_integration`;
-DROP VIEW IF EXISTS `v_student_schedule_integration`;
 
 CREATE ALGORITHM=UNDEFINED SQL SECURITY DEFINER VIEW `v_student_schedule_integration`  AS SELECT `ts`.`schedule_id` AS `teacher_schedule_id`, `ts`.`teacher_id` AS `teacher_id`, `t`.`teacher_name` AS `teacher_name`, `ts`.`class_id` AS `class_id`, `c`.`class_name` AS `class_name`, `ts`.`subject` AS `subject`, `d`.`day_name` AS `day_name`, `s`.`shift_name` AS `shift_name`, `s`.`time_in` AS `time_in`, `s`.`time_out` AS `time_out`, count(distinct `ss`.`student_id`) AS `total_students`, count(distinct case when `ss`.`status` = 'ACTIVE' then `ss`.`student_id` end) AS `active_students`, min(`ss`.`schedule_date`) AS `earliest_date`, max(`ss`.`schedule_date`) AS `latest_date` FROM (((((`teacher_schedule` `ts` left join `teacher` `t` on(`ts`.`teacher_id` = `t`.`id`)) left join `class` `c` on(`ts`.`class_id` = `c`.`class_id`)) left join `day` `d` on(`ts`.`day_id` = `d`.`day_id`)) left join `shift` `s` on(`ts`.`shift_id` = `s`.`shift_id`)) left join `student_schedule` `ss` on(`ts`.`schedule_id` = `ss`.`teacher_schedule_id`)) GROUP BY `ts`.`schedule_id` ;
 
@@ -1393,6 +1639,20 @@ CREATE ALGORITHM=UNDEFINED SQL SECURITY DEFINER VIEW `v_student_schedule_integra
 --
 ALTER TABLE `activity_logs`
   ADD PRIMARY KEY (`log_id`);
+
+--
+-- Indexes for table `cache`
+--
+ALTER TABLE `cache`
+  ADD PRIMARY KEY (`key`),
+  ADD KEY `cache_expiration_index` (`expiration`);
+
+--
+-- Indexes for table `cache_locks`
+--
+ALTER TABLE `cache_locks`
+  ADD PRIMARY KEY (`key`),
+  ADD KEY `cache_locks_expiration_index` (`expiration`);
 
 --
 -- Indexes for table `class`
@@ -1412,6 +1672,34 @@ ALTER TABLE `day`
 --
 ALTER TABLE `day_schedule_config`
   ADD PRIMARY KEY (`day_id`);
+
+--
+-- Indexes for table `ebook_ratings`
+--
+ALTER TABLE `ebook_ratings`
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `ebook_ratings_star_index` (`star`),
+  ADD KEY `ebook_ratings_created_at_index` (`created_at`);
+
+--
+-- Indexes for table `failed_jobs`
+--
+ALTER TABLE `failed_jobs`
+  ADD PRIMARY KEY (`id`),
+  ADD UNIQUE KEY `failed_jobs_uuid_unique` (`uuid`);
+
+--
+-- Indexes for table `jobs`
+--
+ALTER TABLE `jobs`
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `jobs_queue_index` (`queue`);
+
+--
+-- Indexes for table `job_batches`
+--
+ALTER TABLE `job_batches`
+  ADD PRIMARY KEY (`id`);
 
 --
 -- Indexes for table `jurusan`
@@ -1436,11 +1724,10 @@ ALTER TABLE `migrations`
   ADD PRIMARY KEY (`id`);
 
 --
--- Indexes for table `notifications`
+-- Indexes for table `password_reset_tokens`
 --
-ALTER TABLE `notifications`
-  ADD PRIMARY KEY (`id`),
-  ADD KEY `notifications_notifiable_type_notifiable_id_index` (`notifiable_type`,`notifiable_id`);
+ALTER TABLE `password_reset_tokens`
+  ADD PRIMARY KEY (`email`);
 
 --
 -- Indexes for table `presence`
@@ -1478,6 +1765,14 @@ ALTER TABLE `push_tokens`
 --
 ALTER TABLE `school_location`
   ADD PRIMARY KEY (`location_id`);
+
+--
+-- Indexes for table `sessions`
+--
+ALTER TABLE `sessions`
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `sessions_user_id_index` (`user_id`),
+  ADD KEY `sessions_last_activity_index` (`last_activity`);
 
 --
 -- Indexes for table `shift`
@@ -1539,6 +1834,13 @@ ALTER TABLE `user`
   ADD KEY `level` (`level`);
 
 --
+-- Indexes for table `users`
+--
+ALTER TABLE `users`
+  ADD PRIMARY KEY (`id`),
+  ADD UNIQUE KEY `users_email_unique` (`email`);
+
+--
 -- Indexes for table `user_level`
 --
 ALTER TABLE `user_level`
@@ -1552,7 +1854,7 @@ ALTER TABLE `user_level`
 -- AUTO_INCREMENT for table `activity_logs`
 --
 ALTER TABLE `activity_logs`
-  MODIFY `log_id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=409;
+  MODIFY `log_id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=445;
 
 --
 -- AUTO_INCREMENT for table `class`
@@ -1567,6 +1869,24 @@ ALTER TABLE `day`
   MODIFY `day_id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=8;
 
 --
+-- AUTO_INCREMENT for table `ebook_ratings`
+--
+ALTER TABLE `ebook_ratings`
+  MODIFY `id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=7;
+
+--
+-- AUTO_INCREMENT for table `failed_jobs`
+--
+ALTER TABLE `failed_jobs`
+  MODIFY `id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT;
+
+--
+-- AUTO_INCREMENT for table `jobs`
+--
+ALTER TABLE `jobs`
+  MODIFY `id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT;
+
+--
 -- AUTO_INCREMENT for table `jurusan`
 --
 ALTER TABLE `jurusan`
@@ -1576,13 +1896,13 @@ ALTER TABLE `jurusan`
 -- AUTO_INCREMENT for table `master_data_audit_logs`
 --
 ALTER TABLE `master_data_audit_logs`
-  MODIFY `id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=15;
+  MODIFY `id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=18;
 
 --
 -- AUTO_INCREMENT for table `migrations`
 --
 ALTER TABLE `migrations`
-  MODIFY `id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=2;
+  MODIFY `id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=7;
 
 --
 -- AUTO_INCREMENT for table `presence`
@@ -1600,7 +1920,7 @@ ALTER TABLE `present_status`
 -- AUTO_INCREMENT for table `push_notification_logs`
 --
 ALTER TABLE `push_notification_logs`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=15;
 
 --
 -- AUTO_INCREMENT for table `push_tokens`
@@ -1630,13 +1950,13 @@ ALTER TABLE `site`
 -- AUTO_INCREMENT for table `student`
 --
 ALTER TABLE `student`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=20;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=21;
 
 --
 -- AUTO_INCREMENT for table `student_schedule`
 --
 ALTER TABLE `student_schedule`
-  MODIFY `student_schedule_id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=982;
+  MODIFY `student_schedule_id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=1317;
 
 --
 -- AUTO_INCREMENT for table `teacher`
@@ -1648,13 +1968,19 @@ ALTER TABLE `teacher`
 -- AUTO_INCREMENT for table `teacher_schedule`
 --
 ALTER TABLE `teacher_schedule`
-  MODIFY `schedule_id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=8;
+  MODIFY `schedule_id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=9;
 
 --
 -- AUTO_INCREMENT for table `user`
 --
 ALTER TABLE `user`
   MODIFY `user_id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=5;
+
+--
+-- AUTO_INCREMENT for table `users`
+--
+ALTER TABLE `users`
+  MODIFY `id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT;
 
 --
 -- AUTO_INCREMENT for table `user_level`
@@ -1734,4 +2060,10 @@ ALTER TABLE `teacher_schedule`
 --
 ALTER TABLE `user`
   ADD CONSTRAINT `fk_user_level` FOREIGN KEY (`level`) REFERENCES `user_level` (`level_id`) ON UPDATE CASCADE;
+SET FOREIGN_KEY_CHECKS = 1;
 COMMIT;
+
+/*!40101 SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT */;
+/*!40101 SET CHARACTER_SET_RESULTS=@OLD_CHARACTER_SET_RESULTS */;
+/*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
+

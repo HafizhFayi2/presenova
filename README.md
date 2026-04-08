@@ -55,32 +55,126 @@ Minimal variabel yang harus diisi:
 - Database: `DB_*`
 - JWT remember: `JWT_REMEMBER_SECRET`
 - Face matcher: `PYTHON_BIN`, `FACE_MATCH_*`
+- Private media: `MEDIA_SIGNED_URL_TTL_MINUTES` (default 60 menit)
 - Push: `PUSH_ENABLED`, `PUSH_VAPID_PUBLIC_KEY`, `PUSH_VAPID_PRIVATE_KEY`, `PUSH_VAPID_SUBJECT`
 
 Lihat contoh lengkap di `.env.example`.
 
+## Keamanan Media Wajah/Absensi
+- Foto wajah dan foto absensi tidak lagi disajikan langsung dari URL publik `uploads/*`.
+- Akses media memakai URL signed sementara (`/media/face`, `/media/attendance`) + validasi role/session.
+- Direct access ke `/uploads/faces/*` dan `/uploads/attendance/*` diblokir di `.htaccess` (HTTP 403).
+
 ## Menjalankan Lokal
 1. Jalankan Apache + MySQL (XAMPP).
 2. Pastikan extension PHP yang dibutuhkan aktif (`pdo_mysql`, `openssl`, `mbstring`, `gd`).
-3. Install dependency:
+3. Buat file environment lokal (sekali per mesin):
+```bash
+cp .env.example .env
+```
+4. Install dependency:
 ```bash
 composer install
 ```
-4. Generate key jika belum ada:
+5. Generate key aplikasi:
 ```bash
 php artisan key:generate
 ```
-5. Jalankan migrasi jika diperlukan:
+6. Bersihkan cache config lama (penting setelah `git pull`):
+```bash
+php artisan optimize:clear
+```
+7. Jalankan migrasi jika diperlukan:
 ```bash
 php artisan migrate
 ```
-6. Akses aplikasi:
+8. Akses aplikasi:
 - `http://localhost/presenova`
+
+## Quick Deploy VPS Fresh (Instant)
+Untuk VPS Linux fresh 0 progress, gunakan installer satu langkah berikut:
+
+```bash
+sudo bash scripts/setup_vps_fresh_presenova.sh \
+  --domain presenova.my.id \
+  --email adm@presenova.my.id \
+  --app-dir /var/www/presenova \
+  --db-name presenova \
+  --db-user presenova
+```
+
+Yang dikerjakan script ini secara berurutan:
+- Install paket OS penting (Apache, MariaDB, PHP ext, Composer, Certbot, Node, cron).
+- Siapkan database + user + update `.env`.
+- Install dependency Composer + generate `APP_KEY`.
+- Import SQL bootstrap (`presenova.sql`) saat database masih kosong.
+- Jalankan `php artisan migrate --force`, `storage:link`, permission runtime.
+- Setup HTTPS Let's Encrypt + redirect + update `.env` produksi.
+- Setup cron push notification.
+
+Opsional:
+- Tambah `--with-deepface` untuk setup DeepFace venv.
+- Tambah `--with-mail` untuk setup Postfix/Dovecot mail server.
+- Tambah `--skip-https` atau `--skip-cron` jika ingin dipasang terpisah.
+
+Contoh deploy + mail server domain `mail.presenova.my.id`:
+
+```bash
+sudo bash scripts/setup_vps_fresh_presenova.sh \
+  --domain presenova.my.id \
+  --email adm@presenova.my.id \
+  --app-dir /var/www/presenova \
+  --db-name presenova \
+  --db-user presenova \
+  --with-mail \
+  --mail-admin-email adm@presenova.my.id \
+  --mail-host mail.presenova.my.id
+```
+
+Pre-check DNS minimum sebelum setup mail:
+- `A mail.presenova.my.id -> IP VPS mail`
+- `MX presenova.my.id -> mail.presenova.my.id (priority 10)`
+- `TXT SPF` mengizinkan host mail (`mx` atau `a:mail.presenova.my.id` / `ip4:...`)
+
+Jika hanya ingin setup mail server:
+
+```bash
+sudo bash scripts/setup_mail_server_linux.sh \
+  --domain presenova.my.id \
+  --admin-email adm@presenova.my.id \
+  --mail-host mail.presenova.my.id \
+  --letsencrypt-email adm@presenova.my.id \
+  --app-dir /var/www/presenova
+```
+
+Setelah deploy selesai, jalankan verifikasi sistem:
+
+```bash
+cd /var/www/presenova
+php artisan presenova:health-check --strict --domain=presenova.my.id
+```
+
+Jika ada mismatch sinkronisasi `student_schedule`, jalankan sinkronisasi massal:
+
+```bash
+cd /var/www/presenova
+php artisan presenova:sync-schedules --months=6
+```
+
+Sinkronisasi per siswa (contoh ID 10):
+
+```bash
+php artisan presenova:sync-schedules --student-id=10 --months=6
+```
 
 ## Konfigurasi Apache (Windows + Linux)
 Konfigurasi `DocumentRoot` wajib ke folder `public`, bukan ke `resources/views/pages`.
 
 Jika salah (mis. ke `resources/views/pages`), route Laravel tidak aktif dan tombol bisa loop / URL duplikat.
+
+Catatan Debian 12 VPS fresh:
+- Script Linux di folder `scripts/` sudah menyiapkan dependency yang dibutuhkan sebelum konfigurasi inti dijalankan.
+- Tetap jalankan script sebagai `root/sudo` agar proses install paket otomatis bisa berjalan.
 
 ### Linux VPS (`/var/www/presenova`)
 Contoh VirtualHost:
@@ -88,7 +182,7 @@ Contoh VirtualHost:
 ```apache
 <VirtualHost *:80>
     ServerName presenova.my.id
-    ServerAdmin admin@presenova.my.id
+    ServerAdmin adm@presenova.my.id
     DocumentRoot /var/www/presenova/public
 
     <Directory /var/www/presenova/public>
@@ -109,9 +203,9 @@ Gunakan installer otomatis berikut agar Apache langsung aktif HTTPS + redirect H
 ```bash
 sudo bash scripts/setup_https_letsencrypt_linux.sh \
   --domain presenova.my.id \
-  --email admin@presenova.my.id \
+  --email adm@presenova.my.id \
   --app-dir /var/www/presenova \
-  --aliases www.presenova.my.id
+  --aliases www.presenova.my.id,ebook.presenova.my.id
 ```
 
 Script akan:
@@ -140,8 +234,28 @@ Pastikan nilai `.env` produksi:
 Checklist anti warning `Not Secure`:
 - `curl -I http://presenova.my.id` harus 301/302 ke `https://`.
 - `curl -I https://presenova.my.id` harus 200/302 tanpa error sertifikat.
+- `curl -I https://ebook.presenova.my.id` harus 200/302 tanpa error sertifikat.
 - Tidak ada aset `http://` (mixed content) pada source HTML/CSS/JS.
 - `sudo systemctl status certbot.timer` aktif untuk auto-renew.
+
+### Linux VPS + aaPanel (SSL webroot, tanpa Apache script)
+Jika web server dikelola aaPanel (Nginx/OpenLiteSpeed), gunakan mode webroot berikut:
+
+```bash
+sudo bash scripts/setup_ssl_webroot_linux.sh \
+  --domains presenova.my.id,ebook.presenova.my.id \
+  --email adm@presenova.my.id \
+  --webroot /www/wwwroot/presenova/public \
+  --reload-cmd "bt reload"
+```
+
+Output cert akan tersedia di:
+- `/etc/letsencrypt/live/presenova.my.id/fullchain.pem`
+- `/etc/letsencrypt/live/presenova.my.id/privkey.pem`
+
+Jika aaPanel mengelola SSL langsung dari panel, domain SAN tetap harus mencakup:
+- `presenova.my.id`
+- `ebook.presenova.my.id`
 
 ### Windows XAMPP (`C:/xampp/htdocs/presenova`)
 Jika memakai host `localhost/presenova`, pastikan root `.htaccess` aktif (`AllowOverride All`) atau gunakan VirtualHost:
@@ -162,8 +276,12 @@ Template siap pakai juga tersedia di: `scripts/apache-vhost-windows.conf`.
 
 ## Setup DeepFace
 ```bash
-bash scripts/setup_deepface.sh --write-env
+bash scripts/setup_deepface.sh --install-system-deps --write-env
 ```
+
+Catatan Debian 12 fresh:
+- Script akan menginstall dependency Python/OpenCV ketika `--install-system-deps` dipakai.
+- `.venv` default berada di `public/face/.venv` dan `PYTHON_BIN` di `.env` akan diarahkan ke path venv Linux.
 
 ## Setup Cron Push (VPS Linux)
 Jalankan installer cron (idempotent, aman di-run ulang):
@@ -173,6 +291,7 @@ bash scripts/install_push_cron_linux.sh /var/www/presenova
 ```
 
 Catatan:
+- Script akan memasang dependency dasar (`cron`, `php-cli`) jika belum tersedia.
 - Script akan memasang cron per 1 menit untuk menjalankan `public/cron/send_notifications.php`.
 - Jika `flock` tersedia, eksekusi cron diberi lock agar tidak overlap.
 - Log cron tersimpan di `storage/logs/push-cron.log`.
@@ -412,6 +531,7 @@ Dokumen dan template:
 - `scripts/apache-vhost-linux-https-letsencrypt.conf`
 - `scripts/apache-vhost-windows.conf`
 - `scripts/setup_https_letsencrypt_linux.sh`
+- `scripts/setup_ssl_webroot_linux.sh`
 
 ## 11. Pro dan Cons Terkini
 
@@ -475,7 +595,7 @@ DeepFace dijalankan melalui script Python:
 
 Setup otomatis:
 ```bash
-bash scripts/setup_deepface.sh --write-env
+bash scripts/setup_deepface.sh --install-system-deps --write-env
 ```
 
 ## Verifikasi Cepat
@@ -813,4 +933,3 @@ Dokumen ini menetapkan kebijakan retensi data untuk transparansi komunitas sekol
 ---
 
 ---
-

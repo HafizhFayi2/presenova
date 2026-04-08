@@ -63,7 +63,7 @@ if (!defined('FACE_DESCRIPTOR_DISTANCE_THRESHOLD')) {
     define('FACE_DESCRIPTOR_DISTANCE_THRESHOLD', (float) runtime_env('FACE_DESCRIPTOR_THRESHOLD', 0.55));
 }
 if (!defined('FACE_MATCH_MODEL')) {
-    define('FACE_MATCH_MODEL', (string) runtime_env('FACE_MATCH_MODEL', 'SFace'));
+    define('FACE_MATCH_MODEL', (string) runtime_env('FACE_MATCH_MODEL', 'ArcFace'));
 }
 if (!defined('FACE_MATCH_DETECTOR')) {
     define('FACE_MATCH_DETECTOR', (string) runtime_env('FACE_MATCH_DETECTOR', 'opencv'));
@@ -78,7 +78,7 @@ if (!defined('FACE_MATCH_ENFORCE_DETECTION')) {
     );
 }
 if (!defined('FACE_MATCH_MAX_REFERENCES')) {
-    define('FACE_MATCH_MAX_REFERENCES', (int) runtime_env('FACE_MATCH_MAX_REFERENCES', 1));
+    define('FACE_MATCH_MAX_REFERENCES', (int) runtime_env('FACE_MATCH_MAX_REFERENCES', 5));
 }
 if (!defined('FACE_MATCH_ALLOW_FALLBACK')) {
     define(
@@ -93,13 +93,13 @@ if (!defined('FACE_MATCH_USE_BACKUP')) {
     );
 }
 if (!defined('FACE_MATCH_BACKUP_MODEL')) {
-    define('FACE_MATCH_BACKUP_MODEL', (string) runtime_env('FACE_MATCH_BACKUP_MODEL', 'SFace'));
+    define('FACE_MATCH_BACKUP_MODEL', (string) runtime_env('FACE_MATCH_BACKUP_MODEL', 'ArcFace'));
 }
 if (!defined('FACE_MATCH_BACKUP_DETECTOR')) {
     define('FACE_MATCH_BACKUP_DETECTOR', (string) runtime_env('FACE_MATCH_BACKUP_DETECTOR', 'mtcnn'));
 }
 if (!defined('FACE_MATCH_BACKUP_MAX_REFERENCES')) {
-    define('FACE_MATCH_BACKUP_MAX_REFERENCES', (int) runtime_env('FACE_MATCH_BACKUP_MAX_REFERENCES', 1));
+    define('FACE_MATCH_BACKUP_MAX_REFERENCES', (int) runtime_env('FACE_MATCH_BACKUP_MAX_REFERENCES', 5));
 }
 if (!defined('FACE_MATCH_DETECTOR_FALLBACKS')) {
     define(
@@ -110,9 +110,18 @@ if (!defined('FACE_MATCH_DETECTOR_FALLBACKS')) {
 if (!defined('FACE_MATCH_TIMEOUT_SECONDS')) {
     define('FACE_MATCH_TIMEOUT_SECONDS', (int) runtime_env('FACE_MATCH_TIMEOUT_SECONDS', 60));
 }
+if (!defined('FACE_MATCH_STRICT_MARGIN')) {
+    define('FACE_MATCH_STRICT_MARGIN', (float) runtime_env('FACE_MATCH_STRICT_MARGIN', 0.03));
+}
 
-$deepfaceVenvPython = public_path('face/.venv/Scripts/python.exe');
-$pythonBinDefault = is_file($deepfaceVenvPython) ? $deepfaceVenvPython : 'python';
+$deepfaceVenvPythonWindows = public_path('face/.venv/Scripts/python.exe');
+$deepfaceVenvPythonLinux = public_path('face/.venv/bin/python');
+$pythonBinDefault = 'python';
+if (is_file($deepfaceVenvPythonWindows)) {
+    $pythonBinDefault = $deepfaceVenvPythonWindows;
+} elseif (is_file($deepfaceVenvPythonLinux)) {
+    $pythonBinDefault = $deepfaceVenvPythonLinux;
+}
 if (!defined('PYTHON_BIN')) {
     define('PYTHON_BIN', (string) runtime_env('PYTHON_BIN', $pythonBinDefault));
 }
@@ -440,8 +449,171 @@ if (!function_exists('resolve_face_reference_file_path')) {
     }
 }
 
-if (!function_exists('face_reference_public_url')) {
-    function face_reference_public_url($photoReference, $appendVersion = true)
+if (!function_exists('normalize_attendance_reference_path')) {
+    function normalize_attendance_reference_path($pictureIn)
+    {
+        $path = normalize_public_relative_path($pictureIn);
+        if ($path === '') {
+            return '';
+        }
+
+        $path = str_replace('\\', '/', $path);
+        $lower = strtolower($path);
+        $uploadsMarker = 'uploads/attendance/';
+        $uploadsPos = strpos($lower, $uploadsMarker);
+        if ($uploadsPos !== false) {
+            $path = substr($path, $uploadsPos + strlen($uploadsMarker));
+        } elseif (str_starts_with($lower, 'attendance/')) {
+            $path = substr($path, strlen('attendance/'));
+        }
+
+        return normalize_public_relative_path($path);
+    }
+}
+
+if (!function_exists('attendance_relative_from_file')) {
+    function attendance_relative_from_file($filePath)
+    {
+        $filePath = trim((string) $filePath);
+        if ($filePath === '') {
+            return '';
+        }
+
+        $realFile = realpath($filePath);
+        $normalizedFile = str_replace('\\', '/', $realFile !== false ? $realFile : $filePath);
+        if ($normalizedFile === '') {
+            return '';
+        }
+
+        $attendanceRoot = realpath(public_path('uploads/attendance'));
+        if ($attendanceRoot !== false) {
+            $normalizedAttendanceRoot = rtrim(str_replace('\\', '/', $attendanceRoot), '/');
+            if (str_starts_with($normalizedFile, $normalizedAttendanceRoot . '/')) {
+                $relative = substr($normalizedFile, strlen($normalizedAttendanceRoot) + 1);
+
+                return normalize_attendance_reference_path($relative);
+            }
+        }
+
+        $marker = '/uploads/attendance/';
+        $markerPos = stripos($normalizedFile, $marker);
+        if ($markerPos !== false) {
+            $relative = substr($normalizedFile, $markerPos + strlen($marker));
+
+            return normalize_attendance_reference_path($relative);
+        }
+
+        return '';
+    }
+}
+
+if (!function_exists('resolve_attendance_file_path')) {
+    function resolve_attendance_file_path($pictureIn, $presenceDate = null)
+    {
+        $raw = trim((string) $pictureIn);
+        if ($raw === '') {
+            return null;
+        }
+
+        $rawNormalized = str_replace('\\', '/', $raw);
+        if ((preg_match('~^[A-Za-z]:/~', $rawNormalized) === 1 || str_starts_with($rawNormalized, '/')) && is_file($raw)) {
+            $real = realpath($raw);
+            return $real !== false ? $real : $raw;
+        }
+
+        $normalized = normalize_attendance_reference_path($raw);
+        if ($normalized === '') {
+            return null;
+        }
+
+        $candidates = [
+            public_path('uploads/attendance/' . $normalized),
+            public_path($normalized),
+            public_path('uploads/' . $normalized),
+        ];
+
+        if (!str_contains($normalized, '/')) {
+            $presenceDate = trim((string) $presenceDate);
+            if ($presenceDate !== '') {
+                $dateOnly = date('Y-m-d', strtotime($presenceDate));
+                $candidates[] = public_path('uploads/attendance/' . $dateOnly . '/' . $normalized);
+                $dayFolderCandidates = glob(public_path('uploads/attendance/' . $dateOnly . '_*' . DIRECTORY_SEPARATOR . '*' . DIRECTORY_SEPARATOR . $normalized)) ?: [];
+                foreach ($dayFolderCandidates as $candidatePath) {
+                    $candidates[] = $candidatePath;
+                }
+            }
+        }
+
+        foreach ($candidates as $candidate) {
+            if ($candidate !== '' && is_file($candidate)) {
+                $real = realpath($candidate);
+                return $real !== false ? $real : $candidate;
+            }
+        }
+
+        if (!str_contains($normalized, '/')) {
+            $attendanceRoot = public_path('uploads/attendance');
+            if (is_dir($attendanceRoot)) {
+                try {
+                    $iterator = new RecursiveIteratorIterator(
+                        new RecursiveDirectoryIterator($attendanceRoot, FilesystemIterator::SKIP_DOTS)
+                    );
+                    foreach ($iterator as $fileInfo) {
+                        if (!$fileInfo->isFile()) {
+                            continue;
+                        }
+                        if (strcasecmp($fileInfo->getFilename(), $normalized) !== 0) {
+                            continue;
+                        }
+                        $real = realpath($fileInfo->getPathname());
+                        return $real !== false ? $real : $fileInfo->getPathname();
+                    }
+                } catch (\Throwable) {
+                    return null;
+                }
+            }
+        }
+
+        return null;
+    }
+}
+
+if (!function_exists('presenova_media_ref_encode')) {
+    function presenova_media_ref_encode(string $value): string
+    {
+        return rtrim(strtr(base64_encode($value), '+/', '-_'), '=');
+    }
+}
+
+if (!function_exists('presenova_media_ref_decode')) {
+    function presenova_media_ref_decode(string $value): string
+    {
+        $value = trim($value);
+        if ($value === '') {
+            return '';
+        }
+        $decoded = base64_decode(strtr($value, '-_', '+/'), true);
+        if ($decoded === false) {
+            return '';
+        }
+
+        return $decoded;
+    }
+}
+
+if (!function_exists('presenova_media_sign_ttl_minutes')) {
+    function presenova_media_sign_ttl_minutes(): int
+    {
+        $configured = (int) runtime_env('MEDIA_SIGNED_URL_TTL_MINUTES', 60);
+        if ($configured < 1) {
+            return 60;
+        }
+        return min($configured, 1440);
+    }
+}
+
+if (!function_exists('face_reference_secure_url')) {
+    function face_reference_secure_url($photoReference, $appendVersion = true): string
     {
         $absolutePath = resolve_face_reference_file_path($photoReference);
         if ($absolutePath === null) {
@@ -453,32 +625,18 @@ if (!function_exists('face_reference_public_url')) {
             return '';
         }
 
-        // Build base URL robustly for both XAMPP subdirectory and server root setups.
-        $basePath = '';
+        $encodedRef = presenova_media_ref_encode($relativePath);
         try {
-            // getBaseUrl() returns the prefix before the front controller script name.
-            $raw = rtrim((string) request()->getBaseUrl(), '/');
-            // Strip /public suffix since root .htaccess transparently rewrites to public/.
-            if (str_ends_with(strtolower($raw), '/public')) {
-                $raw = substr($raw, 0, -7);
-            }
-            // Strip /index.php or similar script name if present.
-            if (preg_match('~/[^/]+\.php$~i', $raw)) {
-                $raw = preg_replace('~/[^/]+\.php$~i', '', $raw);
-            }
-            $basePath = rtrim((string) $raw, '/');
+            $url = \Illuminate\Support\Facades\URL::temporarySignedRoute(
+                'media.face',
+                now()->addMinutes(presenova_media_sign_ttl_minutes()),
+                ['ref' => $encodedRef],
+                false
+            );
         } catch (\Throwable) {
-            $basePath = '';
-        }
-        if ($basePath === '') {
-            $configUrl = (string) config('app.url', '');
-            $configPath = trim((string) parse_url($configUrl, PHP_URL_PATH), '/');
-            if ($configPath !== '') {
-                $basePath = '/' . $configPath;
-            }
+            return '';
         }
 
-        $url = $basePath . '/uploads/faces/' . ltrim($relativePath, '/');
         if ($appendVersion) {
             $version = @filemtime($absolutePath);
             if ($version) {
@@ -487,6 +645,49 @@ if (!function_exists('face_reference_public_url')) {
         }
 
         return $url;
+    }
+}
+
+if (!function_exists('attendance_photo_secure_url')) {
+    function attendance_photo_secure_url($pictureIn, $presenceDate = null, $appendVersion = true): string
+    {
+        $absolutePath = resolve_attendance_file_path($pictureIn, $presenceDate);
+        if ($absolutePath === null) {
+            return '';
+        }
+
+        $relativePath = attendance_relative_from_file($absolutePath);
+        if ($relativePath === '') {
+            return '';
+        }
+
+        $encodedRef = presenova_media_ref_encode($relativePath);
+        try {
+            $url = \Illuminate\Support\Facades\URL::temporarySignedRoute(
+                'media.attendance',
+                now()->addMinutes(presenova_media_sign_ttl_minutes()),
+                ['ref' => $encodedRef],
+                false
+            );
+        } catch (\Throwable) {
+            return '';
+        }
+
+        if ($appendVersion) {
+            $version = @filemtime($absolutePath);
+            if ($version) {
+                $url .= (str_contains($url, '?') ? '&' : '?') . 'v=' . $version;
+            }
+        }
+
+        return $url;
+    }
+}
+
+if (!function_exists('face_reference_public_url')) {
+    function face_reference_public_url($photoReference, $appendVersion = true)
+    {
+        return face_reference_secure_url($photoReference, $appendVersion);
     }
 }
 
@@ -973,5 +1174,3 @@ if (!function_exists('buildScheduleWindow')) {
         return [$start, $end, $base_end];
     }
 }
-
-

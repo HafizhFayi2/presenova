@@ -1935,6 +1935,55 @@
                 -webkit-backdrop-filter: none !important;
         }
 
+        .nav-shell {
+                will-change: transform;
+                transition: transform 0.22s ease-out;
+        }
+
+        .top-bar {
+                transition: border-color 0.2s ease, background-color 0.2s ease;
+        }
+
+        [data-theme="light"] .student-shell::before {
+                background: #f3f6fc;
+                border-color: rgba(148, 163, 184, 0.28);
+        }
+
+        [data-theme="dark"] .student-shell::before {
+                background: #0f141c;
+                border-color: rgba(148, 163, 184, 0.24);
+        }
+
+        [data-theme="light"] .nav-shell {
+                background: #e8eef9;
+                border-color: rgba(148, 163, 184, 0.32);
+        }
+
+        [data-theme="dark"] .nav-shell {
+                background: #111a28;
+                border-color: rgba(148, 163, 184, 0.3);
+        }
+
+        [data-theme="light"] .sidebar {
+                background: #ffffff;
+                border-color: rgba(148, 163, 184, 0.26);
+        }
+
+        [data-theme="dark"] .sidebar {
+                background: #182233;
+                border-color: rgba(148, 163, 184, 0.26);
+        }
+
+        [data-theme="light"] .top-bar {
+                background-color: #ffffff;
+                border-color: rgba(148, 163, 184, 0.28);
+        }
+
+        [data-theme="dark"] .top-bar {
+                background-color: #182233;
+                border-color: rgba(148, 163, 184, 0.28);
+        }
+
         .liquidGlass-effect {
                 display: none;
                 filter: none !important;

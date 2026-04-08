@@ -11,6 +11,7 @@ use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 class ApiController extends Controller
 {
@@ -998,16 +999,45 @@ class ApiController extends Controller
                 );
             }
 
+            $attendanceUrl = '';
+            if (function_exists('attendance_photo_secure_url')) {
+                $attendanceUrl = attendance_photo_secure_url($attendanceFilename, $scheduleDate);
+                if ($attendanceUrl === '') {
+                    $relativeAttendance = function_exists('attendance_relative_from_file')
+                        ? attendance_relative_from_file((string) $attendancePath)
+                        : '';
+                    if ($relativeAttendance !== '') {
+                        $attendanceUrl = attendance_photo_secure_url($relativeAttendance, $scheduleDate);
+                    }
+                }
+            }
+
+            $validationUrl = null;
+            if ($validationGenerated && function_exists('attendance_photo_secure_url')) {
+                $validationReference = $dateTimeFolder . '/' . $classFolder . '/' . $validationFilename;
+                $resolvedValidationUrl = attendance_photo_secure_url($validationReference, $scheduleDate);
+                if ($resolvedValidationUrl === '') {
+                    $relativeValidation = function_exists('attendance_relative_from_file')
+                        ? attendance_relative_from_file((string) $validationPath)
+                        : '';
+                    if ($relativeValidation !== '') {
+                        $resolvedValidationUrl = attendance_photo_secure_url($relativeValidation, $scheduleDate);
+                    }
+                }
+                $validationUrl = $resolvedValidationUrl !== '' ? $resolvedValidationUrl : null;
+            }
+
             return $this->attendanceJson($requestPath, [
                 'success' => true,
                 'message' => 'Absensi berhasil',
                 'data' => [
                     'similarity' => (float) ($matchResult['similarity'] ?? 0),
                     'match_log' => $matchLog,
-                    'attendance_path' => str_replace('\\', '/', str_replace(public_path() . DIRECTORY_SEPARATOR, '', (string) $attendancePath)),
-                    'validation_path' => $validationGenerated
-                        ? str_replace('\\', '/', str_replace(public_path() . DIRECTORY_SEPARATOR, '', (string) $validationPath))
-                        : null,
+                    'attendance_url' => $attendanceUrl,
+                    'validation_url' => $validationUrl,
+                    // Keep legacy keys non-sensitive to avoid exposing upload paths.
+                    'attendance_path' => null,
+                    'validation_path' => null,
                     'status' => $isLate ? 'OVERDUE' : 'SUCCESS',
                     'attendance_time' => $currentTime,
                     'attendance_date' => $scheduleDate,
@@ -1127,12 +1157,238 @@ class ApiController extends Controller
             (int) $student->class_id,
             6
         );
+        $totalSchedules = DB::table('student_schedule')
+            ->where('student_id', $studentId)
+            ->count();
 
         return response()->json([
             'success' => true,
             'message' => 'Sinkronisasi berhasil',
             'added' => $added,
-            'total_schedules' => $added,
+            'total_schedules' => $totalSchedules,
+        ]);
+    }
+
+    public function ebookRatings(Request $request): JsonResponse
+    {
+        if (strtoupper((string) $request->method()) === 'OPTIONS') {
+            return $this->applyEbookCors($request, response()->json([
+                'success' => true,
+                'message' => 'Preflight OK',
+            ]));
+        }
+
+        if (!Schema::hasTable('ebook_ratings')) {
+            return $this->applyEbookCors($request, response()->json([
+                'success' => false,
+                'message' => 'Tabel ebook_ratings belum tersedia. Jalankan migrasi terlebih dahulu.',
+                'data' => [
+                    'summary' => [
+                        'total' => 0,
+                        'average' => 0,
+                    ],
+                    'ratings' => [],
+                ],
+            ], 503));
+        }
+
+        if (strtoupper((string) $request->method()) === 'POST') {
+            return $this->applyEbookCors($request, $this->storeEbookRating($request));
+        }
+
+        return $this->applyEbookCors($request, $this->listEbookRatings($request));
+    }
+
+    private function applyEbookCors(Request $request, JsonResponse $response): JsonResponse
+    {
+        $origin = trim((string) $request->headers->get('Origin', ''));
+        $allowedOrigin = $this->resolveEbookCorsOrigin($origin);
+
+        if ($allowedOrigin !== null) {
+            $response->headers->set('Access-Control-Allow-Origin', $allowedOrigin);
+            $response->headers->set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+            $response->headers->set('Access-Control-Allow-Headers', 'Content-Type, Accept, X-Requested-With');
+            $response->headers->set('Access-Control-Max-Age', '86400');
+            $response->headers->set('Vary', 'Origin');
+        }
+
+        return $response;
+    }
+
+    private function resolveEbookCorsOrigin(string $origin): ?string
+    {
+        if ($origin === '') {
+            return null;
+        }
+
+        $parts = parse_url($origin);
+        if (!is_array($parts)) {
+            return null;
+        }
+
+        $scheme = strtolower((string) ($parts['scheme'] ?? ''));
+        $host = strtolower((string) ($parts['host'] ?? ''));
+        if (!in_array($scheme, ['http', 'https'], true) || $host === '') {
+            return null;
+        }
+
+        if ($host === 'presenova.my.id' || preg_match('/^[a-z0-9-]+\.presenova\.my\.id$/', $host) === 1) {
+            return $origin;
+        }
+
+        if (in_array($host, ['localhost', '127.0.0.1'], true)) {
+            return $origin;
+        }
+
+        return null;
+    }
+
+    private function listEbookRatings(Request $request): JsonResponse
+    {
+        $limit = (int) $request->query('limit', 60);
+        $limit = max(1, min($limit, 200));
+
+        $summary = DB::table('ebook_ratings')
+            ->selectRaw('COUNT(*) as total, AVG(star) as average')
+            ->first();
+
+        $total = (int) ($summary->total ?? 0);
+        $average = $total > 0 ? round((float) ($summary->average ?? 0), 2) : 0.0;
+
+        $ratings = DB::table('ebook_ratings')
+            ->select('id', 'star', 'reviewer_name', 'improvement_suggestion', 'review_text', 'created_at')
+            ->orderByDesc('id')
+            ->limit($limit)
+            ->get()
+            ->map(static function ($row): array {
+                $createdAtRaw = (string) ($row->created_at ?? '');
+                $timestamp = $createdAtRaw !== '' ? strtotime($createdAtRaw) : false;
+                $isoTime = $timestamp !== false ? date(DATE_ATOM, $timestamp) : '';
+                $text = trim((string) ($row->improvement_suggestion ?? ''));
+                if ($text === '') {
+                    $text = trim((string) ($row->review_text ?? ''));
+                }
+
+                return [
+                    'id' => (int) ($row->id ?? 0),
+                    'star' => (int) ($row->star ?? 0),
+                    'name' => trim((string) ($row->reviewer_name ?? '')),
+                    'text' => $text,
+                    'time' => $timestamp !== false ? date('j M H:i', $timestamp) : '',
+                    'created_at' => $isoTime,
+                ];
+            })
+            ->all();
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Data rating berhasil diambil',
+            'data' => [
+                'summary' => [
+                    'total' => $total,
+                    'average' => $average,
+                ],
+                'ratings' => $ratings,
+            ],
+        ]);
+    }
+
+    private function storeEbookRating(Request $request): JsonResponse
+    {
+        $payload = is_array($request->json()->all()) ? $request->json()->all() : [];
+        if ($payload === []) {
+            $payload = $request->all();
+        }
+
+        $star = (int) ($payload['star'] ?? 0);
+        if ($star < 1 || $star > 5) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Nilai bintang harus antara 1 sampai 5.',
+            ], 422);
+        }
+
+        $reviewerName = trim(strip_tags((string) ($payload['name'] ?? '')));
+        if (function_exists('mb_substr')) {
+            $reviewerName = mb_substr($reviewerName, 0, 80);
+        } else {
+            $reviewerName = substr($reviewerName, 0, 80);
+        }
+
+        if ($reviewerName === '') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Nama pengulas wajib diisi.',
+            ], 422);
+        }
+
+        $reviewText = trim(strip_tags((string) ($payload['text'] ?? '')));
+        if (function_exists('mb_substr')) {
+            $reviewText = mb_substr($reviewText, 0, 280);
+        } else {
+            $reviewText = substr($reviewText, 0, 280);
+        }
+
+        if ($star <= 3 && $reviewText === '') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Saran perbaikan wajib diisi untuk rating 1 sampai 3.',
+            ], 422);
+        }
+
+        $createdAtInput = trim((string) ($payload['created_at'] ?? ''));
+        $createdAtTimestamp = $createdAtInput !== '' ? strtotime($createdAtInput) : false;
+        $createdAt = $createdAtTimestamp !== false ? date('Y-m-d H:i:s', $createdAtTimestamp) : now()->format('Y-m-d H:i:s');
+
+        $ipAddress = trim((string) $request->ip());
+        $userAgent = trim((string) $request->userAgent());
+        if ($userAgent !== '' && strlen($userAgent) > 255) {
+            $userAgent = substr($userAgent, 0, 255);
+        }
+
+        try {
+            $ratingId = (int) DB::table('ebook_ratings')->insertGetId([
+                'star' => $star,
+                'reviewer_name' => $reviewerName,
+                'review_text' => $reviewText !== '' ? $reviewText : null,
+                'improvement_suggestion' => $reviewText !== '' ? $reviewText : null,
+                'source_page' => 'presenova-ebook.html',
+                'ip_address' => $ipAddress !== '' ? $ipAddress : null,
+                'user_agent' => $userAgent !== '' ? $userAgent : null,
+                'created_at' => $createdAt,
+            ]);
+        } catch (\Throwable) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Gagal menyimpan rating ke database.',
+            ], 500);
+        }
+
+        $savedRating = DB::table('ebook_ratings')
+            ->select('id', 'star', 'reviewer_name', 'improvement_suggestion', 'review_text', 'created_at')
+            ->where('id', $ratingId)
+            ->first();
+
+        $createdAtRaw = (string) ($savedRating->created_at ?? $createdAt);
+        $savedTimestamp = $createdAtRaw !== '' ? strtotime($createdAtRaw) : false;
+        $savedText = trim((string) ($savedRating->improvement_suggestion ?? ''));
+        if ($savedText === '') {
+            $savedText = trim((string) ($savedRating->review_text ?? $reviewText));
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Rating berhasil disimpan.',
+            'data' => [
+                'rating' => [
+                    'id' => $ratingId,
+                    'star' => (int) ($savedRating->star ?? $star),
+                    'name' => trim((string) ($savedRating->reviewer_name ?? $reviewerName)),
+                    'text' => $savedText,
+                    'time' => $savedTimestamp !== false ? date('j M H:i', $savedTimestamp) : '',
+                    'created_at' => $savedTimestamp !== false ? date(DATE_ATOM, $savedTimestamp) : '',
+                ],
+            ],
         ]);
     }
 
@@ -1234,31 +1490,20 @@ class ApiController extends Controller
             return '';
         }
 
-        if (preg_match('~^https?://~', $rawPhoto)) {
+        $presenceDate = trim((string) ($attendance['presence_date'] ?? ''));
+        if (function_exists('attendance_photo_secure_url')) {
+            $secureUrl = attendance_photo_secure_url($rawPhoto, $presenceDate);
+            if ($secureUrl !== '') {
+                return $secureUrl;
+            }
+        }
+
+        // Never expose direct upload paths when secure URL resolution fails.
+        if (preg_match('~^https?://~i', $rawPhoto) || str_starts_with(strtolower($rawPhoto), 'data:')) {
             return $rawPhoto;
         }
 
-        $cleanPhoto = ltrim($rawPhoto, '/');
-        $prefix = rtrim($relativePrefix, '/');
-
-        if (str_starts_with($cleanPhoto, 'uploads/')) {
-            return $prefix . '/' . $cleanPhoto;
-        }
-        if (str_starts_with($cleanPhoto, '../')) {
-            return $cleanPhoto;
-        }
-        if (!str_contains($cleanPhoto, '/')) {
-            $presenceDate = trim((string) ($attendance['presence_date'] ?? ''));
-            if ($presenceDate !== '') {
-                $dateDir = date('Y-m-d', strtotime($presenceDate));
-                return $prefix . '/uploads/attendance/' . $dateDir . '/' . $cleanPhoto;
-            }
-        }
-        if (str_starts_with($cleanPhoto, 'attendance/')) {
-            return $prefix . '/uploads/' . $cleanPhoto;
-        }
-
-        return $prefix . '/uploads/attendance/' . $cleanPhoto;
+        return '';
     }
 
     private function logActivity(int $userId, string $userType, string $action, string $details = ''): void

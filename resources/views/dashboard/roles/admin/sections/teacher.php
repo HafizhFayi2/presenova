@@ -2,8 +2,15 @@
 // Get all teachers
 $sql = "SELECT * FROM teacher ORDER BY teacher_code";
 $stmt = $db->query($sql);
-$teachers = $stmt->fetchAll();
+$teachers = $stmt ? ($stmt->fetchAll() ?: []) : [];
+$teacherSectionError = $stmt ? '' : 'Gagal memuat data guru. Periksa koneksi database.';
 ?>
+
+<?php if ($teacherSectionError !== ''): ?>
+<div class="alert alert-warning mb-3">
+    <?php echo htmlspecialchars($teacherSectionError); ?>
+</div>
+<?php endif; ?>
 
 <div class="data-table-container">
     <div class="table-header">
@@ -46,15 +53,21 @@ $teachers = $stmt->fetchAll();
             </thead>
             <tbody>
                 <?php foreach($teachers as $index => $teacher): ?>
+                <?php
+                    $teacherType = strtoupper(trim((string) ($teacher['teacher_type'] ?? 'UMUM')));
+                    if (!in_array($teacherType, ['UMUM', 'KEJURUAN'], true)) {
+                        $teacherType = 'UMUM';
+                    }
+                ?>
                 <tr>
                     <td><?php echo $index + 1; ?></td>
-                    <td><span class="badge badge-primary"><?php echo $teacher['teacher_code']; ?></span></td>
-                    <td><?php echo $teacher['teacher_username']; ?></td>
-                    <td><?php echo $teacher['teacher_name']; ?></td>
-                    <td><?php echo $teacher['subject']; ?></td>
+                    <td><span class="badge badge-primary"><?php echo htmlspecialchars((string) ($teacher['teacher_code'] ?? '')); ?></span></td>
+                    <td><?php echo htmlspecialchars((string) ($teacher['teacher_username'] ?? '')); ?></td>
+                    <td><?php echo htmlspecialchars((string) ($teacher['teacher_name'] ?? '')); ?></td>
+                    <td><?php echo htmlspecialchars((string) ($teacher['subject'] ?? '-')); ?></td>
                     <td>
-                        <span class="badge <?php echo $teacher['teacher_type'] == 'UMUM' ? 'badge-primary' : 'badge-success'; ?>">
-                            <?php echo $teacher['teacher_type']; ?>
+                        <span class="badge <?php echo $teacherType === 'UMUM' ? 'badge-primary' : 'badge-success'; ?>">
+                            <?php echo htmlspecialchars($teacherType); ?>
                         </span>
                     </td>
                     <td>

@@ -1016,12 +1016,22 @@ $(document).ready(function() {
                 if (response.success) {
                     const statusLabel = response.data.status || 'SUCCESS';
                     let validationHtml = '';
-                    if (response.data.validation_path) {
-                        const imgSrc = '../' + response.data.validation_path;
+                    const validationSource = response.data.validation_url || response.data.validation_path || '';
+                    const attendanceSource = response.data.attendance_url || response.data.attendance_path || '';
+                    if (validationSource) {
+                        const isAbsoluteSource = /^(?:https?:)?\/\//i.test(validationSource)
+                            || validationSource.startsWith('data:')
+                            || validationSource.startsWith('/');
+                        const imgSrc = isAbsoluteSource
+                            ? validationSource
+                            : ('../' + String(validationSource).replace(/^\.?\//, ''));
+                        const storageInfo = attendanceSource
+                            ? '<div class="small text-muted mt-2">Foto absensi tersimpan aman.</div>'
+                            : '';
                         validationHtml = `
                             <div class="text-center mt-3">
                                 <img src="${imgSrc}" class="img-fluid rounded" style="max-width: 360px;">
-                                <div class="small text-muted mt-2">Tersimpan di ${response.data.attendance_path}</div>
+                                ${storageInfo}
                             </div>
                         `;
                     }
@@ -1160,4 +1170,3 @@ $(document).ready(function() {
     }
 }
 </style>
-

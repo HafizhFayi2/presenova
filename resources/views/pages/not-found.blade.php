@@ -3,6 +3,9 @@
     $mainErrorCode = (string) ((int) ($errorCode ?? 404));
     $subErrorLabel = strtolower((string) ($errorTitle ?? 'not found'));
     $descriptionText = (string) ($errorMessage ?? 'Halaman yang Anda cari tidak ditemukan atau sudah dipindahkan.');
+    $basePath = trim((string) request()->getBasePath(), '/');
+    $fallbackLoginUrl = $basePath === '' ? '/login.php' : '/' . $basePath . '/login.php';
+    $resolvedLoginUrl = (string) ($loginUrl ?? $fallbackLoginUrl);
 @endphp
 <!DOCTYPE html>
 <html lang="id">
@@ -156,7 +159,7 @@
         <p class="description">{{ $descriptionText }}</p>
         <p class="request-path">Request: {{ $requestedPath }}</p>
         <div class="actions">
-            <a class="action-btn" href="{{ url('index.php') }}">Kembali ke Beranda</a>
+            <a class="action-btn" href="{{ $resolvedLoginUrl }}">Kembali ke Login</a>
             <a class="action-btn" href="javascript:history.back()">Halaman Sebelumnya</a>
         </div>
     </main>

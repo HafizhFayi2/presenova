@@ -15,13 +15,13 @@ if hasattr(sys.stderr, "reconfigure"):
     sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
 IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".bmp", ".webp"}
-DEFAULT_MODEL = "SFace"
+DEFAULT_MODEL = "ArcFace"
 DEFAULT_DETECTOR = "opencv"
 DEFAULT_METRIC = "cosine"
-DEFAULT_MAX_REFERENCES = 1
-DEFAULT_BACKUP_MODEL = "SFace"
+DEFAULT_MAX_REFERENCES = 5
+DEFAULT_BACKUP_MODEL = "ArcFace"
 DEFAULT_BACKUP_DETECTOR = "mtcnn"
-DEFAULT_BACKUP_MAX_REFERENCES = 1
+DEFAULT_BACKUP_MAX_REFERENCES = 5
 
 
 def emit(payload: Dict, code: int = 0) -> None:
@@ -54,6 +54,7 @@ def extract_identity_token(file_path: Path) -> str:
 def scan_references(reference: Path, max_refs: int) -> List[Path]:
     refs: List[Path] = []
     seen = set()
+    main_reference: Optional[Path] = reference if reference.is_file() else None
 
     def add_ref(candidate: Path) -> None:
         key = str(candidate.resolve()).lower()
@@ -82,8 +83,34 @@ def scan_references(reference: Path, max_refs: int) -> List[Path]:
                     or stem.startswith(token_lower + "_")
                 ):
                     add_ref(child)
+        pose_dir = parent / "pose"
+        if pose_dir.exists() and pose_dir.is_dir():
+            for child in sorted(pose_dir.rglob("*")):
+                add_ref(child)
 
-    refs.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+    def reference_priority(path: Path) -> Tuple[int, float]:
+        mtime = path.stat().st_mtime if path.exists() else 0.0
+        if main_reference is not None:
+            try:
+                if path.resolve() == main_reference.resolve():
+                    return 0, -mtime
+            except Exception:
+                pass
+
+        parent_name = path.parent.name.lower()
+        stem = path.stem.lower()
+        if parent_name == "pose":
+            if stem.startswith("front_"):
+                return 1, -mtime
+            if stem.startswith("right_"):
+                return 2, -mtime
+            if stem.startswith("left_"):
+                return 3, -mtime
+            return 4, -mtime
+
+        return 5, -mtime
+
+    refs.sort(key=reference_priority)
     if max_refs > 0:
         refs = refs[:max_refs]
     return refs
@@ -213,6 +240,12 @@ def main() -> None:
         help="true/false. If true, try multiple detector backends when needed",
     )
     parser.add_argument(
+        "--strict-margin",
+        type=float,
+        default=0.03,
+        help="Extra safety margin below DeepFace threshold to reduce false-accepts (0.0-0.2).",
+    )
+    parser.add_argument(
         "--max-runtime-seconds",
         type=float,
         default=45.0,
@@ -243,6 +276,7 @@ def main() -> None:
     use_backup = str(args.use_backup).strip().lower() not in {"0", "false", "no", "off"}
     detector_fallbacks = str(args.detector_fallbacks).strip().lower() not in {"0", "false", "no", "off"}
     max_runtime_seconds = max(5.0, float(args.max_runtime_seconds))
+    strict_margin = max(0.0, min(0.2, float(args.strict_margin)))
 
     references = scan_references(reference, max_refs=max(primary_max_refs, backup_max_refs))
     if not references:
@@ -322,13 +356,18 @@ def main() -> None:
                 verified = bool(result.get("verified", False))
                 deepface_threshold = float(result.get("threshold", 0.0))
 
-                # Use DeepFace native confidence (0-100) when available (v0.0.99+),
-                # otherwise fall back to our compute_similarity formula.
                 native_confidence = result.get("confidence")
                 if native_confidence is not None:
-                    similarity = float(native_confidence)
-                else:
-                    similarity = compute_similarity(distance=distance, threshold=deepface_threshold)
+                    try:
+                        native_confidence = float(native_confidence)
+                    except Exception:
+                        native_confidence = None
+
+                # Keep threshold semantics stable: score is derived from distance + DeepFace threshold,
+                # so a DeepFace-verified match remains aligned with app threshold policy.
+                similarity = compute_similarity(distance=distance, threshold=deepface_threshold)
+                strict_threshold = max(0.0, deepface_threshold - strict_margin)
+                strict_verified = bool(verified and distance <= strict_threshold)
 
                 item = {
                     "stage": stage,
@@ -339,7 +378,10 @@ def main() -> None:
                     "distance": distance,
                     "deepface_threshold": deepface_threshold,
                     "verified": verified,
+                    "strict_verified": strict_verified,
+                    "strict_threshold": strict_threshold,
                     "similarity": similarity,
+                    "native_confidence": native_confidence,
                     "result": result,
                 }
                 attempts.append(
@@ -351,29 +393,42 @@ def main() -> None:
                         "distance": round(distance, 6),
                         "threshold": round(deepface_threshold, 6),
                         "verified": verified,
+                        "strict_verified": strict_verified,
+                        "strict_threshold": round(strict_threshold, 6),
                         "similarity": round(similarity, 2),
+                        "native_confidence": (
+                            round(float(native_confidence), 2)
+                            if native_confidence is not None
+                            else None
+                        ),
                     }
                 )
 
                 if best is None:
                     best = item
                 else:
-                    # Prioritize verified results, then lower distance.
-                    if item["verified"] and not best["verified"]:
+                    # Prioritize strict-verified results, then verified results, then lower distance.
+                    if item["strict_verified"] and not best["strict_verified"]:
                         best = item
-                    elif item["verified"] == best["verified"] and item["distance"] < best["distance"]:
+                    elif item["strict_verified"] == best["strict_verified"] and item["verified"] and not best["verified"]:
+                        best = item
+                    elif (
+                        item["strict_verified"] == best["strict_verified"]
+                        and item["verified"] == best["verified"]
+                        and item["distance"] < best["distance"]
+                    ):
                         best = item
 
-                # Stop as soon as DeepFace already verified above configured threshold.
-                if verified and similarity >= float(args.threshold):
+                # Stop as soon as strict-verified match already exceeds configured threshold.
+                if strict_verified and similarity >= float(args.threshold):
                     break
             if runtime_limited:
                 break
-            if best is not None and best["verified"] and best["similarity"] >= float(args.threshold):
+            if best is not None and best["strict_verified"] and best["similarity"] >= float(args.threshold):
                 break
         if runtime_limited:
             break
-        if best is not None and best["verified"] and best["similarity"] >= float(args.threshold):
+        if best is not None and best["strict_verified"] and best["similarity"] >= float(args.threshold):
             break
 
     if best is None:
@@ -415,7 +470,7 @@ def main() -> None:
         )
 
     final_similarity = float(best["similarity"])
-    passed = bool(best["verified"] and final_similarity >= float(args.threshold))
+    passed = bool(best["strict_verified"] and final_similarity >= float(args.threshold))
     box = extract_candidate_box(best["result"])
 
     response = {
@@ -431,7 +486,15 @@ def main() -> None:
             "stage_used": best["stage"],
             "distance": round(float(best["distance"]), 6),
             "deepface_threshold": round(float(best["deepface_threshold"]), 6),
-            "verified_by_deepface": bool(best["verified"]),
+            "strict_threshold": round(float(best["strict_threshold"]), 6),
+            "strict_margin": round(strict_margin, 6),
+            "verified_by_deepface_raw": bool(best["verified"]),
+            "verified_by_deepface": bool(best["strict_verified"]),
+            "native_confidence": (
+                round(float(best.get("native_confidence")), 2)
+                if best.get("native_confidence") is not None
+                else None
+            ),
             "reference_image": best["reference_image"],
             "total_references_scanned": len(references),
             "total_attempts": len(attempts),

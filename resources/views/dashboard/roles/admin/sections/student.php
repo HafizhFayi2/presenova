@@ -7,35 +7,34 @@ $sql = "SELECT s.*, c.class_name, j.name as jurusan_name, j.code as jurusan_code
         ORDER BY s.student_code";
 
 $studentsResult = $db->query($sql);
-
-// Check if query was successful
-if($studentsResult === false) {
-    die("Error in query: " . print_r($db->errorInfo(), true));
-}
-
-$students = $studentsResult->fetchAll();
+$students = $studentsResult ? ($studentsResult->fetchAll() ?: []) : [];
+$studentSectionError = $studentsResult ? '' : 'Gagal memuat data siswa. Periksa koneksi database.';
 
 // Get classes with jurusan info for the modal
 $classesResult = $db->query("SELECT c.*, j.jurusan_id, j.name as jurusan_name, j.code as jurusan_code
                               FROM class c 
                               LEFT JOIN jurusan j ON c.jurusan_id = j.jurusan_id 
                               ORDER BY c.class_name");
-
-if($classesResult === false) {
-    die("Error in query: " . print_r($db->errorInfo(), true));
+$classes = $classesResult ? ($classesResult->fetchAll() ?: []) : [];
+if (!$classesResult && $studentSectionError === '') {
+    $studentSectionError = 'Gagal memuat data kelas. Periksa koneksi database.';
 }
-
-$classes = $classesResult->fetchAll();
 
 // Get majors for filters
 $majorsResult = $db->query("SELECT * FROM jurusan ORDER BY name");
-if($majorsResult === false) {
-    die("Error in query: " . print_r($db->errorInfo(), true));
+$majors = $majorsResult ? ($majorsResult->fetchAll() ?: []) : [];
+if (!$majorsResult && $studentSectionError === '') {
+    $studentSectionError = 'Gagal memuat data jurusan. Periksa koneksi database.';
 }
-$majors = $majorsResult->fetchAll();
 $isOperatorView = isset($isOperator) ? (bool) $isOperator : ((int) ($_SESSION['level'] ?? 0) === 2);
 $canRevealStudentCode = !$isOperatorView && ((int) ($_SESSION['level'] ?? 0) === 1);
 ?>
+
+<?php if ($studentSectionError !== ''): ?>
+<div class="alert alert-warning mb-3">
+    <?php echo htmlspecialchars($studentSectionError); ?>
+</div>
+<?php endif; ?>
 
 <div class="data-table-container">
     <div class="table-header">
