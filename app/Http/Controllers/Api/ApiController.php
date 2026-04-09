@@ -574,6 +574,19 @@ class ApiController extends Controller
             return response()->json(['success' => false, 'message' => 'Wajah sudah terdaftar sebelumnya']);
         }
 
+        $hasPoseCapture = $this->hasPoseCaptureDataset(
+            (string) ($student->student_nisn ?? ''),
+            (string) ($student->class_name ?? ''),
+            (string) ($student->student_name ?? '')
+        );
+        session(['has_pose_capture' => $hasPoseCapture]);
+        if (!$hasPoseCapture) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Selesaikan capture pose (5 kanan, 5 kiri, 1 depan) sebelum registrasi wajah',
+            ], 422);
+        }
+
         if ($storedReferenceRaw !== '') {
             DB::table('student')
                 ->where('id', $studentId)
@@ -1606,6 +1619,27 @@ class ApiController extends Controller
         }
 
         return $binary;
+    }
+
+    private function hasPoseCaptureDataset(string $studentNisn, string $className, string $studentName): bool
+    {
+        $studentNisn = trim($studentNisn);
+        if ($studentNisn === '') {
+            return false;
+        }
+
+        $classFolder = $this->storageClassFolder($className);
+        $studentFolder = $this->storageStudentFolder($studentName !== '' ? $studentName : ('siswa_' . $studentNisn));
+        $poseDir = public_path('uploads/faces/' . $classFolder . '/' . $studentFolder . '/pose');
+        if (!is_dir($poseDir)) {
+            return false;
+        }
+
+        $right = glob($poseDir . '/right_*.jpg') ?: [];
+        $left = glob($poseDir . '/left_*.jpg') ?: [];
+        $front = glob($poseDir . '/front_*.jpg') ?: [];
+
+        return count($right) >= 5 && count($left) >= 5 && count($front) >= 1;
     }
 
     private function writePoseFrames(array $frames, string $prefix, int $maxCount, string $poseDir): int

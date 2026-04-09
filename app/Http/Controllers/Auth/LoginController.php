@@ -136,6 +136,7 @@ class LoginController extends Controller
                 ->where('id', (int) $student->id)
                 ->update(['created_login' => now()]);
 
+            $hasPoseCapture = $this->hasPoseCaptureDataset((string) ($student->student_nisn ?? ''));
             $this->syncSession([
                 'student_id' => (int) $student->id,
                 'student_nisn' => (string) ($student->student_nisn ?? ''),
@@ -145,12 +146,20 @@ class LoginController extends Controller
                 'role' => 'siswa',
                 'photo_reference' => $studentPhotoReference !== '' ? $studentPhotoReference : null,
                 'has_face' => $hasFace,
-                'has_pose_capture' => $this->hasPoseCaptureDataset((string) ($student->student_nisn ?? '')),
+                'has_pose_capture' => $hasPoseCapture,
                 'logged_in' => true,
             ]);
 
             $this->applyRememberCookie($remember, 'student', (int) $student->id);
             $this->touchActivityTimestamp($request, true);
+
+            if ($hasFace && !$hasPoseCapture) {
+                $this->syncSession([
+                    'face_pose_notice' => 'Lengkapi capture pose kepala (5 kanan, 5 kiri, 1 depan) sebelum menggunakan dashboard.',
+                ]);
+
+                return redirect($this->appPath('register.php?upload_face=1&pose_only=1'));
+            }
 
             if ($hasFace) {
                 return redirect($this->freshDashboardPath('dashboard/siswa.php'));
