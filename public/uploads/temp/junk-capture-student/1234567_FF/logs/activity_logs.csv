@@ -1,7 +1,0 @@
-﻿log_id,user_id,user_type,action,details,ip_address,user_agent,created_at
-352,11,student,dashboard_access,"Student dashboard accessed",::1,curl/8.16.0,"2026-02-18 17:06:25"
-341,11,student,dashboard_access,"Student dashboard accessed",::1,curl/8.16.0,"2026-02-18 15:47:58"
-326,11,student,dashboard_access,"Student dashboard accessed",::1,curl/8.16.0,"2026-02-18 15:35:40"
-325,11,student,dashboard_access,"Student dashboard accessed",::1,curl/8.16.0,"2026-02-18 15:35:25"
-318,11,student,dashboard_access,"Student dashboard accessed",::1,curl/8.16.0,"2026-02-18 15:29:27"
-316,11,student,dashboard_access,"Student dashboard accessed",::1,curl/8.16.0,"2026-02-18 15:28:26"

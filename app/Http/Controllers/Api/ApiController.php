@@ -23,6 +23,10 @@ class ApiController extends Controller
 
     public function checkLocation(Request $request): JsonResponse
     {
+        if (!$this->hasAuthenticatedSession()) {
+            return response()->json(['success' => false, 'message' => 'Unauthorized'], 401);
+        }
+
         $payload = is_array($request->json()->all()) ? $request->json()->all() : [];
         $latitude = $payload['latitude'] ?? $request->input('latitude');
         $longitude = $payload['longitude'] ?? $request->input('longitude');
@@ -1090,19 +1094,39 @@ class ApiController extends Controller
             return response('<div class="alert alert-danger">Unauthorized</div>');
         }
 
+        $role = strtolower(trim((string) session('role', '')));
+        $adminUserId = (int) session('user_id', 0);
+        $studentId = (int) session('student_id', 0);
+        $teacherId = (int) session('teacher_id', 0);
+
+        $isAdmin = $role === 'admin' && $adminUserId > 0;
+        $isStudent = in_array($role, ['siswa', 'student'], true) && $studentId > 0;
+        $isTeacher = in_array($role, ['guru', 'teacher'], true) && $teacherId > 0;
+        if (!$isAdmin && !$isStudent && !$isTeacher) {
+            return response('<div class="alert alert-danger">Akses ditolak</div>');
+        }
+
         $attendanceId = (int) $request->input('id', 0);
         if ($attendanceId <= 0) {
             return response('<div class="alert alert-warning">ID absensi tidak valid</div>');
         }
 
-        $attendance = DB::table('presence as p')
+        $attendanceQuery = DB::table('presence as p')
             ->join('student as s', 'p.student_id', '=', 's.id')
             ->join('class as c', 's.class_id', '=', 'c.class_id')
             ->join('present_status as ps', 'p.present_id', '=', 'ps.present_id')
             ->leftJoin('student_schedule as ss', 'p.student_schedule_id', '=', 'ss.student_schedule_id')
             ->leftJoin('teacher_schedule as ts', 'ss.teacher_schedule_id', '=', 'ts.schedule_id')
             ->leftJoin('teacher as t', 'ts.teacher_id', '=', 't.id')
-            ->where('p.presence_id', $attendanceId)
+            ->where('p.presence_id', $attendanceId);
+
+        if ($isStudent) {
+            $attendanceQuery->where('p.student_id', $studentId);
+        } elseif ($isTeacher) {
+            $attendanceQuery->where('ts.teacher_id', $teacherId);
+        }
+
+        $attendance = $attendanceQuery
             ->select(
                 'p.*',
                 's.student_name',
@@ -1121,7 +1145,7 @@ class ApiController extends Controller
             ->first();
 
         if (!$attendance) {
-            return response('<div class="alert alert-warning">Data tidak ditemukan</div>');
+            return response('<div class="alert alert-warning">Data tidak ditemukan atau tidak memiliki akses</div>');
         }
 
         $attendanceData = (array) $attendance;
@@ -1139,7 +1163,28 @@ class ApiController extends Controller
             return response()->json(['success' => false, 'message' => 'Method not allowed']);
         }
 
-        $studentId = (int) ($request->input('student_id') ?: session('student_id', 0));
+        if (!$this->hasAuthenticatedSession()) {
+            return response()->json(['success' => false, 'message' => 'Unauthorized'], 401);
+        }
+
+        $role = strtolower(trim((string) session('role', '')));
+        $sessionStudentId = (int) session('student_id', 0);
+        $requestedStudentId = (int) $request->input('student_id', 0);
+        $studentId = 0;
+
+        if ($sessionStudentId > 0) {
+            // Student can only sync own schedule even if payload sends different student_id.
+            if ($requestedStudentId > 0 && $requestedStudentId !== $sessionStudentId) {
+                return response()->json(['success' => false, 'message' => 'Akses ditolak'], 403);
+            }
+            $studentId = $sessionStudentId;
+        } elseif ($role === 'admin' && (int) session('user_id', 0) > 0) {
+            // Admin may target a specific student ID for maintenance tooling.
+            $studentId = $requestedStudentId;
+        } else {
+            return response()->json(['success' => false, 'message' => 'Akses ditolak'], 403);
+        }
+
         if ($studentId <= 0) {
             return response()->json(['success' => false, 'message' => 'Student ID tidak valid']);
         }
@@ -1498,11 +1543,6 @@ class ApiController extends Controller
             }
         }
 
-        // Never expose direct upload paths when secure URL resolution fails.
-        if (preg_match('~^https?://~i', $rawPhoto) || str_starts_with(strtolower($rawPhoto), 'data:')) {
-            return $rawPhoto;
-        }
-
         return '';
     }
 
@@ -1631,11 +1671,11 @@ class ApiController extends Controller
 
     private function logAttendanceError(string $message, array $context = []): void
     {
-        $logFile = public_path('uploads/temp/attendance_error.log');
-        $dir = dirname($logFile);
-        if (!is_dir($dir)) {
-            @mkdir($dir, 0777, true);
+        $logDir = storage_path('app/private/logs');
+        if (!is_dir($logDir)) {
+            @mkdir($logDir, 0750, true);
         }
+        $logFile = $logDir . DIRECTORY_SEPARATOR . 'attendance_error.log';
 
         $entry = [
             'time' => date('c'),

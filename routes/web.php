@@ -13,12 +13,13 @@ use Illuminate\Support\Facades\Route;
 
 $appUrlPathPrefix = trim((string) parse_url((string) config('app.url'), PHP_URL_PATH), '/');
 $prefixes = $appUrlPathPrefix !== '' ? [$appUrlPathPrefix, ''] : [''];
+$primaryPrefix = $appUrlPathPrefix !== '' ? $appUrlPathPrefix : '';
 
 foreach ($prefixes as $prefix) {
-    $isBaseRoutes = $prefix === '';
+    $isPrimaryRoutes = $prefix === $primaryPrefix;
     $groupAttributes = $prefix !== '' ? ['prefix' => $prefix] : [];
 
-    Route::group($groupAttributes, function () use ($isBaseRoutes) {
+    Route::group($groupAttributes, function () use ($isPrimaryRoutes) {
         $homeRoute = Route::get('/', [HomeController::class, 'getStarted']);
         $getStartedRoute = Route::get('/getstarted/index.php', [HomeController::class, 'getStarted']);
         Route::get('/public/getstarted/index.php', [HomeController::class, 'getStarted']);
@@ -34,7 +35,7 @@ foreach ($prefixes as $prefix) {
             ]);
         });
         Route::get('/ebook', static fn () => response('', 302)->header('Location', './presenova-ebook.html'));
-        if ($isBaseRoutes) {
+        if ($isPrimaryRoutes) {
             $homeRoute->name('home');
             $getStartedRoute->name('home.getstarted');
             $indexRoute->name('home.index');
@@ -65,7 +66,7 @@ foreach ($prefixes as $prefix) {
         Route::get('/dashboard/login', [LoginController::class, 'show']);
         Route::post('/dashboard/login', [LoginController::class, 'authenticate']);
         Route::get('/dashboard/logout', [LoginController::class, 'logout']);
-        if ($isBaseRoutes) {
+        if ($isPrimaryRoutes) {
             $loginShow->name('auth.login.show');
             $loginAuth->name('auth.login.authenticate');
             $logout->name('auth.logout');
@@ -78,7 +79,7 @@ foreach ($prefixes as $prefix) {
         Route::match(['GET', 'POST'], '/dashboard/admin.php', [DashboardPageController::class, 'admin']);
         Route::match(['GET', 'POST'], '/dashboard/guru.php', [DashboardPageController::class, 'guru']);
         Route::match(['GET', 'POST'], '/dashboard/siswa.php', [DashboardPageController::class, 'siswa']);
-        if ($isBaseRoutes) {
+        if ($isPrimaryRoutes) {
             $adminPath->name('dashboard.admin');
             $guruPath->name('dashboard.guru');
             $siswaPath->name('dashboard.siswa');
@@ -131,7 +132,7 @@ foreach ($prefixes as $prefix) {
             ->middleware(['signed:relative', 'throttle:120,1']);
         $secureAttendanceMedia = Route::get('/media/attendance', [SecureMediaController::class, 'attendance'])
             ->middleware(['signed:relative', 'throttle:120,1']);
-        if ($isBaseRoutes) {
+        if ($isPrimaryRoutes) {
             $secureFaceMedia->name('media.face');
             $secureAttendanceMedia->name('media.attendance');
         }

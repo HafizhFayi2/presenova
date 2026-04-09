@@ -16,6 +16,11 @@
 /public/build
 /public/hot
 /public/storage
+/public/uploads/temp/*
+!/public/uploads/temp/.gitkeep
+!/public/uploads/temp/.htaccess
+/storage/app/private/runtime/temp/*
+/storage/app/private/logs/*.log
 /storage/*.key
 /storage/pail
 /vendor

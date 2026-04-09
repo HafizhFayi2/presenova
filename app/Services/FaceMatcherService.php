@@ -35,7 +35,13 @@ class FaceMatcherService
             $uploadsBase = base_path('public/uploads');
         }
         $uploadsBase = rtrim((string) $uploadsBase, '/\\') . DIRECTORY_SEPARATOR;
-        $this->tempDir = $uploadsBase . 'temp' . DIRECTORY_SEPARATOR;
+
+        $privateTempBase = trim((string) env('FACE_TEMP_DIR', ''));
+        if ($privateTempBase === '') {
+            $privateTempBase = storage_path('app/private/runtime/temp');
+        }
+        $this->tempDir = rtrim($privateTempBase, '/\\') . DIRECTORY_SEPARATOR;
+
         $this->facesDir = $uploadsBase . 'faces' . DIRECTORY_SEPARATOR;
         $this->attendanceDir = $uploadsBase . 'attendance' . DIRECTORY_SEPARATOR;
 
