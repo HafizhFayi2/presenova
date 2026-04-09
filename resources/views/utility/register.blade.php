@@ -188,8 +188,6 @@ if (!empty($_SESSION['face_pose_notice'])) {
 if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['face_data'])) {
     if ($pose_only_mode) {
         $error = "Mode pose-only tidak membutuhkan upload foto depan.";
-    } elseif (empty($_SESSION['has_pose_capture'])) {
-        $error = "Silakan selesaikan pose capture (5 kanan, 5 kiri, 1 depan) terlebih dahulu.";
     }
     
     $face_data = $_POST['face_data'] ?? '';
@@ -211,11 +209,24 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['face_data'])) {
             WHERE s.id = ?";
     $stmt = $db->query($sql, [$student_id]);
     $student_data = $stmt ? $stmt->fetch() : null;
+
+    if ($student_data) {
+        $has_pose_capture_now = register_has_pose_capture_dataset(
+            $student_data['student_nisn'] ?? '',
+            $student_data['class_name'] ?? '',
+            $student_data['student_name'] ?? ''
+        );
+        $_SESSION['has_pose_capture'] = $has_pose_capture_now;
+        if (empty($error) && !$has_pose_capture_now) {
+            $_SESSION['face_pose_notice'] = 'Lengkapi capture pose kepala (5 kanan, 5 kiri, 1 depan) sebelum menyimpan wajah.';
+            $error = "Silakan selesaikan pose capture (5 kanan, 5 kiri, 1 depan) terlebih dahulu.";
+        }
+    } elseif (empty($error)) {
+        $error = "Data siswa tidak ditemukan!";
+    }
     
     if (!empty($error)) {
         // Do nothing, show error from pose validation.
-    } elseif (!$student_data) {
-        $error = "Data siswa tidak ditemukan!";
     } else {
         $nisn = $student_data['student_nisn'];
         $classFolder = storage_class_folder($student_data['class_name'] ?? 'kelas');

@@ -4,6 +4,13 @@ DirectoryIndex index.php
 <IfModule mod_rewrite.c>
     RewriteEngine On
 
+    # Let Let's Encrypt HTTP-01 challenge pass through without rewrites.
+    RewriteRule ^\.well-known/acme-challenge/ - [L,NC]
+
+    # Block hidden files and restricted runtime areas from direct web access.
+    RewriteRule (^|/)\.(?!well-known(?:/|$)) - [F,L,NC]
+    RewriteRule ^(face/(?:\.venv|faces_conf)|scripts|cron)(/|$) - [F,L,NC]
+
     # Handle Authorization Header
     RewriteCond %{HTTP:Authorization} .
     RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
@@ -17,11 +24,11 @@ DirectoryIndex index.php
     RewriteCond %{REQUEST_URI} (.+)/$
     RewriteRule ^ %1 [L,R=301]
 
-    # Block direct access to sensitive uploaded photos.
-    RewriteRule ^uploads/(faces|attendance)(/|$) - [F,L,NC]
+    # Block direct access to sensitive uploaded photos and runtime temp artifacts.
+    RewriteRule ^uploads/(faces|attendance|temp)(/|$) - [F,L,NC]
 
     # Serve static runtime assets directly
-    RewriteRule ^(assets|uploads|face|scripts)(/.*)?$ - [L,NC]
+    RewriteRule ^(assets|uploads|face)(/.*)?$ - [L,NC]
 
     # Serve known static files directly
     RewriteCond %{REQUEST_URI} \.(?:css|js|mjs|map|png|jpe?g|gif|svg|ico|webp|woff2?|ttf|eot|json|txt|xml|webmanifest|pdf|mp4|webm|ogg|wav|wasm|pkl|csv)$ [NC]

@@ -12,6 +12,7 @@ Options:
   --mail-password <password>   Password mailbox admin (default: auto-generate)
   --mail-host <host>           Host mail server (default: mail.<domain>)
   --letsencrypt-email <email>  Email untuk registrasi Let's Encrypt (default: admin-email)
+  --cert-mode <mode>           Mode challenge Let's Encrypt: auto|webroot|standalone (default: auto)
   --app-dir <path>             Path project Laravel untuk update .env (default: parent folder script)
   --skip-dns-check             Lewati preflight DNS check (A mail-host + MX domain)
   --skip-cert                  Lewati Let's Encrypt dan pakai self-signed certificate
@@ -72,6 +73,7 @@ SKIP_DNS_CHECK=0
 SKIP_CERT=0
 SKIP_ENV_UPDATE=0
 AUTO_GENERATED_PASSWORD=0
+CERT_MODE="auto"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -93,6 +95,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --letsencrypt-email)
       LETSENCRYPT_EMAIL="${2:-}"
+      shift 2
+      ;;
+    --cert-mode)
+      CERT_MODE="${2:-}"
       shift 2
       ;;
     --app-dir)
@@ -123,6 +129,7 @@ done
 
 [[ -n "${DOMAIN}" ]] || fail "--domain wajib diisi."
 [[ -n "${ADMIN_EMAIL}" ]] || fail "--admin-email wajib diisi."
+[[ "${CERT_MODE}" =~ ^(auto|webroot|standalone)$ ]] || fail "--cert-mode harus salah satu: auto, webroot, standalone."
 
 DOMAIN="$(printf '%s' "${DOMAIN%.}" | tr '[:upper:]' '[:lower:]')"
 
@@ -277,19 +284,66 @@ if [[ "${SKIP_CERT}" -eq 1 ]]; then
     -keyout "${TLS_KEY_FILE}" \
     -out "${TLS_CERT_FILE}"
 else
-  log "Minta TLS certificate Let's Encrypt untuk ${MAIL_HOST}..."
-  for svc in apache2 nginx; do
-    if systemctl list-unit-files | grep -q "^${svc}\.service" && systemctl is-active --quiet "${svc}"; then
-      log "Stop sementara service '${svc}' agar certbot standalone bisa bind port 80."
-      systemctl stop "${svc}"
-      STOPPED_WEB_SERVICES+=("${svc}")
-    fi
-  done
+  CERT_MODE_EFFECTIVE="${CERT_MODE}"
+  WEBROOT_PATH="${APP_DIR}/public"
+  HAS_ACTIVE_WEB_SERVER=0
 
-  trap restore_web_services EXIT
-  certbot certonly --standalone --non-interactive --agree-tos --email "${LETSENCRYPT_EMAIL}" --keep-until-expiring -d "${MAIL_HOST}"
-  restore_web_services
-  trap - EXIT
+  if systemctl is-active --quiet apache2; then
+    HAS_ACTIVE_WEB_SERVER=1
+  fi
+  if systemctl is-active --quiet nginx; then
+    HAS_ACTIVE_WEB_SERVER=1
+  fi
+
+  if [[ "${CERT_MODE_EFFECTIVE}" == "auto" ]]; then
+    if [[ -d "${WEBROOT_PATH}" && "${HAS_ACTIVE_WEB_SERVER}" -eq 1 ]]; then
+      CERT_MODE_EFFECTIVE="webroot"
+    else
+      CERT_MODE_EFFECTIVE="standalone"
+    fi
+  fi
+
+  log "Minta TLS certificate Let's Encrypt untuk ${MAIL_HOST} (mode: ${CERT_MODE_EFFECTIVE})..."
+  if [[ "${CERT_MODE_EFFECTIVE}" == "webroot" ]]; then
+    [[ -d "${WEBROOT_PATH}" ]] || fail "Webroot tidak ditemukan: ${WEBROOT_PATH}. Gunakan --cert-mode standalone atau perbaiki --app-dir."
+    mkdir -p "${WEBROOT_PATH}/.well-known/acme-challenge"
+    if ! certbot certonly --webroot -w "${WEBROOT_PATH}" --non-interactive --agree-tos --email "${LETSENCRYPT_EMAIL}" --keep-until-expiring -d "${MAIL_HOST}"; then
+      warn "Certbot mode webroot gagal. Fallback ke standalone..."
+      for svc in apache2 nginx; do
+        if systemctl list-unit-files | grep -q "^${svc}\.service" && systemctl is-active --quiet "${svc}"; then
+          log "Stop sementara service '${svc}' untuk fallback standalone."
+          systemctl stop "${svc}"
+          STOPPED_WEB_SERVICES+=("${svc}")
+        fi
+      done
+
+      trap restore_web_services EXIT
+      if ! certbot certonly --standalone --non-interactive --agree-tos --email "${LETSENCRYPT_EMAIL}" --keep-until-expiring -d "${MAIL_HOST}"; then
+        warn "Fallback standalone gagal. Proses yang masih listen di port 80:"
+        ss -ltnp '( sport = :80 )' || true
+        fail "Gagal menerbitkan sertifikat mail via webroot maupun standalone."
+      fi
+      restore_web_services
+      trap - EXIT
+    fi
+  else
+    for svc in apache2 nginx; do
+      if systemctl list-unit-files | grep -q "^${svc}\.service" && systemctl is-active --quiet "${svc}"; then
+        log "Stop sementara service '${svc}' agar certbot standalone bisa bind port 80."
+        systemctl stop "${svc}"
+        STOPPED_WEB_SERVICES+=("${svc}")
+      fi
+    done
+
+    trap restore_web_services EXIT
+    if ! certbot certonly --standalone --non-interactive --agree-tos --email "${LETSENCRYPT_EMAIL}" --keep-until-expiring -d "${MAIL_HOST}"; then
+      warn "Certbot standalone gagal. Proses yang masih listen di port 80:"
+      ss -ltnp '( sport = :80 )' || true
+      fail "Gagal menerbitkan sertifikat mail. Ulangi dengan --cert-mode webroot jika web app sudah aktif."
+    fi
+    restore_web_services
+    trap - EXIT
+  fi
 
   TLS_CERT_FILE="/etc/letsencrypt/live/${MAIL_HOST}/fullchain.pem"
   TLS_KEY_FILE="/etc/letsencrypt/live/${MAIL_HOST}/privkey.pem"

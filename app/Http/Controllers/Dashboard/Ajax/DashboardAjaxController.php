@@ -826,19 +826,39 @@ class DashboardAjaxController extends Controller
             return response('<div class="alert alert-danger">Unauthorized</div>');
         }
 
+        $role = strtolower(trim((string) session('role', '')));
+        $adminUserId = (int) session('user_id', 0);
+        $studentId = (int) session('student_id', 0);
+        $teacherId = (int) session('teacher_id', 0);
+
+        $isAdmin = $role === 'admin' && $adminUserId > 0;
+        $isStudent = in_array($role, ['siswa', 'student'], true) && $studentId > 0;
+        $isTeacher = in_array($role, ['guru', 'teacher'], true) && $teacherId > 0;
+        if (!$isAdmin && !$isStudent && !$isTeacher) {
+            return response('<div class="alert alert-danger">Akses ditolak</div>');
+        }
+
         $attendanceId = (int) $request->input('id', 0);
         if ($attendanceId <= 0) {
             return response('<div class="alert alert-warning">ID absensi tidak valid</div>');
         }
 
-        $attendance = DB::table('presence as p')
+        $attendanceQuery = DB::table('presence as p')
             ->join('student as s', 'p.student_id', '=', 's.id')
             ->join('class as c', 's.class_id', '=', 'c.class_id')
             ->join('present_status as ps', 'p.present_id', '=', 'ps.present_id')
             ->leftJoin('student_schedule as ss', 'p.student_schedule_id', '=', 'ss.student_schedule_id')
             ->leftJoin('teacher_schedule as ts', 'ss.teacher_schedule_id', '=', 'ts.schedule_id')
             ->leftJoin('teacher as t', 'ts.teacher_id', '=', 't.id')
-            ->where('p.presence_id', $attendanceId)
+            ->where('p.presence_id', $attendanceId);
+
+        if ($isStudent) {
+            $attendanceQuery->where('p.student_id', $studentId);
+        } elseif ($isTeacher) {
+            $attendanceQuery->where('ts.teacher_id', $teacherId);
+        }
+
+        $attendance = $attendanceQuery
             ->select(
                 'p.*',
                 's.student_name',
@@ -857,7 +877,7 @@ class DashboardAjaxController extends Controller
             ->first();
 
         if (!$attendance) {
-            return response('<div class="alert alert-warning">Data tidak ditemukan</div>');
+            return response('<div class="alert alert-warning">Data tidak ditemukan atau tidak memiliki akses</div>');
         }
 
         $attendanceData = (array) $attendance;
@@ -872,6 +892,18 @@ class DashboardAjaxController extends Controller
     public function getAttendanceStats(Request $request): JsonResponse
     {
         if (session('logged_in') !== true) {
+            return response()->json(['success' => false, 'message' => 'Akses ditolak']);
+        }
+
+        $role = strtolower(trim((string) session('role', '')));
+        $adminUserId = (int) session('user_id', 0);
+        $sessionStudentId = (int) session('student_id', 0);
+        $sessionTeacherId = (int) session('teacher_id', 0);
+
+        $isAdmin = $role === 'admin' && $adminUserId > 0;
+        $isStudent = in_array($role, ['siswa', 'student'], true) && $sessionStudentId > 0;
+        $isTeacher = in_array($role, ['guru', 'teacher'], true) && $sessionTeacherId > 0;
+        if (!$isAdmin && !$isStudent && !$isTeacher) {
             return response()->json(['success' => false, 'message' => 'Akses ditolak']);
         }
 
@@ -922,8 +954,15 @@ class DashboardAjaxController extends Controller
 
             $presenceQuery = DB::table('presence as p')
                 ->join('student as s', 'p.student_id', '=', 's.id')
+                ->leftJoin('student_schedule as ss', 'p.student_schedule_id', '=', 'ss.student_schedule_id')
+                ->leftJoin('teacher_schedule as ts', 'ss.teacher_schedule_id', '=', 'ts.schedule_id')
                 ->whereBetween('p.presence_date', [$cycleStart, $cycleEnd])
                 ->select('p.present_id', 'p.is_late');
+            if ($isStudent) {
+                $presenceQuery->where('p.student_id', $sessionStudentId);
+            } elseif ($isTeacher) {
+                $presenceQuery->where('ts.teacher_id', $sessionTeacherId);
+            }
             if ($filterClass !== '') {
                 $presenceQuery->where('s.class_id', $filterClass);
             }
@@ -940,6 +979,11 @@ class DashboardAjaxController extends Controller
                 ->whereBetween('ss.schedule_date', [$filterDateFrom, $filterDateTo])
                 ->whereNull('p.presence_id')
                 ->select('ss.schedule_date', 'ss.time_in as schedule_time_in', 'ss.time_out as schedule_time_out', 'sh.time_in as shift_time_in', 'sh.time_out as shift_time_out');
+            if ($isStudent) {
+                $alpaQuery->where('ss.student_id', $sessionStudentId);
+            } elseif ($isTeacher) {
+                $alpaQuery->where('ts.teacher_id', $sessionTeacherId);
+            }
             if ($filterClass !== '') {
                 $alpaQuery->where('s.class_id', $filterClass);
             }
@@ -1026,6 +1070,10 @@ class DashboardAjaxController extends Controller
 
     public function getSystemStats(): JsonResponse
     {
+        if (!$this->isAdminSession()) {
+            return response()->json(['success' => false, 'message' => 'Akses ditolak'], 403);
+        }
+
         try {
             $disks = [];
             $osFamily = PHP_OS_FAMILY;
@@ -1167,6 +1215,10 @@ class DashboardAjaxController extends Controller
 
     public function downloadSystemLogs(): Response|StreamedResponse
     {
+        if (!$this->isAdminSession()) {
+            return response('Akses ditolak', 403);
+        }
+
         $timestamp = date('Ymd_His');
         $exportedBy = trim((string) (session('fullname') ?: session('username') ?: ''));
         if ($exportedBy === '') {
@@ -1243,15 +1295,20 @@ class DashboardAjaxController extends Controller
             return response()->json(['success' => false, 'message' => 'Invalid request method']);
         }
 
-        $allowed = session('logged_in') === true
-            && (string) session('role', '') === 'admin'
-            && in_array((int) session('level', 0), [1, 2], true);
+        $allowed = $this->isAdminSession();
 
         if (!$allowed) {
             return response()->json(['success' => false, 'message' => 'Akses ditolak']);
         }
 
         return null;
+    }
+
+    private function isAdminSession(): bool
+    {
+        return session('logged_in') === true
+            && (string) session('role', '') === 'admin'
+            && in_array((int) session('level', 0), [1, 2], true);
     }
 
     private function assertGuruPost(Request $request): ?JsonResponse
@@ -1335,11 +1392,6 @@ class DashboardAjaxController extends Controller
             if ($secureUrl !== '') {
                 return $secureUrl;
             }
-        }
-
-        // Never expose direct upload paths when secure URL resolution fails.
-        if (preg_match('~^https?://~i', $rawPhoto) || str_starts_with(strtolower($rawPhoto), 'data:')) {
-            return $rawPhoto;
         }
 
         return '';

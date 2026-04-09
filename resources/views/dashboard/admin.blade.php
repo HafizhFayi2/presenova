@@ -866,6 +866,52 @@ function ensureDirectory($path) {
     return mkdir($path, 0777, true);
 }
 
+function resolveRuntimeTempRoots() {
+    $roots = [];
+
+    $configuredTemp = trim((string) env('FACE_TEMP_DIR', ''));
+    if ($configuredTemp !== '') {
+        $roots[] = $configuredTemp;
+    }
+
+    $projectRoot = defined('ROOT_PATH') ? (string) ROOT_PATH : '';
+    if ($projectRoot === '' && defined('BASE_PATH')) {
+        $projectRoot = dirname((string) BASE_PATH);
+    }
+    if ($projectRoot === '') {
+        $projectRoot = dirname(__DIR__, 3);
+    }
+
+    $roots[] = $projectRoot
+        . DIRECTORY_SEPARATOR . 'storage'
+        . DIRECTORY_SEPARATOR . 'app'
+        . DIRECTORY_SEPARATOR . 'private'
+        . DIRECTORY_SEPARATOR . 'runtime'
+        . DIRECTORY_SEPARATOR . 'temp';
+    $roots[] = BASE_PATH . DIRECTORY_SEPARATOR . 'uploads' . DIRECTORY_SEPARATOR . 'temp';
+
+    $resolved = [];
+    foreach ($roots as $root) {
+        $root = trim((string) $root);
+        if ($root === '') {
+            continue;
+        }
+
+        $real = realpath($root);
+        if ($real !== false) {
+            $root = $real;
+        }
+        if (!is_dir($root)) {
+            continue;
+        }
+
+        $normalized = rtrim(str_replace('\\', '/', $root), '/');
+        $resolved[$normalized] = $root;
+    }
+
+    return array_values($resolved);
+}
+
 function writeTextFile($path, $content) {
     if (is_array($content)) {
         $content = implode(PHP_EOL, array_map('strval', $content));
@@ -1101,7 +1147,19 @@ function backupStudentData($db, $studentId, $reason) {
     $safeName = sanitizeBackupPart($name);
     $folderName = $safeNisn . ($safeName ? '_' . $safeName : '');
 
-    $backupRoot = BASE_PATH . '/uploads/temp/junk-capture-student';
+    // Simpan backup di storage private (bukan web-public) agar tidak bisa diakses langsung via URL.
+    $projectRoot = defined('ROOT_PATH') ? (string) ROOT_PATH : '';
+    if ($projectRoot === '' && defined('BASE_PATH')) {
+        $projectRoot = dirname((string) BASE_PATH);
+    }
+    if ($projectRoot === '') {
+        $projectRoot = dirname(__DIR__, 3);
+    }
+    $backupRoot = $projectRoot
+        . DIRECTORY_SEPARATOR . 'storage'
+        . DIRECTORY_SEPARATOR . 'app'
+        . DIRECTORY_SEPARATOR . 'private'
+        . DIRECTORY_SEPARATOR . 'junk-capture-student';
     if (!ensureDirectory($backupRoot)) {
         return ['success' => false, 'error' => 'Gagal membuat folder backup.'];
     }
@@ -1206,7 +1264,17 @@ function backupStudentData($db, $studentId, $reason) {
     $copiedReferences = copyFilesUnique($referenceArtifacts['files'], $referencesDir);
 
     // Match logs
-    $matchLogs = glob(BASE_PATH . '/uploads/temp/match_log_' . $studentId . '_*.json') ?: [];
+    $matchLogs = [];
+    foreach (resolveRuntimeTempRoots() as $tempRoot) {
+        $candidateLogs = glob(rtrim($tempRoot, '/\\') . DIRECTORY_SEPARATOR . 'match_log_' . $studentId . '_*.json') ?: [];
+        foreach ($candidateLogs as $candidateLog) {
+            if (is_file($candidateLog)) {
+                $matchLogs[] = $candidateLog;
+            }
+        }
+    }
+    $matchLogs = array_values(array_unique($matchLogs));
+
     $matchLogEntries = [];
     foreach ($matchLogs as $matchLogFile) {
         if (!is_file($matchLogFile)) continue;
@@ -1236,20 +1304,47 @@ function backupStudentData($db, $studentId, $reason) {
 
     // Attendance logs from temp/capture
     $attendanceLogEntries = [];
-    $attendanceLogFile = BASE_PATH . '/uploads/temp/capture/attendance_log.txt';
-    if (is_file($attendanceLogFile)) {
-        $handle = fopen($attendanceLogFile, 'r');
-        if ($handle) {
-            while (($line = fgets($handle)) !== false) {
-                $line = trim($line);
-                if ($line === '') continue;
-                $decoded = json_decode($line, true);
-                if (!is_array($decoded)) continue;
-                if ((int)($decoded['student_id'] ?? 0) !== (int)$studentId) continue;
-                $attendanceLogEntries[] = $decoded;
-            }
-            fclose($handle);
+    $attendanceLogFiles = [];
+    foreach (resolveRuntimeTempRoots() as $tempRoot) {
+        $legacyCaptureLog = rtrim($tempRoot, '/\\') . DIRECTORY_SEPARATOR . 'capture' . DIRECTORY_SEPARATOR . 'attendance_log.txt';
+        if (is_file($legacyCaptureLog)) {
+            $attendanceLogFiles[] = $legacyCaptureLog;
         }
+    }
+
+    $privateAttendanceErrorLog = $projectRoot
+        . DIRECTORY_SEPARATOR . 'storage'
+        . DIRECTORY_SEPARATOR . 'app'
+        . DIRECTORY_SEPARATOR . 'private'
+        . DIRECTORY_SEPARATOR . 'logs'
+        . DIRECTORY_SEPARATOR . 'attendance_error.log';
+    if (is_file($privateAttendanceErrorLog)) {
+        $attendanceLogFiles[] = $privateAttendanceErrorLog;
+    }
+
+    $attendanceLogFiles = array_values(array_unique($attendanceLogFiles));
+    foreach ($attendanceLogFiles as $attendanceLogFile) {
+        $handle = fopen($attendanceLogFile, 'r');
+        if (!$handle) {
+            continue;
+        }
+
+        while (($line = fgets($handle)) !== false) {
+            $line = trim($line);
+            if ($line === '') continue;
+            $decoded = json_decode($line, true);
+            if (!is_array($decoded)) continue;
+
+            $entryStudentId = (int)($decoded['student_id'] ?? ($decoded['context']['student_id'] ?? 0));
+            if ($entryStudentId !== (int)$studentId) continue;
+
+            if (!isset($decoded['student_id'])) {
+                $decoded['student_id'] = $entryStudentId;
+            }
+            $attendanceLogEntries[] = $decoded;
+        }
+
+        fclose($handle);
     }
     writeCsvFile($logsDir . DIRECTORY_SEPARATOR . 'attendance_log.csv', $attendanceLogEntries);
 

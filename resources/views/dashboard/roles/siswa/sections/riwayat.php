@@ -67,10 +67,6 @@ function resolveAttendancePhotoUrl($rawPhoto, $presenceDate = null): string {
         }
     }
 
-    if (preg_match('~^https?://~i', (string) $rawPhoto) || str_starts_with(strtolower((string) $rawPhoto), 'data:')) {
-        return (string) $rawPhoto;
-    }
-
     return '';
 }
 

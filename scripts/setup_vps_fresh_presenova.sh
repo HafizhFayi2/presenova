@@ -11,7 +11,9 @@ Usage:
 Options:
   --domain <domain>            Domain utama app (default: presenova.my.id)
   --email <email>              Email Let's Encrypt (default: adm@presenova.my.id)
-  --aliases <a,b,c>            Alias domain (default: www.<domain>,ebook.<domain>)
+  --aliases <a,b,c>            Alias domain app utama (default: www.<domain>)
+  --ebook-domain <domain>      Domain ebook terpisah (default: ebook.<domain>)
+  --ebook-dir <path>           DocumentRoot ebook (default: <app-dir>/Ebook)
   --app-dir <path>             Root project (default: parent folder script)
   --db-name <name>             Nama database (default: presenova)
   --db-user <user>             User database (default: presenova)
@@ -20,6 +22,7 @@ Options:
   --db-port <port>             DB port untuk .env (default: 3306)
   --sql-file <path>            File SQL bootstrap (default: <app-dir>/presenova.sql)
   --skip-sql-import            Lewati import SQL awal
+  --skip-frontend-build        Lewati npm install + npm run build
   --skip-https                 Lewati setup HTTPS/Let's Encrypt
   --skip-cron                  Lewati setup cron push notification
   --with-deepface              Sekalian setup DeepFace venv
@@ -27,6 +30,7 @@ Options:
   --mail-admin-email <email>   Admin mailbox untuk --with-mail (default: adm@<domain>)
   --mail-host <host>           Host mail server untuk --with-mail (default: mail.<domain>)
   --mail-password <password>   Password mailbox untuk --with-mail (default: auto-generate)
+  --mail-cert-mode <mode>      Mode cert mail: auto|webroot|standalone (default: auto)
   --help                       Tampilkan bantuan
 
 Contoh:
@@ -34,6 +38,8 @@ Contoh:
     --domain presenova.my.id \
     --email adm@presenova.my.id \
     --app-dir /var/www/presenova \
+    --ebook-domain ebook.presenova.my.id \
+    --ebook-dir /var/www/presenova/Ebook \
     --db-name presenova \
     --db-user presenova
 USAGE
@@ -83,9 +89,70 @@ apt_install_packages() {
   apt-get install -y "${packages[@]}"
 }
 
+version_lt() {
+  local left="${1:-0.0.0}"
+  local right="${2:-0.0.0}"
+  [[ "${left}" != "${right}" ]] && [[ "$(printf '%s\n%s\n' "${left}" "${right}" | sort -V | head -n1)" == "${left}" ]]
+}
+
+ensure_node_for_vite() {
+  local min_node="20.19.0"
+  local current_node=""
+
+  if command -v node >/dev/null 2>&1; then
+    current_node="$(node -v | sed 's/^v//' | xargs)"
+  fi
+
+  if [[ -n "${current_node}" ]] && ! version_lt "${current_node}" "${min_node}"; then
+    log "Node.js ${current_node} sudah memenuhi syarat Vite (>= ${min_node})."
+    return 0
+  fi
+
+  log "Node.js ${current_node:-tidak terpasang} belum memenuhi syarat Vite (>= ${min_node}). Upgrade ke Node.js 22 LTS..."
+  curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
+  apt-get install -y nodejs
+  hash -r
+
+  command -v node >/dev/null 2>&1 || fail "Node.js gagal terpasang."
+  command -v npm >/dev/null 2>&1 || fail "npm gagal terpasang."
+
+  local upgraded_node
+  upgraded_node="$(node -v | sed 's/^v//' | xargs)"
+  if version_lt "${upgraded_node}" "${min_node}"; then
+    fail "Versi Node.js masih ${upgraded_node}. Minimal untuk Vite adalah ${min_node}."
+  fi
+  log "Node.js aktif: v${upgraded_node}"
+}
+
+install_frontend_dependencies() {
+  local project_dir="$1"
+  local npm_flags=(--include=dev --no-audit --no-fund)
+
+  if [[ -f "${project_dir}/package-lock.json" ]]; then
+    if (cd "${project_dir}" && npm ci "${npm_flags[@]}"); then
+      return 0
+    fi
+
+    log "npm ci gagal. Retry npm install setelah hapus node_modules (workaround optional dependency)."
+    rm -rf "${project_dir}/node_modules"
+    if (cd "${project_dir}" && npm install "${npm_flags[@]}"); then
+      return 0
+    fi
+
+    log "npm install masih gagal. Retry terakhir dengan regenerasi package-lock.json."
+    rm -rf "${project_dir}/node_modules" "${project_dir}/package-lock.json"
+    (cd "${project_dir}" && npm install "${npm_flags[@]}")
+    return $?
+  fi
+
+  (cd "${project_dir}" && npm install "${npm_flags[@]}")
+}
+
 DOMAIN="presenova.my.id"
 EMAIL="adm@presenova.my.id"
 ALIASES_RAW=""
+EBOOK_DOMAIN=""
+EBOOK_DIR=""
 APP_DIR=""
 DB_NAME="presenova"
 DB_USER="presenova"
@@ -94,6 +161,7 @@ DB_HOST="127.0.0.1"
 DB_PORT="3306"
 SQL_FILE=""
 SKIP_SQL_IMPORT=0
+SKIP_FRONTEND_BUILD=0
 SKIP_HTTPS=0
 SKIP_CRON=0
 WITH_DEEPFACE=0
@@ -101,6 +169,7 @@ WITH_MAIL=0
 MAIL_ADMIN_EMAIL=""
 MAIL_HOST=""
 MAIL_PASSWORD=""
+MAIL_CERT_MODE="auto"
 AUTO_GENERATED_DB_PASSWORD=0
 
 while [[ $# -gt 0 ]]; do
@@ -115,6 +184,14 @@ while [[ $# -gt 0 ]]; do
       ;;
     --aliases)
       ALIASES_RAW="${2:-}"
+      shift 2
+      ;;
+    --ebook-domain)
+      EBOOK_DOMAIN="${2:-}"
+      shift 2
+      ;;
+    --ebook-dir)
+      EBOOK_DIR="${2:-}"
       shift 2
       ;;
     --app-dir)
@@ -149,6 +226,10 @@ while [[ $# -gt 0 ]]; do
       SKIP_SQL_IMPORT=1
       shift
       ;;
+    --skip-frontend-build)
+      SKIP_FRONTEND_BUILD=1
+      shift
+      ;;
     --skip-https)
       SKIP_HTTPS=1
       shift
@@ -175,6 +256,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --mail-password)
       MAIL_PASSWORD="${2:-}"
+      shift 2
+      ;;
+    --mail-cert-mode)
+      MAIL_CERT_MODE="${2:-}"
       shift 2
       ;;
     --help|-h)
@@ -209,12 +294,17 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DEFAULT_APP_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 APP_DIR="${APP_DIR:-${DEFAULT_APP_DIR}}"
 APP_DIR="$(cd "${APP_DIR}" && pwd)"
+EBOOK_DOMAIN="${EBOOK_DOMAIN:-ebook.${DOMAIN}}"
+EBOOK_DIR="${EBOOK_DIR:-${APP_DIR}/Ebook}"
 
 [[ -f "${APP_DIR}/artisan" ]] || fail "File artisan tidak ditemukan di ${APP_DIR}."
 
 if [[ -z "${ALIASES_RAW}" ]]; then
-  ALIASES_RAW="www.${DOMAIN},ebook.${DOMAIN}"
+  ALIASES_RAW="www.${DOMAIN}"
 fi
+
+mkdir -p "${EBOOK_DIR}"
+EBOOK_DIR="$(cd "${EBOOK_DIR}" && pwd)"
 
 if [[ -z "${SQL_FILE}" ]]; then
   SQL_FILE="${APP_DIR}/presenova.sql"
@@ -222,6 +312,7 @@ fi
 
 MAIL_ADMIN_EMAIL="${MAIL_ADMIN_EMAIL:-adm@${DOMAIN}}"
 MAIL_HOST="${MAIL_HOST:-mail.${DOMAIN}}"
+[[ "${MAIL_CERT_MODE}" =~ ^(auto|webroot|standalone)$ ]] || fail "--mail-cert-mode harus salah satu: auto, webroot, standalone."
 
 log "Install dependency dasar VPS..."
 apt_install_packages \
@@ -246,8 +337,6 @@ apt_install_packages \
   php-opcache \
   certbot \
   python3-certbot-apache \
-  nodejs \
-  npm \
   cron \
   openssl
 
@@ -256,6 +345,9 @@ require_cmd composer
 require_cmd mysql
 require_cmd a2enmod
 require_cmd systemctl
+
+ensure_node_for_vite
+require_cmd npm
 
 if [[ -z "${DB_PASS}" ]]; then
   if command -v openssl >/dev/null 2>&1; then
@@ -316,14 +408,28 @@ upsert_env "${ENV_FILE}" "DB_DATABASE" "${DB_NAME}"
 upsert_env "${ENV_FILE}" "DB_USERNAME" "${DB_USER}"
 upsert_env "${ENV_FILE}" "DB_PASSWORD" "${DB_PASS}"
 
+log "Install dependency composer..."
+export COMPOSER_ALLOW_SUPERUSER=1
+(cd "${APP_DIR}" && composer install --no-dev --optimize-autoloader --no-interaction)
+
+[[ -f "${APP_DIR}/vendor/autoload.php" ]] || fail "vendor/autoload.php tidak ditemukan setelah composer install."
+
+if [[ "${SKIP_FRONTEND_BUILD}" -eq 0 ]]; then
+  if [[ -f "${APP_DIR}/package.json" ]]; then
+    log "Install dependency frontend (npm) + build asset..."
+    install_frontend_dependencies "${APP_DIR}"
+    (cd "${APP_DIR}" && npm run build)
+  else
+    log "Lewati build frontend karena package.json tidak ditemukan."
+  fi
+else
+  log "Build frontend dilewati (--skip-frontend-build)."
+fi
+
 if grep -qE '^APP_KEY=$' "${ENV_FILE}" || ! grep -qE '^APP_KEY=base64:' "${ENV_FILE}"; then
   log "Generate APP_KEY..."
   (cd "${APP_DIR}" && php artisan key:generate --force --no-interaction)
 fi
-
-log "Install dependency composer..."
-export COMPOSER_ALLOW_SUPERUSER=1
-(cd "${APP_DIR}" && composer install --no-dev --optimize-autoloader --no-interaction)
 
 if [[ "${SKIP_SQL_IMPORT}" -eq 0 ]]; then
   if [[ -f "${SQL_FILE}" ]]; then
@@ -354,10 +460,12 @@ if [[ "${CORE_TABLE_COUNT}" -lt 4 ]]; then
 fi
 
 log "Set permission runtime Laravel..."
-mkdir -p "${APP_DIR}/storage" "${APP_DIR}/bootstrap/cache" "${APP_DIR}/public/uploads"
-chown -R www-data:www-data "${APP_DIR}/storage" "${APP_DIR}/bootstrap/cache" "${APP_DIR}/public/uploads"
+mkdir -p "${APP_DIR}/storage" "${APP_DIR}/bootstrap/cache" "${APP_DIR}/public/uploads" "${EBOOK_DIR}"
+chown -R www-data:www-data "${APP_DIR}/storage" "${APP_DIR}/bootstrap/cache" "${APP_DIR}/public/uploads" "${EBOOK_DIR}"
 find "${APP_DIR}/storage" "${APP_DIR}/bootstrap/cache" "${APP_DIR}/public/uploads" -type d -exec chmod 775 {} \;
 find "${APP_DIR}/storage" "${APP_DIR}/bootstrap/cache" "${APP_DIR}/public/uploads" -type f -exec chmod 664 {} \;
+find "${EBOOK_DIR}" -type d -exec chmod 755 {} \;
+find "${EBOOK_DIR}" -type f -exec chmod 644 {} \;
 
 if [[ "${SKIP_HTTPS}" -eq 0 ]]; then
   log "Setup HTTPS Let's Encrypt..."
@@ -365,7 +473,9 @@ if [[ "${SKIP_HTTPS}" -eq 0 ]]; then
     --domain "${DOMAIN}" \
     --email "${EMAIL}" \
     --app-dir "${APP_DIR}" \
-    --aliases "${ALIASES_RAW}"
+    --aliases "${ALIASES_RAW}" \
+    --ebook-domain "${EBOOK_DOMAIN}" \
+    --ebook-dir "${EBOOK_DIR}"
 else
   log "Setup HTTPS dilewati (--skip-https)."
 fi
@@ -392,6 +502,7 @@ if [[ "${WITH_MAIL}" -eq 1 ]]; then
     --domain "${DOMAIN}"
     --admin-email "${MAIL_ADMIN_EMAIL}"
     --mail-host "${MAIL_HOST}"
+    --cert-mode "${MAIL_CERT_MODE}"
     --app-dir "${APP_DIR}"
   )
   if [[ -n "${MAIL_PASSWORD}" ]]; then
@@ -407,7 +518,9 @@ log "Finalisasi cache Laravel..."
 CREDENTIAL_FILE="/root/${DOMAIN//./-}-presenova-vps-credentials.txt"
 cat > "${CREDENTIAL_FILE}" <<EOF
 Domain        : ${DOMAIN}
+Ebook domain  : ${EBOOK_DOMAIN}
 App directory : ${APP_DIR}
+Ebook dir     : ${EBOOK_DIR}
 DB host       : ${DB_HOST}
 DB port       : ${DB_PORT}
 DB name       : ${DB_NAME}
@@ -426,5 +539,6 @@ echo
 echo "Verifikasi cepat:"
 echo "  curl -I http://${DOMAIN}"
 echo "  curl -I https://${DOMAIN}"
+echo "  curl -I https://${EBOOK_DOMAIN}"
 echo "  crontab -l | grep PRESENOVA_PUSH_CRON"
 echo "  systemctl status apache2 mariadb cron --no-pager"
