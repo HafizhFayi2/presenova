@@ -30,6 +30,7 @@ Options:
   --mail-admin-email <email>   Admin mailbox untuk --with-mail (default: adm@<domain>)
   --mail-host <host>           Host mail server untuk --with-mail (default: mail.<domain>)
   --mail-password <password>   Password mailbox untuk --with-mail (default: auto-generate)
+  --mail-cert-mode <mode>      Mode cert mail: auto|webroot|standalone (default: auto)
   --help                       Tampilkan bantuan
 
 Contoh:
@@ -168,6 +169,7 @@ WITH_MAIL=0
 MAIL_ADMIN_EMAIL=""
 MAIL_HOST=""
 MAIL_PASSWORD=""
+MAIL_CERT_MODE="auto"
 AUTO_GENERATED_DB_PASSWORD=0
 
 while [[ $# -gt 0 ]]; do
@@ -256,6 +258,10 @@ while [[ $# -gt 0 ]]; do
       MAIL_PASSWORD="${2:-}"
       shift 2
       ;;
+    --mail-cert-mode)
+      MAIL_CERT_MODE="${2:-}"
+      shift 2
+      ;;
     --help|-h)
       usage
       exit 0
@@ -306,6 +312,7 @@ fi
 
 MAIL_ADMIN_EMAIL="${MAIL_ADMIN_EMAIL:-adm@${DOMAIN}}"
 MAIL_HOST="${MAIL_HOST:-mail.${DOMAIN}}"
+[[ "${MAIL_CERT_MODE}" =~ ^(auto|webroot|standalone)$ ]] || fail "--mail-cert-mode harus salah satu: auto, webroot, standalone."
 
 log "Install dependency dasar VPS..."
 apt_install_packages \
@@ -495,6 +502,7 @@ if [[ "${WITH_MAIL}" -eq 1 ]]; then
     --domain "${DOMAIN}"
     --admin-email "${MAIL_ADMIN_EMAIL}"
     --mail-host "${MAIL_HOST}"
+    --cert-mode "${MAIL_CERT_MODE}"
     --app-dir "${APP_DIR}"
   )
   if [[ -n "${MAIL_PASSWORD}" ]]; then

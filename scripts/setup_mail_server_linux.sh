@@ -307,7 +307,25 @@ else
   if [[ "${CERT_MODE_EFFECTIVE}" == "webroot" ]]; then
     [[ -d "${WEBROOT_PATH}" ]] || fail "Webroot tidak ditemukan: ${WEBROOT_PATH}. Gunakan --cert-mode standalone atau perbaiki --app-dir."
     mkdir -p "${WEBROOT_PATH}/.well-known/acme-challenge"
-    certbot certonly --webroot -w "${WEBROOT_PATH}" --non-interactive --agree-tos --email "${LETSENCRYPT_EMAIL}" --keep-until-expiring -d "${MAIL_HOST}"
+    if ! certbot certonly --webroot -w "${WEBROOT_PATH}" --non-interactive --agree-tos --email "${LETSENCRYPT_EMAIL}" --keep-until-expiring -d "${MAIL_HOST}"; then
+      warn "Certbot mode webroot gagal. Fallback ke standalone..."
+      for svc in apache2 nginx; do
+        if systemctl list-unit-files | grep -q "^${svc}\.service" && systemctl is-active --quiet "${svc}"; then
+          log "Stop sementara service '${svc}' untuk fallback standalone."
+          systemctl stop "${svc}"
+          STOPPED_WEB_SERVICES+=("${svc}")
+        fi
+      done
+
+      trap restore_web_services EXIT
+      if ! certbot certonly --standalone --non-interactive --agree-tos --email "${LETSENCRYPT_EMAIL}" --keep-until-expiring -d "${MAIL_HOST}"; then
+        warn "Fallback standalone gagal. Proses yang masih listen di port 80:"
+        ss -ltnp '( sport = :80 )' || true
+        fail "Gagal menerbitkan sertifikat mail via webroot maupun standalone."
+      fi
+      restore_web_services
+      trap - EXIT
+    fi
   else
     for svc in apache2 nginx; do
       if systemctl list-unit-files | grep -q "^${svc}\.service" && systemctl is-active --quiet "${svc}"; then
