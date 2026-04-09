@@ -88,6 +88,65 @@ apt_install_packages() {
   apt-get install -y "${packages[@]}"
 }
 
+version_lt() {
+  local left="${1:-0.0.0}"
+  local right="${2:-0.0.0}"
+  [[ "${left}" != "${right}" ]] && [[ "$(printf '%s\n%s\n' "${left}" "${right}" | sort -V | head -n1)" == "${left}" ]]
+}
+
+ensure_node_for_vite() {
+  local min_node="20.19.0"
+  local current_node=""
+
+  if command -v node >/dev/null 2>&1; then
+    current_node="$(node -v | sed 's/^v//' | xargs)"
+  fi
+
+  if [[ -n "${current_node}" ]] && ! version_lt "${current_node}" "${min_node}"; then
+    log "Node.js ${current_node} sudah memenuhi syarat Vite (>= ${min_node})."
+    return 0
+  fi
+
+  log "Node.js ${current_node:-tidak terpasang} belum memenuhi syarat Vite (>= ${min_node}). Upgrade ke Node.js 22 LTS..."
+  curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
+  apt-get install -y nodejs
+  hash -r
+
+  command -v node >/dev/null 2>&1 || fail "Node.js gagal terpasang."
+  command -v npm >/dev/null 2>&1 || fail "npm gagal terpasang."
+
+  local upgraded_node
+  upgraded_node="$(node -v | sed 's/^v//' | xargs)"
+  if version_lt "${upgraded_node}" "${min_node}"; then
+    fail "Versi Node.js masih ${upgraded_node}. Minimal untuk Vite adalah ${min_node}."
+  fi
+  log "Node.js aktif: v${upgraded_node}"
+}
+
+install_frontend_dependencies() {
+  local project_dir="$1"
+  local npm_flags=(--include=dev --no-audit --no-fund)
+
+  if [[ -f "${project_dir}/package-lock.json" ]]; then
+    if (cd "${project_dir}" && npm ci "${npm_flags[@]}"); then
+      return 0
+    fi
+
+    log "npm ci gagal. Retry npm install setelah hapus node_modules (workaround optional dependency)."
+    rm -rf "${project_dir}/node_modules"
+    if (cd "${project_dir}" && npm install "${npm_flags[@]}"); then
+      return 0
+    fi
+
+    log "npm install masih gagal. Retry terakhir dengan regenerasi package-lock.json."
+    rm -rf "${project_dir}/node_modules" "${project_dir}/package-lock.json"
+    (cd "${project_dir}" && npm install "${npm_flags[@]}")
+    return $?
+  fi
+
+  (cd "${project_dir}" && npm install "${npm_flags[@]}")
+}
+
 DOMAIN="presenova.my.id"
 EMAIL="adm@presenova.my.id"
 ALIASES_RAW=""
@@ -271,8 +330,6 @@ apt_install_packages \
   php-opcache \
   certbot \
   python3-certbot-apache \
-  nodejs \
-  npm \
   cron \
   openssl
 
@@ -281,6 +338,8 @@ require_cmd composer
 require_cmd mysql
 require_cmd a2enmod
 require_cmd systemctl
+
+ensure_node_for_vite
 require_cmd npm
 
 if [[ -z "${DB_PASS}" ]]; then
@@ -351,11 +410,7 @@ export COMPOSER_ALLOW_SUPERUSER=1
 if [[ "${SKIP_FRONTEND_BUILD}" -eq 0 ]]; then
   if [[ -f "${APP_DIR}/package.json" ]]; then
     log "Install dependency frontend (npm) + build asset..."
-    if [[ -f "${APP_DIR}/package-lock.json" ]]; then
-      (cd "${APP_DIR}" && npm ci --include=dev --no-audit --no-fund)
-    else
-      (cd "${APP_DIR}" && npm install --include=dev --no-audit --no-fund)
-    fi
+    install_frontend_dependencies "${APP_DIR}"
     (cd "${APP_DIR}" && npm run build)
   else
     log "Lewati build frontend karena package.json tidak ditemukan."
