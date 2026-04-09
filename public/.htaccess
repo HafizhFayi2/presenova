@@ -4,6 +4,9 @@ DirectoryIndex index.php
 <IfModule mod_rewrite.c>
     RewriteEngine On
 
+    # Let Let's Encrypt HTTP-01 challenge pass through without rewrites.
+    RewriteRule ^\.well-known/acme-challenge/ - [L,NC]
+
     # Block hidden files and restricted runtime areas from direct web access.
     RewriteRule (^|/)\.(?!well-known(?:/|$)) - [F,L,NC]
     RewriteRule ^(face/(?:\.venv|faces_conf)|scripts|cron)(/|$) - [F,L,NC]
