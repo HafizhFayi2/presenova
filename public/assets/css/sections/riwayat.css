@@ -830,7 +830,7 @@ body.riwayat-modal-open .modal-backdrop {
 @media (max-width: 992px) {
     .section-shell .liquidGlass-wrapper {
         overflow-x: hidden !important;
-        overflow-y: hidden !important;
+        overflow-y: visible !important;
     }
 
     .riwayat-header {

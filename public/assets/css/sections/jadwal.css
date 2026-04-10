@@ -396,7 +396,7 @@
 @media (max-width: 992px) {
     .jadwal-section .liquidGlass-wrapper {
         overflow-x: hidden !important;
-        overflow-y: hidden !important;
+        overflow-y: visible !important;
     }
 
     .section-header {

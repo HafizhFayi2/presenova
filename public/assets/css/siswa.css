@@ -2043,7 +2043,6 @@
         }
 
         /* Keep horizontal scroll only for actual table wrappers */
-        .data-table-container,
         .table-responsive,
         .dataTables_scroll,
         .dataTables_scrollBody {
@@ -2054,6 +2053,15 @@
         }
 
         .data-table-container,
+        .liquidGlass-wrapper,
+        .section-shell,
+        .dashboard-card,
+        .main-content,
+        #content {
+                overflow-y: visible;
+                touch-action: auto;
+        }
+
         .dataTables_wrapper {
                 touch-action: pan-y pinch-zoom;
         }

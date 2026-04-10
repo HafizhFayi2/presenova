@@ -3469,16 +3469,15 @@ body {
   .data-table-container,
   .table-container,
   .activity-table {
-    overflow-x: auto;
-    overflow-y: hidden;
-    -webkit-overflow-scrolling: touch;
-    touch-action: pan-x;
+    overflow: visible;
+    touch-action: auto;
   }
 
   .table-responsive {
     overflow-x: auto;
+    overflow-y: hidden;
     -webkit-overflow-scrolling: touch;
-    touch-action: pan-x;
+    touch-action: pan-x pan-y;
   }
 
   /* DataTables: keep horizontal scroll only on the body */
@@ -3608,5 +3607,4 @@ body {
     margin-left: 4px;
   }
 }
-
 

@@ -1541,6 +1541,8 @@ $admin_section_css = [
 ];
 $active_admin_section_css = $admin_section_css[$table] ?? null;
 $active_admin_section_css_href = null;
+$admin_core_css_version = @filemtime(public_path('assets/css/admin.css')) ?: time();
+$admin_main_js_version = @filemtime(public_path('assets/js/main.js')) ?: time();
 if ($active_admin_section_css !== null) {
     $active_admin_section_css_file = public_path('assets/css/sections/' . $active_admin_section_css);
     $active_admin_section_css_version = is_file($active_admin_section_css_file) ? (string) filemtime($active_admin_section_css_file) : date('YmdHis');
@@ -1575,7 +1577,7 @@ if ($active_admin_section_css !== null) {
     <link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css">
 
     <!-- Import style.css -->
-    <link rel="stylesheet" href="../assets/css/admin.css">
+    <link rel="stylesheet" href="../assets/css/admin.css?v=<?php echo rawurlencode((string) $admin_core_css_version); ?>">
     <link rel="stylesheet" href="../assets/css/app-dialog.css">
 
     <!-- Ion Icons -->
@@ -2017,7 +2019,7 @@ if ($active_admin_section_css !== null) {
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="../assets/js/app-dialog.js?v=20260410b"></script>
     <script src="../assets/js/schedule-print-dialog.js"></script>
-    <script src="../assets/js/main.js"></script>
+    <script src="../assets/js/main.js?v=<?php echo rawurlencode((string) $admin_main_js_version); ?>"></script>
     
     <script>
     // Set cookie function

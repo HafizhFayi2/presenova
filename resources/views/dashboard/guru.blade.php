@@ -105,6 +105,11 @@ $guru_section_css = [
 ];
 $active_guru_section_css = $guru_section_css[$page] ?? null;
 $guru_core_css_version = @filemtime(public_path('assets/css/guru.css')) ?: time();
+$guru_section_css_version = null;
+if ($active_guru_section_css !== null) {
+    $guru_section_css_file = public_path('assets/css/sections/' . $active_guru_section_css);
+    $guru_section_css_version = @filemtime($guru_section_css_file) ?: time();
+}
 ?>
 <!DOCTYPE html>
 <html lang="id" data-theme="<?php echo $theme; ?>">
@@ -176,7 +181,7 @@ $guru_core_css_version = @filemtime(public_path('assets/css/guru.css')) ?: time(
 <link rel="stylesheet" href="../assets/css/guru.css?v=<?php echo $guru_core_css_version; ?>" data-inline-style="extracted">
     <link rel="stylesheet" href="../assets/css/app-dialog.css">
     <?php if ($active_guru_section_css !== null): ?>
-    <link rel="stylesheet" href="../assets/css/sections/<?php echo $active_guru_section_css; ?>">
+    <link rel="stylesheet" href="../assets/css/sections/<?php echo $active_guru_section_css; ?>?v=<?php echo rawurlencode((string) $guru_section_css_version); ?>">
     <?php endif; ?>
 
 </head>
