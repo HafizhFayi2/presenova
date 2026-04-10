@@ -62,12 +62,26 @@ class SecureMediaController extends Controller
 
     private function isLoggedIn(): bool
     {
-        return session('logged_in') === true;
+        $role = $this->currentRole();
+        $hasIdentity = (int) $this->sessionValue('student_id', 0) > 0
+            || (int) $this->sessionValue('teacher_id', 0) > 0
+            || (int) $this->sessionValue('user_id', 0) > 0;
+
+        if ($role === '' || !$hasIdentity) {
+            return false;
+        }
+
+        if ($this->toBool($this->sessionValue('logged_in', false))) {
+            return true;
+        }
+
+        // Backward compatibility: some legacy requests only persist role+id in native session.
+        return true;
     }
 
     private function currentRole(): string
     {
-        return strtolower(trim((string) session('role', '')));
+        return strtolower(trim((string) $this->sessionValue('role', '')));
     }
 
     private function canAccessFaceReference(string $targetPath): bool
@@ -81,7 +95,7 @@ class SecureMediaController extends Controller
             return false;
         }
 
-        $studentId = (int) session('student_id', 0);
+        $studentId = (int) $this->sessionValue('student_id', 0);
         if ($studentId <= 0) {
             return false;
         }
@@ -150,12 +164,12 @@ class SecureMediaController extends Controller
         }
 
         if (in_array($role, ['siswa', 'student'], true)) {
-            $studentId = (int) session('student_id', 0);
+            $studentId = (int) $this->sessionValue('student_id', 0);
             return $studentId > 0 && $studentId === (int) ($record['student_id'] ?? 0);
         }
 
         if (in_array($role, ['guru', 'teacher'], true)) {
-            $teacherId = (int) session('teacher_id', 0);
+            $teacherId = (int) $this->sessionValue('teacher_id', 0);
             $studentScheduleId = (int) ($record['student_schedule_id'] ?? 0);
             if ($teacherId <= 0 || $studentScheduleId <= 0) {
                 return false;
@@ -234,5 +248,38 @@ class SecureMediaController extends Controller
             'X-Content-Type-Options' => 'nosniff',
             'Content-Disposition' => 'inline; filename="private-media.jpg"',
         ]);
+    }
+
+    private function sessionValue(string $key, mixed $default = null): mixed
+    {
+        try {
+            if (session()->has($key)) {
+                return session($key);
+            }
+        } catch (\Throwable) {
+            // Ignore read errors and fallback to native session.
+        }
+
+        if (isset($_SESSION) && is_array($_SESSION) && array_key_exists($key, $_SESSION)) {
+            return $_SESSION[$key];
+        }
+
+        return $default;
+    }
+
+    private function toBool(mixed $value): bool
+    {
+        if (is_bool($value)) {
+            return $value;
+        }
+        if (is_int($value) || is_float($value)) {
+            return (int) $value === 1;
+        }
+        if (is_string($value)) {
+            $normalized = strtolower(trim($value));
+            return in_array($normalized, ['1', 'true', 'yes', 'on'], true);
+        }
+
+        return false;
     }
 }

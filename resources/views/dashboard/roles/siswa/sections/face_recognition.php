@@ -350,7 +350,7 @@ if (isset($db)) {
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
-                <img id="referenceModalImg" src="" alt="Foto Referensi Full" loading="eager" decoding="async" fetchpriority="high">
+                <img id="referenceModalImg" alt="Foto Referensi Full" loading="eager" decoding="async" fetchpriority="high">
             </div>
         </div>
     </div>
@@ -4003,6 +4003,10 @@ document.addEventListener('DOMContentLoaded', function() {
 
             if (modalImg) {
                 modalImg.addEventListener('error', function() {
+                    const currentSrc = (modalImg.getAttribute('src') || '').trim();
+                    if (!currentSrc) {
+                        return;
+                    }
                     setStatus('Foto referensi gagal dimuat. Muat ulang halaman atau hubungi admin.');
                 });
             }
@@ -4021,7 +4025,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
             modalEl.addEventListener('hidden.bs.modal', function() {
                 if (modalImg) {
-                    modalImg.src = '';
+                    modalImg.removeAttribute('src');
                 }
                 if (outsideClickHandler) {
                     document.removeEventListener('mousedown', outsideClickHandler);
