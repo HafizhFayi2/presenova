@@ -626,22 +626,22 @@ if (!function_exists('face_reference_secure_url')) {
         }
 
         $encodedRef = presenova_media_ref_encode($relativePath);
+        $routeParams = ['ref' => $encodedRef];
+        if ($appendVersion) {
+            $version = @filemtime($absolutePath);
+            if ($version) {
+                $routeParams['v'] = (string) $version;
+            }
+        }
         try {
             $url = \Illuminate\Support\Facades\URL::temporarySignedRoute(
                 'media.face',
                 now()->addMinutes(presenova_media_sign_ttl_minutes()),
-                ['ref' => $encodedRef],
+                $routeParams,
                 false
             );
         } catch (\Throwable) {
             return '';
-        }
-
-        if ($appendVersion) {
-            $version = @filemtime($absolutePath);
-            if ($version) {
-                $url .= (str_contains($url, '?') ? '&' : '?') . 'v=' . $version;
-            }
         }
 
         return $url;
@@ -662,22 +662,22 @@ if (!function_exists('attendance_photo_secure_url')) {
         }
 
         $encodedRef = presenova_media_ref_encode($relativePath);
+        $routeParams = ['ref' => $encodedRef];
+        if ($appendVersion) {
+            $version = @filemtime($absolutePath);
+            if ($version) {
+                $routeParams['v'] = (string) $version;
+            }
+        }
         try {
             $url = \Illuminate\Support\Facades\URL::temporarySignedRoute(
                 'media.attendance',
                 now()->addMinutes(presenova_media_sign_ttl_minutes()),
-                ['ref' => $encodedRef],
+                $routeParams,
                 false
             );
         } catch (\Throwable) {
             return '';
-        }
-
-        if ($appendVersion) {
-            $version = @filemtime($absolutePath);
-            if ($version) {
-                $url .= (str_contains($url, '?') ? '&' : '?') . 'v=' . $version;
-            }
         }
 
         return $url;

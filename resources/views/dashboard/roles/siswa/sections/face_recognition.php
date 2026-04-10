@@ -11,10 +11,6 @@ if (isset($student) && is_array($student) && !empty($student['photo_reference'])
 $studentKey = $nisn ?: ($_SESSION['student_id'] ?? '');
 $referencePath = ($nisn || $photoReference) ? $faceMatcher->getReferencePath($nisn, $photoReference) : null;
 $referenceUrl = $referencePath ? $faceMatcher->toPublicUrl($referencePath, '..') : '';
-$referenceVersion = $referencePath && is_file($referencePath) ? (@filemtime($referencePath) ?: time()) : null;
-if ($referenceUrl !== '' && $referenceVersion !== null) {
-    $referenceUrl .= (str_contains($referenceUrl, '?') ? '&' : '?') . 'v=' . $referenceVersion;
-}
 $referenceFile = $referencePath ? basename($referencePath) : '';
 
 $scheduleInfo = null;

@@ -129,9 +129,9 @@ foreach ($prefixes as $prefix) {
         Route::match(['GET', 'POST'], '/dashboard/ajax/save_attendance.php', [ApiController::class, 'saveAttendance']);
 
         $secureFaceMedia = Route::get('/media/face', [SecureMediaController::class, 'face'])
-            ->middleware(['signed:relative', 'throttle:120,1']);
+            ->middleware(['signed:relative,v', 'throttle:120,1']);
         $secureAttendanceMedia = Route::get('/media/attendance', [SecureMediaController::class, 'attendance'])
-            ->middleware(['signed:relative', 'throttle:120,1']);
+            ->middleware(['signed:relative,v', 'throttle:120,1']);
         if ($isPrimaryRoutes) {
             $secureFaceMedia->name('media.face');
             $secureAttendanceMedia->name('media.attendance');
