@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Media;
 
 use App\Http\Controllers\Controller;
+use App\Services\FaceMatcherService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Symfony\Component\HttpFoundation\Response;
@@ -87,12 +88,13 @@ class SecureMediaController extends Controller
 
         $student = DB::table('student')
             ->where('id', $studentId)
-            ->select('photo_reference', 'photo')
+            ->select('photo_reference', 'photo', 'student_nisn')
             ->first();
         if (!$student) {
             return false;
         }
 
+        $candidatePaths = [];
         $candidateReferences = array_filter([
             trim((string) ($student->photo_reference ?? '')),
             trim((string) ($student->photo ?? '')),
@@ -103,7 +105,31 @@ class SecureMediaController extends Controller
             if ($studentPath === null || !is_file($studentPath)) {
                 continue;
             }
-            if ($this->sameFile($targetPath, $studentPath)) {
+            $candidatePaths[] = $studentPath;
+        }
+
+        $studentNisn = trim((string) ($student->student_nisn ?? ''));
+        if ($studentNisn !== '') {
+            try {
+                /** @var FaceMatcherService $faceMatcher */
+                $faceMatcher = app(FaceMatcherService::class);
+                $fallbackCandidates = $faceMatcher->getReferenceCandidates(
+                    $studentNisn,
+                    trim((string) ($student->photo_reference ?? ''))
+                );
+                foreach ($fallbackCandidates as $fallbackPath) {
+                    if (is_string($fallbackPath) && $fallbackPath !== '' && is_file($fallbackPath)) {
+                        $candidatePaths[] = $fallbackPath;
+                    }
+                }
+            } catch (\Throwable) {
+                // Ignore fallback lookup failure and keep strict DB candidates.
+            }
+        }
+
+        $candidatePaths = array_values(array_unique($candidatePaths));
+        foreach ($candidatePaths as $candidatePath) {
+            if ($this->sameFile($targetPath, $candidatePath)) {
                 return true;
             }
         }
