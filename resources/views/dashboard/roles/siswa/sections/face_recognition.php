@@ -3997,18 +3997,12 @@ document.addEventListener('DOMContentLoaded', function() {
     if (referencePreview && referenceUrl) {
         const modalEl = document.getElementById('referenceModal');
         const modalImg = document.getElementById('referenceModalImg');
-        const referenceUrlWithoutQuery = referenceUrl.split('?')[0];
         if (modalEl && window.bootstrap) {
             referenceModal = new bootstrap.Modal(modalEl, { backdrop: true, keyboard: true });
             let outsideClickHandler = null;
 
             if (modalImg) {
                 modalImg.addEventListener('error', function() {
-                    if (!modalImg.dataset.retried && referenceUrlWithoutQuery && referenceUrlWithoutQuery !== referenceUrl) {
-                        modalImg.dataset.retried = '1';
-                        modalImg.src = referenceUrlWithoutQuery;
-                        return;
-                    }
                     setStatus('Foto referensi gagal dimuat. Muat ulang halaman atau hubungi admin.');
                 });
             }
@@ -4037,7 +4031,6 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         referencePreview.addEventListener('click', function() {
             if (modalImg) {
-                delete modalImg.dataset.retried;
                 modalImg.src = referenceUrl;
             }
             if (referenceModal) {

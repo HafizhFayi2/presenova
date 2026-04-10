@@ -612,6 +612,13 @@ if (!function_exists('presenova_media_sign_ttl_minutes')) {
     }
 }
 
+if (!function_exists('presenova_media_include_version_param')) {
+    function presenova_media_include_version_param(): bool
+    {
+        return filter_var((string) runtime_env('MEDIA_SIGN_INCLUDE_VERSION', 'false'), FILTER_VALIDATE_BOOLEAN);
+    }
+}
+
 if (!function_exists('face_reference_secure_url')) {
     function face_reference_secure_url($photoReference, $appendVersion = true): string
     {
@@ -627,7 +634,7 @@ if (!function_exists('face_reference_secure_url')) {
 
         $encodedRef = presenova_media_ref_encode($relativePath);
         $routeParams = ['ref' => $encodedRef];
-        if ($appendVersion) {
+        if ($appendVersion && presenova_media_include_version_param()) {
             $version = @filemtime($absolutePath);
             if ($version) {
                 $routeParams['v'] = (string) $version;
@@ -663,7 +670,7 @@ if (!function_exists('attendance_photo_secure_url')) {
 
         $encodedRef = presenova_media_ref_encode($relativePath);
         $routeParams = ['ref' => $encodedRef];
-        if ($appendVersion) {
+        if ($appendVersion && presenova_media_include_version_param()) {
             $version = @filemtime($absolutePath);
             if ($version) {
                 $routeParams['v'] = (string) $version;
