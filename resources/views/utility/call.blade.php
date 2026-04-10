@@ -59,11 +59,14 @@ if ($isAdminLoggedIn) {
 
 $registrationEmail = 'adm@presenova.my.id';
 $registrationMailto = 'mailto:' . $registrationEmail;
-$registrationSubject = rawurlencode('Permohonan Registrasi Siswa Baru - Presenova');
+$registrationSubject = rawurlencode('[REGISTRASI SISWA PRESENOVA] Pengajuan Akun Baru');
 $registrationBody = rawurlencode(
     "Halo Admin Presenova,\n\n"
-    . "Saya ingin mengajukan registrasi siswa baru.\n\n"
-    . "Nama Lengkap:\nNISN:\nKelas:\nNo. HP:\n\n"
+    . "Saya ingin mengajukan registrasi siswa baru dengan detail berikut:\n\n"
+    . "Nama Lengkap:\n"
+    . "Kelas:\n"
+    . "Jurusan:\n"
+    . "NISN:\n\n"
     . "Terima kasih."
 );
 $registrationMailtoDraft = $registrationMailto . '?subject=' . $registrationSubject . '&body=' . $registrationBody;
@@ -1246,7 +1249,7 @@ $registrationMailtoDraft = $registrationMailto . '?subject=' . $registrationSubj
                                     <i class="fas fa-paper-plane"></i> Hubungi Administrator untuk Registrasi
                                 </h3>
                                 <p class="redirect-subtitle">
-                                    Klik email admin di bawah ini. Sistem akan bantu membuka aplikasi email otomatis.
+                                    Klik email admin di bawah ini. Template registrasi sudah terisi, siswa tinggal melengkapi data lalu kirim.
                                 </p>
                             </div>
 
@@ -1285,7 +1288,7 @@ $registrationMailtoDraft = $registrationMailto . '?subject=' . $registrationSubj
                         <div class="text-center mt-4">
                             <p style="color: var(--text-secondary); font-size: 0.9rem;">
                                 <i class="fas fa-info-circle"></i> 
-                                Jika tidak diarahkan otomatis, klik tombol di atas atau salin alamat email secara manual
+                                Jika tidak diarahkan otomatis, klik tombol di atas atau salin email admin lalu kirim dengan format registrasi yang sama
                             </p>
                         </div>
 
