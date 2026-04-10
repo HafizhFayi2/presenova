@@ -11,6 +11,62 @@
     let refs = null;
     let currentRequest = null;
 
+    function clearTransientModalState(force) {
+        const html = document.documentElement;
+        const body = document.body;
+        if (!html || !body) {
+            return;
+        }
+
+        const hasVisibleModal = !!document.querySelector('.modal.show, .offcanvas.show');
+        if (!force && hasVisibleModal) {
+            return;
+        }
+
+        html.classList.remove('scroll-locked');
+        html.style.overflow = '';
+        html.style.paddingRight = '';
+
+        body.classList.remove('scroll-locked', 'modal-open', 'attendance-modal-open', 'riwayat-modal-open');
+        body.style.overflow = '';
+        body.style.paddingRight = '';
+        body.style.position = '';
+        body.style.top = '';
+        body.style.width = '';
+        body.style.touchAction = '';
+
+        document.querySelectorAll('.modal-backdrop, .offcanvas-backdrop').forEach(function(backdrop) {
+            backdrop.remove();
+        });
+    }
+
+    function markCurrentResolved(value) {
+        if (!currentRequest || currentRequest.done) {
+            return;
+        }
+        currentRequest.pendingAction = 'resolve';
+        currentRequest.pendingValue = value;
+    }
+
+    function markCurrentCancelled() {
+        if (!currentRequest || currentRequest.done) {
+            return;
+        }
+        currentRequest.pendingAction = 'cancel';
+        currentRequest.pendingValue = null;
+    }
+
+    function settleCurrentFromPending() {
+        if (!currentRequest || currentRequest.done) {
+            return;
+        }
+        if (currentRequest.pendingAction === 'resolve') {
+            settleCurrent(currentRequest.pendingValue);
+            return;
+        }
+        cancelCurrent();
+    }
+
     function buildModal() {
         if (refs) {
             return refs;
@@ -64,6 +120,15 @@
             if (!currentRequest) {
                 return;
             }
+            if (refs.bsModal) {
+                if (currentRequest.mode === 'prompt') {
+                    markCurrentResolved(refs.inputEl.value);
+                } else {
+                    markCurrentResolved(true);
+                }
+                hideModal();
+                return;
+            }
             if (currentRequest.mode === 'prompt') {
                 settleCurrent(refs.inputEl.value);
             } else {
@@ -73,16 +138,26 @@
         });
 
         refs.cancelBtn.addEventListener('click', function() {
+            if (refs.bsModal) {
+                markCurrentCancelled();
+                hideModal();
+                return;
+            }
             cancelCurrent();
             hideModal();
         });
 
         refs.closeBtn.addEventListener('click', function() {
+            if (refs.bsModal) {
+                markCurrentCancelled();
+                return;
+            }
             cancelCurrent();
         });
 
         refs.modalEl.addEventListener('hidden.bs.modal', function() {
-            cancelCurrent();
+            settleCurrentFromPending();
+            clearTransientModalState(true);
             runQueue();
         });
 
@@ -100,6 +175,7 @@
         refs.modalEl.classList.remove('show');
         refs.modalEl.style.display = 'none';
         refs.modalEl.setAttribute('aria-hidden', 'true');
+        clearTransientModalState(true);
         runQueue();
     }
 
@@ -158,7 +234,9 @@
             currentRequest = {
                 mode: config.mode,
                 resolve: resolve,
-                done: false
+                done: false,
+                pendingAction: null,
+                pendingValue: null
             };
 
             ui.bsModal.show();
@@ -231,6 +309,10 @@
             window.location.href = href;
         }
     }
+
+    window.addEventListener('pageshow', function() {
+        clearTransientModalState(false);
+    });
 
     const api = {
         alert: function(message, options) {

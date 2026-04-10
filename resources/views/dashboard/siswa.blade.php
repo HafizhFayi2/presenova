@@ -449,7 +449,7 @@ if ($active_siswa_section_css !== null) {
     <!-- JavaScript -->
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    <script src="../assets/js/app-dialog.js"></script>
+    <script src="../assets/js/app-dialog.js?v=20260410b"></script>
     <script src="../assets/js/schedule-print-dialog.js"></script>
     <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
     <script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap5.min.js"></script>
@@ -473,8 +473,8 @@ if ($active_siswa_section_css !== null) {
         return theme === 'dark' ? 'dark' : 'light';
     }
 
-    function ensureStudentPageUnlocked() {
-        if (siswaPage === 'face_recognition') {
+    function ensureStudentPageUnlocked(force = false) {
+        if (!force && siswaPage === 'face_recognition') {
             return;
         }
 
@@ -483,13 +483,18 @@ if ($active_siswa_section_css !== null) {
         html.classList.remove('scroll-locked');
         html.style.overflow = '';
         html.style.paddingRight = '';
-        body.classList.remove('scroll-locked', 'modal-open', 'attendance-modal-open');
+        body.classList.remove('scroll-locked', 'modal-open', 'attendance-modal-open', 'riwayat-modal-open');
         body.style.position = '';
         body.style.top = '';
         body.style.width = '';
         body.style.overflow = '';
         body.style.paddingRight = '';
         body.style.touchAction = '';
+
+        const navShell = document.getElementById('navShell');
+        if (navShell) {
+            navShell.classList.remove('show');
+        }
 
         document.querySelectorAll('.modal-backdrop, .offcanvas-backdrop').forEach((backdrop) => {
             backdrop.remove();
@@ -644,6 +649,9 @@ if ($active_siswa_section_css !== null) {
             }
 
             queuedUrls.push(normalized);
+            link.addEventListener('click', () => {
+                ensureStudentPageUnlocked(true);
+            });
             link.addEventListener('mouseenter', () => prefetchSectionUrl(normalized), { passive: true });
             link.addEventListener('focus', () => prefetchSectionUrl(normalized), { passive: true });
             link.addEventListener('touchstart', () => prefetchSectionUrl(normalized), { passive: true, once: true });

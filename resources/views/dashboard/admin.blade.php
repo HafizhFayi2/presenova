@@ -2015,7 +2015,7 @@ if ($active_admin_section_css !== null) {
     
     <!-- JavaScript -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    <script src="../assets/js/app-dialog.js"></script>
+    <script src="../assets/js/app-dialog.js?v=20260410b"></script>
     <script src="../assets/js/schedule-print-dialog.js"></script>
     <script src="../assets/js/main.js"></script>
     
@@ -2180,25 +2180,50 @@ if ($active_admin_section_css !== null) {
         }
         setTimeout(prime, 600);
     }
+
+    function clearAdminTransientState(options = {}) {
+        const ignoreVisibleModal = options.ignoreVisibleModal === true;
+        const hasVisibleModal = !!document.querySelector('.modal.show, .offcanvas.show');
+
+        if (ignoreVisibleModal || !hasVisibleModal) {
+            document.documentElement.classList.remove('scroll-locked');
+            document.documentElement.style.overflow = '';
+            document.documentElement.style.paddingRight = '';
+
+            document.body.classList.remove('scroll-locked', 'modal-open', 'attendance-modal-open', 'riwayat-modal-open');
+            document.body.style.overflow = '';
+            document.body.style.paddingRight = '';
+            document.body.style.position = '';
+            document.body.style.top = '';
+            document.body.style.width = '';
+            document.body.style.touchAction = '';
+
+            document.querySelectorAll('.modal-backdrop, .offcanvas-backdrop').forEach((backdrop) => {
+                backdrop.remove();
+            });
+        }
+
+        const sidebar = document.getElementById('sidebar');
+        if (sidebar) {
+            sidebar.classList.remove('show');
+        }
+
+        const loadingOverlay = document.getElementById('loadingOverlay');
+        if (loadingOverlay) {
+            loadingOverlay.style.display = 'none';
+        }
+    }
+
+    window.addEventListener('pageshow', function() {
+        clearAdminTransientState();
+    });
     
     $(document).ready(function() {
         if (!isOperatorSession) {
             initAdminSectionPrefetch();
         }
         // Fail-safe: clear stale body lock state (can happen after interrupted modal navigation)
-        document.documentElement.classList.remove('scroll-locked');
-        document.documentElement.style.overflow = '';
-        document.documentElement.style.paddingRight = '';
-        document.body.classList.remove('scroll-locked', 'modal-open');
-        document.body.style.overflow = '';
-        document.body.style.paddingRight = '';
-        document.body.style.position = '';
-        document.body.style.top = '';
-        document.body.style.width = '';
-
-        document.querySelectorAll('.modal-backdrop, .offcanvas-backdrop').forEach((backdrop) => {
-            backdrop.remove();
-        });
+        clearAdminTransientState();
 
     // Initialize DataTables with consistent styling
     $(document).on('init.dt', function(event, settings) {
@@ -2348,6 +2373,10 @@ if ($active_admin_section_css !== null) {
         $('#mobileMenuToggle').click(function() {
             $('#sidebar').toggleClass('show');
         });
+
+        $(document).on('click', '.sidebar-menu a.nav-link[href]', function() {
+            clearAdminTransientState({ ignoreVisibleModal: true });
+        });
         
         function updateAdminFavicon(theme) {
             const favicon = document.getElementById('adminFavicon');
@@ -2443,6 +2472,7 @@ if ($active_admin_section_css !== null) {
                 onclickAttr.includes('AppDialog.inlineConfirm') ||
                 onclickAttr.includes('inlineConfirm(');
             const isQuickAction = $link.hasClass('quick-action-item');
+            const isSidebarNav = $link.closest('.sidebar-menu').length > 0;
             const hasDownloadIntent = $link.is('[download]') || downloadLikeHrefPattern.test(href);
 
             if (e.isDefaultPrevented()) {
@@ -2450,7 +2480,7 @@ if ($active_admin_section_css !== null) {
                 return;
             }
 
-            if ($link.data('no-loading') || hasInlineConfirm || isQuickAction || hasDownloadIntent) {
+            if ($link.data('no-loading') || hasInlineConfirm || isQuickAction || isSidebarNav || hasDownloadIntent) {
                 $('#loadingOverlay').hide();
                 return;
             }
