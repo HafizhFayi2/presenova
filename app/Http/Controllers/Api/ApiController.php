@@ -11,6 +11,7 @@ use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
 
 class ApiController extends Controller
@@ -1415,7 +1416,15 @@ class ApiController extends Controller
                 'user_agent' => $userAgent !== '' ? $userAgent : null,
                 'created_at' => $createdAt,
             ]);
-        } catch (\Throwable) {
+        } catch (\Throwable $e) {
+            Log::error('Gagal menyimpan ebook rating.', [
+                'error' => $e->getMessage(),
+                'star' => $star,
+                'reviewer_name_length' => strlen($reviewerName),
+                'review_text_length' => strlen($reviewText),
+                'ip_address' => $ipAddress,
+            ]);
+
             return response()->json([
                 'success' => false,
                 'message' => 'Gagal menyimpan rating ke database.',

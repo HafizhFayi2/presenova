@@ -1981,6 +1981,15 @@ function ensureApiContext(){
   }
 }
 
+function isJsonApiResponse(response){
+  if(!response || !response.headers){
+    return false;
+  }
+
+  const contentType = String(response.headers.get('content-type') || '').toLowerCase();
+  return contentType.includes('application/json') || contentType.includes('+json');
+}
+
 async function requestRatingsApi(queryString, requestOptions = {}){
   ensureApiContext();
 
@@ -2003,8 +2012,12 @@ async function requestRatingsApi(queryString, requestOptions = {}){
         ...requestOptions
       });
 
-      resolvedRatingsApiUrl = baseUrl;
-      return response;
+      if(isJsonApiResponse(response)){
+        resolvedRatingsApiUrl = baseUrl;
+        return response;
+      }
+
+      lastError = new Error(`Endpoint ${baseUrl} merespons non-JSON (status ${response.status}).`);
     } catch (error) {
       lastError = error;
     }
