@@ -27,6 +27,38 @@
     <link rel="preload" as="style" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" onload="this.onload=null;this.rel='stylesheet'">
     <noscript><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"></noscript>
 
+    <script>
+        (function () {
+            var isStandalone = false;
+            var prefersReducedMotion = false;
+
+            try {
+                isStandalone = (
+                    (window.matchMedia && (
+                        window.matchMedia('(display-mode: standalone)').matches ||
+                        window.matchMedia('(display-mode: fullscreen)').matches
+                    )) ||
+                    window.navigator.standalone === true
+                );
+            } catch (error) {
+                isStandalone = false;
+            }
+
+            try {
+                prefersReducedMotion = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+            } catch (error) {
+                prefersReducedMotion = false;
+            }
+
+            if (isStandalone && !prefersReducedMotion) {
+                document.documentElement.setAttribute('data-entry-door', 'pending');
+                window.__presenovaEntryDoorFailsafe = window.setTimeout(function () {
+                    document.documentElement.removeAttribute('data-entry-door');
+                }, 3600);
+            }
+        })();
+    </script>
+
     <style>
         :root {
             --bg-1: #02060f;
@@ -2217,9 +2249,21 @@
             transition: opacity 0.18s ease;
         }
 
+        html[data-entry-door="pending"] .entry-door-overlay,
+        html[data-entry-door="opening"] .entry-door-overlay,
         .entry-door-overlay.is-visible {
             opacity: 1;
             visibility: visible;
+        }
+
+        html[data-entry-door="pending"] .page-shell {
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        html[data-entry-door="opening"] .page-shell {
+            opacity: 1;
+            transition: opacity 0.24s ease;
         }
 
         .entry-door-backdrop {
@@ -2333,6 +2377,60 @@
             <span>Presenova</span>
         </div>
     </div>
+    <script>
+        (function () {
+            const overlay = document.getElementById('entryDoorOverlay');
+            const html = document.documentElement;
+            const state = html.getAttribute('data-entry-door');
+
+            if (!overlay || state !== 'pending') {
+                if (overlay) {
+                    overlay.remove();
+                }
+                return;
+            }
+
+            const finish = function () {
+                if (overlay.dataset.closed === '1') {
+                    return;
+                }
+                overlay.dataset.closed = '1';
+                if (window.__presenovaEntryDoorFailsafe) {
+                    window.clearTimeout(window.__presenovaEntryDoorFailsafe);
+                    window.__presenovaEntryDoorFailsafe = null;
+                }
+                html.removeAttribute('data-entry-door');
+                overlay.remove();
+            };
+
+            const startOpen = function () {
+                if (overlay.dataset.opening === '1') {
+                    return;
+                }
+                overlay.dataset.opening = '1';
+                html.setAttribute('data-entry-door', 'opening');
+                overlay.classList.add('is-opening');
+            };
+
+            window.requestAnimationFrame(function () {
+                window.requestAnimationFrame(function () {
+                    window.setTimeout(startOpen, 80);
+                });
+            });
+
+            const rightDoor = overlay.querySelector('.entry-door-right');
+            if (rightDoor) {
+                rightDoor.addEventListener('transitionend', function (event) {
+                    if (event.propertyName === 'transform') {
+                        finish();
+                    }
+                }, { once: true });
+            }
+
+            window.setTimeout(startOpen, 260);
+            window.setTimeout(finish, 1800);
+        })();
+    </script>
     <div class="page-shell">
         <main class="hero-wrapper">
             <section class="hero-stage">
@@ -2469,57 +2567,6 @@
 
     <script src="https://cdn.jsdelivr.net/npm/three@0.160.1/build/three.min.js"></script>
     <script>
-        (function () {
-            const overlay = document.getElementById('entryDoorOverlay');
-            if (!overlay) {
-                return;
-            }
-
-            const isStandaloneMode =
-                (window.matchMedia && (
-                    window.matchMedia('(display-mode: standalone)').matches ||
-                    window.matchMedia('(display-mode: fullscreen)').matches
-                )) ||
-                window.navigator.standalone === true;
-            const prefersReducedMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-
-            if (!isStandaloneMode || prefersReducedMotion) {
-                overlay.remove();
-                return;
-            }
-
-            overlay.classList.add('is-visible');
-
-            const finalize = function () {
-                if (overlay.dataset.closed === '1') {
-                    return;
-                }
-                overlay.dataset.closed = '1';
-                overlay.remove();
-            };
-
-            const startOpen = function () {
-                overlay.classList.add('is-opening');
-            };
-
-            window.requestAnimationFrame(function () {
-                window.requestAnimationFrame(function () {
-                    window.setTimeout(startOpen, 150);
-                });
-            });
-
-            const rightDoor = overlay.querySelector('.entry-door-right');
-            if (rightDoor) {
-                rightDoor.addEventListener('transitionend', function (event) {
-                    if (event.propertyName === 'transform') {
-                        finalize();
-                    }
-                }, { once: true });
-            }
-
-            window.setTimeout(finalize, 1700);
-        })();
-
         (function () {
             const root = document.getElementById('lightPillarRoot');
             if (!root || typeof THREE === 'undefined') {
