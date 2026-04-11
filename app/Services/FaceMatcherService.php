@@ -29,6 +29,7 @@ class FaceMatcherService
     private const REFERENCE_CACHE_TTL_SECONDS = 120;
     private static array $referenceCandidatesCache = [];
     private static ?string $verifiedPythonBin = null;
+    private static ?string $deepfaceEnvPrefix = null;
     
     public function __construct() {
         $uploadsBase = public_path('uploads');
@@ -496,7 +497,9 @@ class FaceMatcherService
         $referencePath = realpath($referencePath) ?: $referencePath;
         $selfiePath = realpath($selfiePath) ?: $selfiePath;
 
-        $cmd = escapeshellarg($pythonBin)
+        $envPrefix = $this->deepfaceEnvPrefix();
+        $cmd = $envPrefix
+            . escapeshellarg($pythonBin)
             . ' -u'
             . ' ' . escapeshellarg($this->pythonScript)
             . ' --reference ' . escapeshellarg($referencePath)
@@ -580,7 +583,9 @@ class FaceMatcherService
 
         $candidates = $this->pythonBinCandidates();
         foreach ($candidates as $candidate) {
-            $probeCmd = escapeshellarg($candidate)
+            $envPrefix = $this->deepfaceEnvPrefix();
+            $probeCmd = $envPrefix
+                . escapeshellarg($candidate)
                 . ' -c '
                 . escapeshellarg('from deepface import DeepFace; print("deepface-ok")');
 
@@ -621,6 +626,50 @@ class FaceMatcherService
         $pushCandidate($candidates, 'python');
 
         return $candidates;
+    }
+
+    private function deepfaceEnvPrefix(): string
+    {
+        if (is_string(self::$deepfaceEnvPrefix)) {
+            return self::$deepfaceEnvPrefix;
+        }
+
+        $cacheBase = trim((string) env('DEEPFACE_HOME', ''));
+        if ($cacheBase === '') {
+            $cacheBase = storage_path('app/deepface');
+        }
+        $cacheBase = rtrim($cacheBase, '/\\');
+        $mplCache = $cacheBase . DIRECTORY_SEPARATOR . 'matplotlib';
+        $tfhubCache = $cacheBase . DIRECTORY_SEPARATOR . 'tfhub';
+        $xdgCache = $cacheBase . DIRECTORY_SEPARATOR . 'xdg';
+
+        foreach ([$cacheBase, $mplCache, $tfhubCache, $xdgCache] as $dir) {
+            if (!is_dir($dir)) {
+                @mkdir($dir, 0775, true);
+            }
+        }
+
+        if (PHP_OS_FAMILY === 'Windows') {
+            $prefix = 'set DEEPFACE_HOME=' . $this->escapeShellValue($cacheBase)
+                . '&& set MPLCONFIGDIR=' . $this->escapeShellValue($mplCache)
+                . '&& set TFHUB_CACHE_DIR=' . $this->escapeShellValue($tfhubCache)
+                . '&& set XDG_CACHE_HOME=' . $this->escapeShellValue($xdgCache)
+                . '&& ';
+        } else {
+            $prefix = 'DEEPFACE_HOME=' . escapeshellarg($cacheBase)
+                . ' MPLCONFIGDIR=' . escapeshellarg($mplCache)
+                . ' TFHUB_CACHE_DIR=' . escapeshellarg($tfhubCache)
+                . ' XDG_CACHE_HOME=' . escapeshellarg($xdgCache)
+                . ' ';
+        }
+
+        self::$deepfaceEnvPrefix = $prefix;
+        return $prefix;
+    }
+
+    private function escapeShellValue(string $value): string
+    {
+        return '"' . str_replace('"', '\"', $value) . '"';
     }
 
     private function runPythonCommand($command, $timeoutSeconds = 60) {
