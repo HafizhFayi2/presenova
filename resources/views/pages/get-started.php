@@ -2207,9 +2207,132 @@
                 min-height: 30px;
             }
         }
+        .entry-door-overlay {
+            position: fixed;
+            inset: 0;
+            z-index: 10050;
+            pointer-events: none;
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.18s ease;
+        }
+
+        .entry-door-overlay.is-visible {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        .entry-door-backdrop {
+            position: absolute;
+            inset: 0;
+            background:
+                radial-gradient(circle at 50% 16%, rgba(52, 140, 255, 0.2), transparent 48%),
+                linear-gradient(135deg, #020816 0%, #04102b 45%, #030915 100%);
+        }
+
+        .entry-door-panel {
+            position: absolute;
+            top: -18%;
+            bottom: -18%;
+            width: 64%;
+            background: linear-gradient(155deg, rgba(4, 16, 36, 0.98) 10%, rgba(6, 30, 74, 0.96) 52%, rgba(3, 14, 38, 0.98) 100%);
+            box-shadow: inset 0 0 0 1px rgba(126, 208, 255, 0.15), 0 0 38px rgba(3, 24, 60, 0.35);
+            transition: transform 0.96s cubic-bezier(0.2, 0.92, 0.18, 1), opacity 0.62s ease;
+            will-change: transform, opacity;
+        }
+
+        .entry-door-left {
+            left: -18%;
+            clip-path: polygon(0 0, 84% 0, 100% 50%, 84% 100%, 0 100%);
+            transform: translate3d(0, 0, 0) rotate(0deg);
+            transform-origin: 12% 50%;
+        }
+
+        .entry-door-right {
+            right: -18%;
+            clip-path: polygon(16% 0, 100% 0, 100% 100%, 16% 100%, 0 50%);
+            transform: translate3d(0, 0, 0) rotate(0deg);
+            transform-origin: 88% 50%;
+        }
+
+        .entry-door-seam {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 4px;
+            height: 76vh;
+            transform: translate(-50%, -50%) rotate(15deg);
+            border-radius: 999px;
+            background: linear-gradient(180deg, rgba(156, 238, 255, 0), rgba(156, 238, 255, 0.95), rgba(156, 238, 255, 0));
+            box-shadow: 0 0 20px rgba(105, 227, 255, 0.75);
+            transition: transform 0.62s ease, opacity 0.42s ease;
+        }
+
+        .entry-door-core {
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            transform: translate(-50%, -50%);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+            transition: opacity 0.4s ease, transform 0.52s ease;
+        }
+
+        .entry-door-core img {
+            width: clamp(86px, 22vw, 124px);
+            height: auto;
+            filter: drop-shadow(0 0 24px rgba(96, 224, 255, 0.48));
+        }
+
+        .entry-door-core span {
+            font-family: 'Sora', sans-serif;
+            font-weight: 700;
+            font-size: clamp(1.1rem, 2.6vw, 1.5rem);
+            letter-spacing: 0.06em;
+            color: #e6f7ff;
+            text-shadow: 0 8px 20px rgba(0, 0, 0, 0.4);
+        }
+
+        .entry-door-overlay.is-opening .entry-door-left {
+            transform: translate3d(-124%, 0, 0) rotate(-9deg);
+            opacity: 0.97;
+        }
+
+        .entry-door-overlay.is-opening .entry-door-right {
+            transform: translate3d(124%, 0, 0) rotate(9deg);
+            opacity: 0.97;
+        }
+
+        .entry-door-overlay.is-opening .entry-door-seam {
+            opacity: 0;
+            transform: translate(-50%, -50%) rotate(15deg) scaleY(0.3);
+        }
+
+        .entry-door-overlay.is-opening .entry-door-core {
+            opacity: 0;
+            transform: translate(-50%, -50%) scale(0.86);
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            .entry-door-overlay {
+                display: none !important;
+            }
+        }
     </style>
 </head>
 <body>
+    <div class="entry-door-overlay" id="entryDoorOverlay" aria-hidden="true">
+        <div class="entry-door-backdrop"></div>
+        <div class="entry-door-panel entry-door-left"></div>
+        <div class="entry-door-panel entry-door-right"></div>
+        <div class="entry-door-seam"></div>
+        <div class="entry-door-core">
+            <img src="<?php echo htmlspecialchars($assetBaseUrl, ENT_QUOTES, 'UTF-8'); ?>assets/images/logo-512.png" alt="">
+            <span>Presenova</span>
+        </div>
+    </div>
     <div class="page-shell">
         <main class="hero-wrapper">
             <section class="hero-stage">
@@ -2346,6 +2469,57 @@
 
     <script src="https://cdn.jsdelivr.net/npm/three@0.160.1/build/three.min.js"></script>
     <script>
+        (function () {
+            const overlay = document.getElementById('entryDoorOverlay');
+            if (!overlay) {
+                return;
+            }
+
+            const isStandaloneMode =
+                (window.matchMedia && (
+                    window.matchMedia('(display-mode: standalone)').matches ||
+                    window.matchMedia('(display-mode: fullscreen)').matches
+                )) ||
+                window.navigator.standalone === true;
+            const prefersReducedMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+            if (!isStandaloneMode || prefersReducedMotion) {
+                overlay.remove();
+                return;
+            }
+
+            overlay.classList.add('is-visible');
+
+            const finalize = function () {
+                if (overlay.dataset.closed === '1') {
+                    return;
+                }
+                overlay.dataset.closed = '1';
+                overlay.remove();
+            };
+
+            const startOpen = function () {
+                overlay.classList.add('is-opening');
+            };
+
+            window.requestAnimationFrame(function () {
+                window.requestAnimationFrame(function () {
+                    window.setTimeout(startOpen, 150);
+                });
+            });
+
+            const rightDoor = overlay.querySelector('.entry-door-right');
+            if (rightDoor) {
+                rightDoor.addEventListener('transitionend', function (event) {
+                    if (event.propertyName === 'transform') {
+                        finalize();
+                    }
+                }, { once: true });
+            }
+
+            window.setTimeout(finalize, 1700);
+        })();
+
         (function () {
             const root = document.getElementById('lightPillarRoot');
             if (!root || typeof THREE === 'undefined') {
