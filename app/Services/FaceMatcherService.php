@@ -28,6 +28,7 @@ class FaceMatcherService
     private $deepfaceStrictMargin = 0.03;
     private const REFERENCE_CACHE_TTL_SECONDS = 120;
     private static array $referenceCandidatesCache = [];
+    private static ?string $verifiedPythonBin = null;
     
     public function __construct() {
         $uploadsBase = public_path('uploads');
@@ -473,6 +474,14 @@ class FaceMatcherService
             return ['success' => false, 'error' => 'Python matcher tidak tersedia'];
         }
 
+        $pythonBin = $this->resolveWorkingPythonBin();
+        if ($pythonBin === null) {
+            return [
+                'success' => false,
+                'error' => 'Runtime Python DeepFace tidak siap. Pastikan DeepFace terpasang pada PYTHON_BIN atau venv public/face/.venv.'
+            ];
+        }
+
         $threshold = $this->threshold;
         if (isset($options['threshold'])) {
             $threshold = max(0, min(100, (float) $options['threshold']));
@@ -487,7 +496,7 @@ class FaceMatcherService
         $referencePath = realpath($referencePath) ?: $referencePath;
         $selfiePath = realpath($selfiePath) ?: $selfiePath;
 
-        $cmd = escapeshellarg($this->pythonBin)
+        $cmd = escapeshellarg($pythonBin)
             . ' -u'
             . ' ' . escapeshellarg($this->pythonScript)
             . ' --reference ' . escapeshellarg($referencePath)
@@ -561,6 +570,57 @@ class FaceMatcherService
         }
 
         return $result;
+    }
+
+    private function resolveWorkingPythonBin(): ?string
+    {
+        if (is_string(self::$verifiedPythonBin) && self::$verifiedPythonBin !== '') {
+            return self::$verifiedPythonBin;
+        }
+
+        $candidates = $this->pythonBinCandidates();
+        foreach ($candidates as $candidate) {
+            $probeCmd = escapeshellarg($candidate)
+                . ' -c '
+                . escapeshellarg('from deepface import DeepFace; print("deepface-ok")');
+
+            $probe = $this->runPythonCommand($probeCmd, 20);
+            $output = strtolower(trim((string) ($probe['output'] ?? '')));
+            if (($probe['exit_code'] ?? 1) === 0 && str_contains($output, 'deepface-ok')) {
+                self::$verifiedPythonBin = $candidate;
+                return $candidate;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private function pythonBinCandidates(): array
+    {
+        $candidates = [];
+        $pushCandidate = static function (array &$bucket, string $candidate): void {
+            $candidate = trim($candidate);
+            if ($candidate === '') {
+                return;
+            }
+            if (preg_match('/^[A-Za-z]:[\\\\\\/]|^\\//', $candidate) === 1 && !is_file($candidate)) {
+                return;
+            }
+            if (!in_array($candidate, $bucket, true)) {
+                $bucket[] = $candidate;
+            }
+        };
+
+        $pushCandidate($candidates, (string) $this->pythonBin);
+        $pushCandidate($candidates, public_path('face/.venv/bin/python'));
+        $pushCandidate($candidates, public_path('face/.venv/Scripts/python.exe'));
+        $pushCandidate($candidates, 'python3');
+        $pushCandidate($candidates, 'python');
+
+        return $candidates;
     }
 
     private function runPythonCommand($command, $timeoutSeconds = 60) {
