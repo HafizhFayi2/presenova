@@ -795,6 +795,112 @@ class DashboardAjaxController extends Controller
         return response()->json(['success' => false, 'message' => 'Role tidak memiliki izin']);
     }
 
+    public function deleteFaceReference(Request $request, FaceMatcherService $faceMatcher): JsonResponse
+    {
+        if ($denied = $this->assertSiswaPost($request)) {
+            return $denied;
+        }
+
+        if ((string) $request->input('confirm_delete', '0') !== '1') {
+            return response()->json(['success' => false, 'message' => 'Konfirmasi penghapusan tidak valid'], 422);
+        }
+
+        $studentId = (int) session('student_id', 0);
+        if ($studentId <= 0) {
+            return response()->json(['success' => false, 'message' => 'Session siswa tidak valid']);
+        }
+
+        $student = DB::table('student as s')
+            ->leftJoin('class as c', 's.class_id', '=', 'c.class_id')
+            ->where('s.id', $studentId)
+            ->select(
+                's.id',
+                's.student_nisn',
+                's.student_name',
+                's.photo_reference',
+                's.face_embedding',
+                's.photo',
+                'c.class_name'
+            )
+            ->first();
+
+        if (!$student) {
+            return response()->json(['success' => false, 'message' => 'Data siswa tidak ditemukan']);
+        }
+
+        $studentData = (array) $student;
+        $filesToDelete = $this->collectStudentFaceReferenceFiles($studentData, $faceMatcher);
+        $deleteResult = $this->deleteStudentFaceReferenceFiles($filesToDelete);
+
+        if (!empty($deleteResult['failed'])) {
+            $failedFiles = array_map(
+                static fn ($path): string => basename((string) $path),
+                $deleteResult['failed']
+            );
+            $failedFiles = array_values(array_filter(array_unique($failedFiles), static fn (string $item): bool => $item !== ''));
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Sebagian file foto referensi gagal dihapus. Coba ulangi atau hubungi admin.',
+                'failed_files' => $failedFiles,
+            ], 500);
+        }
+
+        $updated = DB::table('student')
+            ->where('id', $studentId)
+            ->update([
+                'photo_reference' => null,
+                'face_embedding' => null,
+                'last_face_update' => now(),
+            ]);
+
+        if ($updated === 0) {
+            $current = DB::table('student')
+                ->select('photo_reference', 'face_embedding')
+                ->where('id', $studentId)
+                ->first();
+
+            $alreadyCleared = $current
+                && trim((string) ($current->photo_reference ?? '')) === ''
+                && trim((string) ($current->face_embedding ?? '')) === '';
+
+            if (!$alreadyCleared) {
+                return response()->json(['success' => false, 'message' => 'Gagal menghapus referensi wajah di database'], 500);
+            }
+        }
+
+        session([
+            'has_face' => false,
+            'has_pose_capture' => false,
+            'photo_reference' => null,
+            'face_reference_missing' => true,
+            'face_pose_notice' => 'Data wajah (depan, kiri, kanan) telah dihapus. Silakan lakukan register ulang.',
+        ]);
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            $_SESSION['has_face'] = false;
+            $_SESSION['has_pose_capture'] = false;
+            $_SESSION['photo_reference'] = null;
+            $_SESSION['face_reference_missing'] = true;
+            $_SESSION['face_pose_notice'] = 'Data wajah (depan, kiri, kanan) telah dihapus. Silakan lakukan register ulang.';
+        }
+
+        if (function_exists('logActivity')) {
+            logActivity(
+                $studentId,
+                'student',
+                'delete_face_reference',
+                'Siswa menghapus foto referensi wajah melalui profil'
+            );
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Foto referensi dan dataset pose (depan, kiri, kanan) berhasil dihapus. Silakan registrasi ulang.',
+            'redirect_url' => '../register.php?upload_face=1&pose_only=1',
+            'deleted_files' => count($deleteResult['deleted']),
+        ]);
+    }
+
     public function checkSchedule(Request $request): JsonResponse
     {
         if ($denied = $this->assertAdminPost($request)) {
@@ -1326,6 +1432,200 @@ class DashboardAjaxController extends Controller
         }
 
         return null;
+    }
+
+    private function assertSiswaPost(Request $request): ?JsonResponse
+    {
+        if (strtoupper((string) $request->getMethod()) !== 'POST') {
+            return response()->json(['success' => false, 'message' => 'Invalid request method']);
+        }
+
+        $role = strtolower(trim((string) session('role', '')));
+        $allowed = session('logged_in') === true
+            && in_array($role, ['siswa', 'student'], true)
+            && (int) session('student_id', 0) > 0;
+
+        if (!$allowed) {
+            return response()->json(['success' => false, 'message' => 'Akses ditolak']);
+        }
+
+        return null;
+    }
+
+    /**
+     * @param array<string, mixed> $student
+     * @return array<int, string>
+     */
+    private function collectStudentFaceReferenceFiles(array $student, FaceMatcherService $faceMatcher): array
+    {
+        $studentNisn = trim((string) ($student['student_nisn'] ?? ''));
+        $studentName = trim((string) ($student['student_name'] ?? ''));
+        $className = trim((string) ($student['class_name'] ?? ''));
+        $photoReference = trim((string) ($student['photo_reference'] ?? ''));
+        $photoField = trim((string) ($student['photo'] ?? ''));
+        $candidates = [];
+        $poseDirectories = [];
+
+        if ($photoReference !== '') {
+            $resolvedReference = resolve_face_reference_file_path($photoReference);
+            if (is_string($resolvedReference) && $resolvedReference !== '') {
+                $candidates[] = $resolvedReference;
+                $poseDirectories[] = dirname($resolvedReference) . DIRECTORY_SEPARATOR . 'pose';
+            }
+        }
+
+        if ($photoField !== '') {
+            $resolvedPhoto = resolve_face_reference_file_path($photoField);
+            if (is_string($resolvedPhoto) && $resolvedPhoto !== '') {
+                $candidates[] = $resolvedPhoto;
+                $poseDirectories[] = dirname($resolvedPhoto) . DIRECTORY_SEPARATOR . 'pose';
+            }
+        }
+
+        try {
+            $matcherCandidates = $faceMatcher->getReferenceCandidates(
+                $studentNisn,
+                $photoReference !== '' ? $photoReference : null
+            );
+            if (is_array($matcherCandidates)) {
+                foreach ($matcherCandidates as $matcherCandidate) {
+                    $matcherCandidate = trim((string) $matcherCandidate);
+                    if ($matcherCandidate !== '') {
+                        $candidates[] = $matcherCandidate;
+                        $poseDirectories[] = dirname($matcherCandidate) . DIRECTORY_SEPARATOR . 'pose';
+                    }
+                }
+            }
+        } catch (\Throwable) {
+            // Ignore matcher lookup errors to keep deletion flow running.
+        }
+
+        if (function_exists('storage_class_folder') && function_exists('storage_student_folder')) {
+            $classFolder = storage_class_folder($className !== '' ? $className : 'kelas');
+            $studentFolder = storage_student_folder($studentName !== '' ? $studentName : ('siswa_' . $studentNisn));
+            $poseDirectories[] = public_path(
+                'uploads/faces/' . $classFolder . '/' . $studentFolder . '/pose'
+            );
+        }
+
+        foreach ($poseDirectories as $poseDirectory) {
+            $poseDirectory = trim((string) $poseDirectory);
+            if ($poseDirectory === '' || !is_dir($poseDirectory)) {
+                continue;
+            }
+
+            $poseFiles = glob($poseDirectory . DIRECTORY_SEPARATOR . '*') ?: [];
+            foreach ($poseFiles as $poseFile) {
+                if (is_file($poseFile)) {
+                    $candidates[] = $poseFile;
+                }
+            }
+        }
+
+        $unique = [];
+        foreach ($candidates as $candidate) {
+            $candidate = trim((string) $candidate);
+            if ($candidate === '') {
+                continue;
+            }
+            $realPath = realpath($candidate);
+            $normalized = str_replace('\\', '/', $realPath !== false ? $realPath : $candidate);
+            if ($normalized === '') {
+                continue;
+            }
+            if (!isset($unique[$normalized])) {
+                $unique[$normalized] = $realPath !== false ? $realPath : $candidate;
+            }
+        }
+
+        return array_values($unique);
+    }
+
+    /**
+     * @param array<int, string> $paths
+     * @return array{deleted: array<int, string>, failed: array<int, string>}
+     */
+    private function deleteStudentFaceReferenceFiles(array $paths): array
+    {
+        $deleted = [];
+        $failed = [];
+
+        if ($paths === []) {
+            return [
+                'deleted' => $deleted,
+                'failed' => $failed,
+            ];
+        }
+
+        $facesRoot = realpath(public_path('uploads/faces'));
+        if ($facesRoot === false) {
+            return [
+                'deleted' => $deleted,
+                'failed' => $paths,
+            ];
+        }
+
+        $facesRootNormalized = rtrim(str_replace('\\', '/', $facesRoot), '/');
+        foreach ($paths as $path) {
+            $path = trim((string) $path);
+            if ($path === '') {
+                continue;
+            }
+
+            $realPath = realpath($path);
+            if ($realPath === false || !is_file($realPath)) {
+                continue;
+            }
+
+            $normalizedRealPath = str_replace('\\', '/', $realPath);
+            if (!str_starts_with($normalizedRealPath, $facesRootNormalized . '/')) {
+                continue;
+            }
+
+            if (!@unlink($realPath)) {
+                $failed[] = $realPath;
+                continue;
+            }
+
+            $deleted[] = $realPath;
+            $this->pruneEmptyFaceReferenceDirectories($realPath, $facesRoot);
+        }
+
+        return [
+            'deleted' => $deleted,
+            'failed' => $failed,
+        ];
+    }
+
+    private function pruneEmptyFaceReferenceDirectories(string $filePath, string $facesRoot): void
+    {
+        $facesRootNormalized = rtrim(str_replace('\\', '/', $facesRoot), '/');
+        $directory = dirname($filePath);
+
+        while ($directory !== '' && is_dir($directory)) {
+            $normalizedDirectory = rtrim(str_replace('\\', '/', $directory), '/');
+            if ($normalizedDirectory === $facesRootNormalized) {
+                break;
+            }
+            if (!str_starts_with($normalizedDirectory, $facesRootNormalized . '/')) {
+                break;
+            }
+
+            $entries = @scandir($directory);
+            if (!is_array($entries)) {
+                break;
+            }
+            $entries = array_values(array_diff($entries, ['.', '..']));
+            if (!empty($entries)) {
+                break;
+            }
+
+            if (!@rmdir($directory)) {
+                break;
+            }
+
+            $directory = dirname($directory);
+        }
     }
 
     private function generateStudentCode(): string

@@ -97,6 +97,7 @@ foreach ($prefixes as $prefix) {
         Route::post('/dashboard/ajax/edit_student.php', [DashboardAjaxController::class, 'editStudent']);
         Route::post('/dashboard/ajax/reset_password.php', [DashboardAjaxController::class, 'resetPassword']);
         Route::post('/dashboard/ajax/reveal_student_code.php', [DashboardAjaxController::class, 'revealStudentCode']);
+        Route::post('/dashboard/ajax/delete_face_reference.php', [DashboardAjaxController::class, 'deleteFaceReference']);
         Route::post('/dashboard/ajax/change_password.php', [DashboardAjaxController::class, 'changePassword']);
         Route::post('/dashboard/ajax/check_schedule.php', [DashboardAjaxController::class, 'checkSchedule']);
         Route::post('/dashboard/ajax/get_attendance_details.php', [DashboardAjaxController::class, 'getAttendanceDetails']);

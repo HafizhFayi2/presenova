@@ -138,6 +138,7 @@ if (!isset($profileImageUrl)) {
 
 $profileEmailValue = (string)($student['email'] ?? ($student['student_email'] ?? ''));
 $profilePhoneValue = (string)($student['phone'] ?? ($student['student_phone'] ?? ''));
+$hasFaceReference = isset($_SESSION['has_face']) && (bool) $_SESSION['has_face'];
 ?>
 
 <?php if ($profileAlert !== null): ?>
@@ -404,15 +405,19 @@ $profilePhoneValue = (string)($student['phone'] ?? ($student['student_phone'] ??
             </div>
             
             <div class="mb-4">
-                <label class="form-label">Verifikasi Wajah</label>
-                <div class="d-flex align-items-center">
-                    <div>
-                        <?php if (isset($_SESSION['has_face']) && $_SESSION['has_face']): ?>
-                            <span class="badge bg-success">Terverifikasi</span>
-                        <?php else: ?>
-                            <span class="badge bg-warning">Belum Verifikasi</span>
-                        <?php endif; ?>
-                    </div>
+                <label class="form-label">Foto Referensi Wajah</label>
+                <div class="d-flex flex-wrap align-items-center gap-2">
+                    <?php if ($hasFaceReference): ?>
+                        <span class="badge bg-success">Terverifikasi</span>
+                        <button type="button" class="btn btn-sm btn-outline-danger" id="deleteFaceReferenceBtn">
+                            <i class="fas fa-trash-alt me-1"></i>Hapus Foto Referensi
+                        </button>
+                    <?php else: ?>
+                        <span class="badge bg-warning">Belum Verifikasi</span>
+                    <?php endif; ?>
+                </div>
+                <div class="form-text">
+                    Saat dihapus, seluruh data wajah akan dibersihkan: foto referensi, pose depan, pose kiri, dan pose kanan.
                 </div>
             </div>
             
@@ -429,6 +434,71 @@ document.addEventListener('DOMContentLoaded', function() {
     const revealButton = document.getElementById('revealStudentCodeBtn');
     const codeMask = document.getElementById('profileStudentCodeMask');
     const codeField = document.getElementById('profileStudentCodeField');
+    const deleteFaceReferenceButton = document.getElementById('deleteFaceReferenceBtn');
+
+    if (deleteFaceReferenceButton) {
+        deleteFaceReferenceButton.addEventListener('click', async function() {
+            const confirmationText = 'Semua data wajah akan dihapus dari database dan server (foto referensi, pose depan, pose kiri, pose kanan). Anda perlu registrasi ulang. Lanjutkan?';
+            let confirmed = false;
+
+            if (window.AppDialog && typeof window.AppDialog.confirm === 'function') {
+                confirmed = await window.AppDialog.confirm(confirmationText, {
+                    title: 'Hapus Foto Referensi',
+                    okText: 'Ya, Hapus',
+                    cancelText: 'Batal'
+                });
+            } else {
+                confirmed = window.confirm(confirmationText);
+            }
+
+            if (!confirmed) {
+                return;
+            }
+
+            const originalContent = deleteFaceReferenceButton.innerHTML;
+            deleteFaceReferenceButton.disabled = true;
+            deleteFaceReferenceButton.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Menghapus...';
+
+            try {
+                const response = await fetch('ajax/delete_face_reference.php', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8'
+                    },
+                    body: new URLSearchParams({ confirm_delete: '1' }).toString()
+                });
+                const result = await response.json();
+
+                if (!result || !result.success) {
+                    throw new Error((result && result.message) ? result.message : 'Gagal menghapus foto referensi');
+                }
+
+                const successMessage = result.message || 'Foto referensi berhasil dihapus.';
+                if (window.AppDialog && typeof window.AppDialog.alert === 'function') {
+                    await window.AppDialog.alert(successMessage, {
+                        title: 'Berhasil',
+                        okText: 'Lanjut'
+                    });
+                } else {
+                    alert(successMessage);
+                }
+
+                window.location.href = result.redirect_url || '../register.php?upload_face=1&pose_only=1';
+            } catch (error) {
+                const message = (error && error.message) ? error.message : 'Terjadi kesalahan saat menghapus foto referensi';
+                if (window.AppDialog && typeof window.AppDialog.alert === 'function') {
+                    await window.AppDialog.alert(message, {
+                        title: 'Gagal Menghapus',
+                        okText: 'Tutup'
+                    });
+                } else {
+                    alert(message);
+                }
+                deleteFaceReferenceButton.disabled = false;
+                deleteFaceReferenceButton.innerHTML = originalContent;
+            }
+        });
+    }
 
     if (!revealButton || !codeMask) {
         return;
