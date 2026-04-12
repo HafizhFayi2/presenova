@@ -1020,10 +1020,30 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['face_data'])) {
                 line-height: 1;
                 box-shadow: 0 10px 22px rgba(2, 7, 19, 0.58);
                 cursor: pointer;
+                overflow: visible;
             }
 
             .guide-fab.is-pulsing {
-                animation: guidePulse 1.55s ease-in-out infinite;
+                animation: guidePulse 1.35s ease-in-out infinite;
+                box-shadow:
+                    0 0 0 2px rgba(125, 211, 252, 0.42),
+                    0 0 18px rgba(56, 189, 248, 0.65),
+                    0 12px 26px rgba(2, 7, 19, 0.62);
+            }
+
+            .guide-fab::before {
+                content: '';
+                position: absolute;
+                inset: -6px;
+                border-radius: 999px;
+                border: 2px solid rgba(125, 211, 252, 0.7);
+                opacity: 0;
+                transform: scale(0.9);
+                pointer-events: none;
+            }
+
+            .guide-fab.is-pulsing::before {
+                animation: guidePulseRing 1.35s ease-out infinite;
             }
 
             .guide-fab:focus-visible {
@@ -1045,6 +1065,21 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['face_data'])) {
             }
             100% {
                 box-shadow: 0 0 0 0 rgba(56, 189, 248, 0), 0 8px 18px rgba(2, 7, 19, 0.58);
+            }
+        }
+
+        @keyframes guidePulseRing {
+            0% {
+                opacity: 0.92;
+                transform: scale(0.86);
+            }
+            75% {
+                opacity: 0;
+                transform: scale(1.26);
+            }
+            100% {
+                opacity: 0;
+                transform: scale(1.26);
             }
         }
 
@@ -1450,20 +1485,30 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['face_data'])) {
             function initGuidePanel() {
                 if (!registerGuidePanel || !guideToggleBtn) return;
 
-                let guideSeen = false;
-                try {
-                    guideSeen = window.localStorage.getItem(guideSeenStorageKey) === '1';
-                } catch (error) {
-                    guideSeen = false;
-                }
+                const syncGuideFabPulse = () => {
+                    if (!isSmallScreen()) {
+                        guideToggleBtn.classList.remove('is-pulsing');
+                        return;
+                    }
+                    let guideSeen = false;
+                    try {
+                        guideSeen = window.localStorage.getItem(guideSeenStorageKey) === '1';
+                    } catch (error) {
+                        guideSeen = false;
+                    }
+                    guideToggleBtn.classList.toggle('is-pulsing', !guideSeen);
+                };
 
-                if (!guideSeen) {
-                    guideToggleBtn.classList.add('is-pulsing');
+                syncGuideFabPulse();
+
+                if (!isSmallScreen()) {
+                    closeGuidePanel();
                 }
 
                 guideToggleBtn.addEventListener('click', function() {
                     openGuidePanel();
                     markGuideAsSeen();
+                    syncGuideFabPulse();
                 });
 
                 if (guideCloseBtn) {
@@ -1488,6 +1533,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['face_data'])) {
                     if (!isSmallScreen()) {
                         closeGuidePanel();
                     }
+                    syncGuideFabPulse();
                 });
             }
 
@@ -1716,13 +1762,13 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['face_data'])) {
                 if (poseStep === 'left') targetLabel = 'kiri';
                 if (poseStep === 'front') targetLabel = 'depan';
                 if (!sample) {
-                    setPoseInstruction(`Target <strong>${targetLabel}</strong> • wajah belum terbaca, posisikan ke tengah.`);
+                    setPoseInstruction(`Target <strong>${targetLabel}</strong> - wajah belum terbaca, posisikan ke tengah.`);
                     return;
                 }
                 const directionText = sample.direction === 'front'
                     ? 'depan'
                     : (sample.direction === 'right' ? 'kanan' : 'kiri');
-                setPoseInstruction(`Target <strong>${targetLabel}</strong> • terbaca <strong>${directionText}</strong>.`);
+                setPoseInstruction(`Target <strong>${targetLabel}</strong> - terbaca <strong>${directionText}</strong>.`);
             }
 
             async function savePoseFramesToServer() {

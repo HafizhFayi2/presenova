@@ -7,6 +7,8 @@
 .app-dialog-modal .modal-content {
     border: 1px solid rgba(148, 163, 184, 0.35);
     border-radius: 16px;
+    background: #f8fbff;
+    color: #1e293b;
     box-shadow: 0 20px 46px rgba(15, 23, 42, 0.35);
     overflow: hidden;
 }
@@ -19,16 +21,22 @@
 .app-dialog-modal .app-dialog-title {
     font-size: 1rem;
     font-weight: 700;
+    color: #0f172a;
 }
 
 .app-dialog-modal .app-dialog-body {
     padding: 16px;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(241, 245, 249, 0.94));
 }
 
 .app-dialog-modal .app-dialog-message {
     margin: 0;
     line-height: 1.55;
     font-size: 0.94rem;
+    font-weight: 500;
+    color: #1f2937;
+    -webkit-user-select: none;
+    user-select: none;
 }
 
 .app-dialog-modal .app-dialog-footer {
@@ -39,6 +47,13 @@
 
 .app-dialog-modal .app-dialog-footer .btn {
     min-width: 96px;
+    font-weight: 600;
+}
+
+.app-dialog-modal .app-dialog-input {
+    border-color: rgba(148, 163, 184, 0.45);
+    color: #0f172a;
+    background: #ffffff;
 }
 
 @media (max-width: 576px) {
@@ -92,6 +107,18 @@ html[data-theme="dark"] .app-dialog-modal .modal-content {
 html[data-theme="dark"] .app-dialog-modal .app-dialog-header,
 html[data-theme="dark"] .app-dialog-modal .app-dialog-footer {
     border-color: rgba(100, 116, 139, 0.35);
+}
+
+html[data-theme="dark"] .app-dialog-modal .app-dialog-body {
+    background: linear-gradient(180deg, rgba(15, 23, 42, 0.94), rgba(9, 14, 28, 0.94));
+}
+
+html[data-theme="dark"] .app-dialog-modal .app-dialog-title {
+    color: #f1f5f9;
+}
+
+html[data-theme="dark"] .app-dialog-modal .app-dialog-message {
+    color: #e2e8f0;
 }
 
 html[data-theme="dark"] .app-dialog-modal .btn-close {

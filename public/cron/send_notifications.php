@@ -259,6 +259,112 @@ function sendPushToStudent(
     return ['failed' => $failed, 'errors' => $errors];
 }
 
+/**
+ * @return array{type:string, title:string, body:string, url:string, signature:string}
+ */
+function resolveSystemUpdatePushPayload(): array
+{
+    $statusRaw = strtolower(trim((string) env('SYSTEM_UPDATE_STATUS', 'uptodate')));
+    $forceUpdateAvailable = filter_var((string) env('SYSTEM_UPDATE_AVAILABLE', 'false'), FILTER_VALIDATE_BOOLEAN);
+
+    $currentVersion = trim((string) env('SYSTEM_CURRENT_VERSION', (string) env('APP_VERSION', '')));
+    $latestVersion = trim((string) env('SYSTEM_LATEST_VERSION', $currentVersion));
+    $normalizedCurrent = preg_replace('/^[vV]/', '', $currentVersion) ?? $currentVersion;
+    $normalizedLatest = preg_replace('/^[vV]/', '', $latestVersion) ?? $latestVersion;
+
+    $isUpdateAvailable = $forceUpdateAvailable || in_array($statusRaw, ['update', 'update_available', 'available', 'pending'], true);
+    if (!$isUpdateAvailable && $normalizedCurrent !== '' && $normalizedLatest !== '') {
+        $isUpdateAvailable = version_compare($normalizedCurrent, $normalizedLatest, '<');
+    }
+
+    $defaultUrl = '/dashboard/siswa.php?page=jadwal';
+    $configuredUrl = trim((string) env('SYSTEM_UPDATE_URL', $defaultUrl));
+    $targetUrl = $configuredUrl !== '' ? $configuredUrl : $defaultUrl;
+
+    if ($isUpdateAvailable) {
+        $title = trim((string) env('SYSTEM_UPDATE_TITLE', 'Pembaruan Sistem Tersedia'));
+        if ($title === '') {
+            $title = 'Pembaruan Sistem Tersedia';
+        }
+
+        $configuredMessage = trim((string) env('SYSTEM_UPDATE_MESSAGE', ''));
+        if ($configuredMessage !== '') {
+            $body = $configuredMessage;
+        } elseif ($currentVersion !== '' && $latestVersion !== '' && strcasecmp($currentVersion, $latestVersion) !== 0) {
+            $body = 'Terdapat pembaruan sistem dari versi ' . $currentVersion . ' ke ' . $latestVersion
+                . '. Silakan lakukan pembaruan agar pengalaman pengguna lebih nyaman.';
+        } elseif ($latestVersion !== '') {
+            $body = 'Terdapat pembaruan sistem terbaru ke versi ' . $latestVersion
+                . '. Silakan lakukan pembaruan agar pengalaman pengguna lebih nyaman.';
+        } else {
+            $body = 'Terdapat pembaruan sistem terbaru. Silakan lakukan pembaruan agar pengalaman pengguna lebih nyaman.';
+        }
+
+        return [
+            'type' => 'system_update_available',
+            'title' => $title,
+            'body' => $body,
+            'url' => $targetUrl,
+            'signature' => sha1('system_update_available|' . $currentVersion . '|' . $latestVersion . '|' . $title . '|' . $body . '|' . $targetUrl),
+        ];
+    }
+
+    $title = trim((string) env('SYSTEM_UPTODATE_TITLE', 'Status Sistem'));
+    if ($title === '') {
+        $title = 'Status Sistem';
+    }
+    $body = trim((string) env(
+        'SYSTEM_UPTODATE_MESSAGE',
+        'Sistem sudah up to date dengan versi terbaru untuk pengalaman pengguna yang lebih nyaman.'
+    ));
+    if ($body === '') {
+        $body = 'Sistem sudah up to date dengan versi terbaru untuk pengalaman pengguna yang lebih nyaman.';
+    }
+
+    return [
+        'type' => 'system_uptodate',
+        'title' => $title,
+        'body' => $body,
+        'url' => $targetUrl,
+        'signature' => sha1('system_uptodate|' . $currentVersion . '|' . $latestVersion . '|' . $title . '|' . $body . '|' . $targetUrl),
+    ];
+}
+
+/**
+ * @return array{signature?:string, sent_at?:string}
+ */
+function readSystemUpdatePushState(string $stateFile): array
+{
+    if (!is_file($stateFile)) {
+        return [];
+    }
+
+    $raw = @file_get_contents($stateFile);
+    if (!is_string($raw) || trim($raw) === '') {
+        return [];
+    }
+
+    $decoded = json_decode($raw, true);
+    if (!is_array($decoded)) {
+        return [];
+    }
+
+    return $decoded;
+}
+
+function writeSystemUpdatePushState(string $stateFile, string $signature, DateTimeImmutable $now): void
+{
+    $storageDir = dirname($stateFile);
+    if (!is_dir($storageDir)) {
+        @mkdir($storageDir, 0777, true);
+    }
+
+    @file_put_contents($stateFile, json_encode([
+        'signature' => $signature,
+        'sent_at' => $now->format('Y-m-d H:i:s'),
+    ], JSON_UNESCAPED_SLASHES));
+}
+
 $tokenStudentIds = DB::table('push_tokens')
     ->where('is_active', 'Y')
     ->distinct()
@@ -271,6 +377,57 @@ if ($tokenStudentIds === []) {
 }
 
 $tokenStudentLookup = array_fill_keys($tokenStudentIds, true);
+
+$systemPushEnabled = filter_var((string) env('SYSTEM_UPDATE_PUSH_ENABLED', 'true'), FILTER_VALIDATE_BOOLEAN);
+if ($systemPushEnabled) {
+    $systemPayload = resolveSystemUpdatePushPayload();
+    $currentSignature = trim((string) ($systemPayload['signature'] ?? ''));
+    $stateFile = storage_path('app/system-update-push-state.json');
+    $previousState = readSystemUpdatePushState($stateFile);
+    $previousSignature = trim((string) ($previousState['signature'] ?? ''));
+
+    if ($currentSignature !== '' && $currentSignature !== $previousSignature) {
+        $scheduledAt = $now->format('Y-m-d H:i:s');
+
+        foreach ($tokenStudentIds as $tokenStudentId) {
+            $studentId = (int) $tokenStudentId;
+            if ($studentId <= 0) {
+                continue;
+            }
+
+            $logId = insertNotificationLog($studentId, null, (string) ($systemPayload['type'] ?? 'system_uptodate'), $scheduledAt);
+            if ($logId === null) {
+                continue;
+            }
+
+            $result = sendPushToStudent(
+                $studentId,
+                [
+                    'title' => (string) ($systemPayload['title'] ?? 'Status Sistem'),
+                    'body' => (string) ($systemPayload['body'] ?? ''),
+                    'url' => (string) ($systemPayload['url'] ?? '/dashboard/siswa.php?page=jadwal'),
+                ],
+                $nodeBin,
+                $sendScript,
+                $publicKey,
+                $privateKey,
+                $subject,
+                $pushTtlSeconds
+            );
+
+            if (($result['failed'] ?? 0) === 0) {
+                updateNotificationLog($logId, 'SENT');
+                continue;
+            }
+
+            $errors = $result['errors'] ?? [];
+            $errorMessage = is_array($errors) && $errors !== [] ? implode(' | ', $errors) : 'Push failed';
+            updateNotificationLog($logId, 'FAILED', $errorMessage);
+        }
+
+        writeSystemUpdatePushState($stateFile, $currentSignature, $now);
+    }
+}
 
 $schedules = DB::table('student_schedule as ss')
     ->join('teacher_schedule as ts', 'ss.teacher_schedule_id', '=', 'ts.schedule_id')

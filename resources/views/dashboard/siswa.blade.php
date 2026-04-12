@@ -501,20 +501,18 @@ if ($active_siswa_section_css !== null) {
     }
 
     function ensureStudentPageUnlocked(force = false) {
-        if (!force && siswaPage === 'face_recognition') {
-            return;
-        }
-
         const html = document.documentElement;
         const body = document.body;
         html.classList.remove('scroll-locked');
         html.style.overflow = '';
+        html.style.height = '';
         html.style.paddingRight = '';
         body.classList.remove('scroll-locked', 'modal-open', 'attendance-modal-open', 'riwayat-modal-open');
         body.style.position = '';
         body.style.top = '';
         body.style.width = '';
         body.style.overflow = '';
+        body.style.height = '';
         body.style.paddingRight = '';
         body.style.touchAction = '';
 
@@ -534,6 +532,25 @@ if ($active_siswa_section_css !== null) {
             modal.removeAttribute('aria-modal');
             modal.removeAttribute('role');
         });
+    }
+
+    function shouldPreserveFaceScrollLock() {
+        if (siswaPage !== 'face_recognition') {
+            return false;
+        }
+        const activeLocationLayer = document.querySelector('.location-lock-layer.show:not(.modal-suspended)');
+        return !!activeLocationLayer;
+    }
+
+    function releaseScrollLockIfSafe() {
+        if (shouldPreserveFaceScrollLock()) {
+            return;
+        }
+        const hasOverlay = document.querySelector('.modal.show, .offcanvas.show');
+        if (hasOverlay) {
+            return;
+        }
+        ensureStudentPageUnlocked(true);
     }
 
     function updateSiswaBranding(theme) {
@@ -715,7 +732,8 @@ if ($active_siswa_section_css !== null) {
             document.documentElement.setAttribute('data-theme', currentTheme);
         }
         updateSiswaBranding(currentTheme);
-        ensureStudentPageUnlocked();
+        ensureStudentPageUnlocked(true);
+        window.setTimeout(releaseScrollLockIfSafe, 120);
         initStudentSectionPrefetch();
 
         if (typeof window.jQuery === 'undefined') {
@@ -816,7 +834,26 @@ if ($active_siswa_section_css !== null) {
     }
 
     window.addEventListener('pageshow', function() {
-        ensureStudentPageUnlocked();
+        releaseScrollLockIfSafe();
+        window.setTimeout(releaseScrollLockIfSafe, 120);
+    });
+
+    document.addEventListener('hidden.bs.modal', function() {
+        releaseScrollLockIfSafe();
+    });
+
+    document.addEventListener('hidden.bs.offcanvas', function() {
+        releaseScrollLockIfSafe();
+    });
+
+    document.addEventListener('visibilitychange', function() {
+        if (!document.hidden) {
+            window.setTimeout(releaseScrollLockIfSafe, 80);
+        }
+    });
+
+    window.addEventListener('focus', function() {
+        window.setTimeout(releaseScrollLockIfSafe, 80);
     });
 
     if (document.readyState === 'loading') {

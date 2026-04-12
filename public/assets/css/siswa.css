@@ -2000,6 +2000,19 @@
         body {
                 max-width: 100%;
                 overflow-x: hidden;
+                overflow-y: auto;
+                height: auto;
+                -webkit-overflow-scrolling: touch;
+                touch-action: pan-y pinch-zoom;
+        }
+
+        html.scroll-locked,
+        body.scroll-locked,
+        body.modal-open,
+        body.attendance-modal-open,
+        body.riwayat-modal-open {
+                overflow: hidden !important;
+                touch-action: none !important;
         }
 
         .student-shell,

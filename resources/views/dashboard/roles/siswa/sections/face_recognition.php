@@ -653,12 +653,15 @@ document.addEventListener('DOMContentLoaded', function() {
     const stableWithinThreshold = 1;
     const stableOutsideThreshold = 2;
     const memoryMonitorIntervalMs = isMobileFr ? 3200 : 1500;
-    const memoryBudgetBytes = 4 * 1024 * 1024 * 1024; // Budget runtime tetap 4GB
+    const memoryServerBaselineBytes = 4 * 1024 * 1024 * 1024; // Baseline kompatibilitas server: 4GB
+    const memoryBudgetBytes = memoryServerBaselineBytes;
     const memoryTurboPercent = 70;
     const memoryTurboStartBytes = 10 * 1024 * 1024; // Mode maksimal dipicu sejak 0-10MB
     const memoryWarningPercent = 93;
     const memoryCriticalPercent = 97;
     const memoryRecoverPercent = 90;
+    const memoryDeviceWarningPercent = 90;
+    const memoryDeviceCriticalPercent = 96;
     const memoryTurboLagMs = 190;
     const memoryWarningLagMs = 460;
     const memoryCriticalLagMs = 980;
@@ -1772,33 +1775,37 @@ document.addEventListener('DOMContentLoaded', function() {
         const perfMemory = (typeof performance !== 'undefined' && performance && performance.memory) ? performance.memory : null;
         const rawUsed = perfMemory?.usedJSHeapSize || 0;
         const limit = perfMemory?.jsHeapSizeLimit || 0;
-        const total = perfMemory?.totalJSHeapSize || 0;
         const supportsHeap = Number.isFinite(limit) && limit > 0;
-        const effectiveLimit = supportsHeap
+        const effectiveLimit = memoryBudgetBytes;
+        const guardLimit = supportsHeap
             ? Math.max(1, Math.min(limit, memoryBudgetBytes))
             : 0;
         const used = supportsHeap ? Math.min(rawUsed, memoryBudgetBytes) : 0;
         const percent = supportsHeap ? Math.min(100, (used / effectiveLimit) * 100) : 0;
+        const guardPercent = supportsHeap ? Math.min(100, (Math.min(rawUsed, guardLimit) / guardLimit) * 100) : 0;
+        const pressurePercent = supportsHeap ? Math.max(percent, guardPercent) : 0;
 
         memoryUsedText.textContent = supportsHeap ? formatMB(used) : '-';
-        memoryLimitText.textContent = supportsHeap
-            ? formatMB(effectiveLimit)
-            : ((Number.isFinite(total) && total > 0) ? formatMB(total) : '-');
+        memoryLimitText.textContent = formatMB(effectiveLimit);
         memoryBarFill.style.width = supportsHeap
             ? (percent.toFixed(1) + '%')
             : (Math.min(100, lagMs / 10).toFixed(1) + '%');
 
         let nextState = 'normal';
         if (supportsHeap) {
-            if (percent > memoryCriticalPercent || (percent > memoryWarningPercent && lagMs >= memoryCriticalLagMs)) {
+            if (
+                pressurePercent > memoryCriticalPercent
+                || guardPercent > memoryDeviceCriticalPercent
+                || (pressurePercent > memoryWarningPercent && lagMs >= memoryCriticalLagMs)
+            ) {
                 nextState = 'critical';
                 memoryGuardHoldUntil = Math.max(memoryGuardHoldUntil, now + memoryCriticalHoldMs);
                 memoryRecoverStableTicks = 0;
-            } else if (percent > memoryWarningPercent) {
+            } else if (pressurePercent > memoryWarningPercent || guardPercent > memoryDeviceWarningPercent) {
                 nextState = 'warning';
                 memoryRecoverStableTicks = 0;
             } else {
-                const safeByHeap = percent <= memoryRecoverPercent;
+                const safeByHeap = pressurePercent <= memoryRecoverPercent && guardPercent <= memoryDeviceWarningPercent;
                 const safeByLag = lagMs <= memoryRecoverLagMs;
                 if (safeByHeap && safeByLag) {
                     memoryRecoverStableTicks += 1;
@@ -1842,15 +1849,15 @@ document.addEventListener('DOMContentLoaded', function() {
             ? 'critical'
             : (nextState === 'warning'
                 ? 'throttle'
-                : ((supportsHeap && percent < memoryTurboPercent && lagMs <= memoryTurboLagMs) ? 'turbo' : 'normal'));
+                : ((supportsHeap && pressurePercent < memoryTurboPercent && lagMs <= memoryTurboLagMs) ? 'turbo' : 'normal'));
 
-        memoryLastPercent = supportsHeap ? percent : 0;
+        memoryLastPercent = supportsHeap ? pressurePercent : 0;
         memoryLastLagMs = lagMs;
         memoryLastUsedBytes = supportsHeap ? used : 0;
         memoryLastSupportsHeap = supportsHeap;
         setMemoryPressureState(nextState, {
             supportsHeap,
-            percent,
+            percent: pressurePercent,
             lagMs,
             profile
         });

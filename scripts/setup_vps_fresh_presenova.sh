@@ -25,6 +25,7 @@ Options:
   --skip-frontend-build        Lewati npm install + npm run build
   --skip-https                 Lewati setup HTTPS/Let's Encrypt
   --skip-cron                  Lewati setup cron push notification
+  --skip-version-auto          Lewati auto version bump deploy
   --with-deepface              Sekalian setup DeepFace venv
   --with-mail                  Sekalian setup mail server (Postfix/Dovecot)
   --mail-admin-email <email>   Admin mailbox untuk --with-mail (default: adm@<domain>)
@@ -164,6 +165,7 @@ SKIP_SQL_IMPORT=0
 SKIP_FRONTEND_BUILD=0
 SKIP_HTTPS=0
 SKIP_CRON=0
+SKIP_VERSION_AUTO=0
 WITH_DEEPFACE=0
 WITH_MAIL=0
 MAIL_ADMIN_EMAIL=""
@@ -236,6 +238,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --skip-cron)
       SKIP_CRON=1
+      shift
+      ;;
+    --skip-version-auto)
+      SKIP_VERSION_AUTO=1
       shift
       ;;
     --with-deepface)
@@ -509,6 +515,17 @@ if [[ "${WITH_MAIL}" -eq 1 ]]; then
     MAIL_CMD+=(--mail-password "${MAIL_PASSWORD}")
   fi
   "${MAIL_CMD[@]}"
+fi
+
+if [[ "${SKIP_VERSION_AUTO}" -eq 0 ]]; then
+  log "Sinkronisasi versi deploy otomatis..."
+  bash "${APP_DIR}/scripts/deploy_version_auto.sh" \
+    --app-dir "${APP_DIR}" \
+    --env-file "${ENV_FILE}" \
+    --start-version "1.0.0" \
+    --bump "patch"
+else
+  log "Auto version deploy dilewati (--skip-version-auto)."
 fi
 
 log "Finalisasi cache Laravel..."

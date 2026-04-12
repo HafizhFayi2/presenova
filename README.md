@@ -118,7 +118,13 @@ Yang dikerjakan script ini secara berurutan:
 Opsional:
 - Tambah `--with-deepface` untuk setup DeepFace venv.
 - Tambah `--with-mail` untuk setup Postfix/Dovecot mail server.
-- Tambah `--skip-frontend-build`, `--skip-https`, atau `--skip-cron` jika ingin dipasang terpisah.
+- Tambah `--skip-frontend-build`, `--skip-https`, `--skip-cron`, atau `--skip-version-auto` jika ingin dipasang terpisah.
+
+Auto version deploy:
+- Pada akhir proses `setup_vps_fresh_presenova.sh`, script akan menjalankan `scripts/deploy_version_auto.sh`.
+- Deploy pertama otomatis set versi `1.0.0`.
+- Deploy berikutnya otomatis bump `patch` (`1.0.1`, `1.0.2`, dst).
+- Jika script dijalankan ulang pada commit Git yang sama, versi tidak dibump ulang (idempotent).
 
 Contoh deploy + mail server domain `mail.presenova.my.id`:
 
@@ -157,6 +163,13 @@ Setelah deploy selesai, jalankan verifikasi sistem:
 ```bash
 cd /var/www/presenova
 php artisan presenova:health-check --strict --domain=presenova.my.id
+```
+
+Untuk deploy harian (tanpa full setup VPS), jalankan sinkronisasi versi:
+
+```bash
+cd /var/www/presenova
+bash scripts/deploy_version_auto.sh --app-dir /var/www/presenova --bump patch
 ```
 
 Jika ada mismatch sinkronisasi `student_schedule`, jalankan sinkronisasi massal:
