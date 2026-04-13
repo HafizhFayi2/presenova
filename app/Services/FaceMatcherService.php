@@ -249,10 +249,17 @@ class FaceMatcherService
                     if (!$fileInfo->isFile()) {
                         continue;
                     }
-                    $filename = $fileInfo->getFilename();
-                    if (stripos($filename, $nisn) === false) {
+                    $filename = strtolower($fileInfo->getFilename());
+                    $nisnLower = strtolower($nisn);
+                    
+                    // FIXED: Only match exact basename or if it explicitly starts with nisn and a delimiter
+                    // to prevent "1" from matching "alex_1001.jpg"
+                    if ($filename !== $nisnLower . '.' . strtolower($fileInfo->getExtension()) &&
+                        !str_starts_with($filename, $nisnLower . '-') &&
+                        !str_starts_with($filename, $nisnLower . '_')) {
                         continue;
                     }
+                    
                     $ext = strtolower($fileInfo->getExtension());
                     if (!in_array($ext, ['jpg', 'jpeg', 'png', 'webp', 'bmp'], true)) {
                         continue;
