@@ -836,9 +836,27 @@ $(document).ready(function() {
         const canvas = document.getElementById('attendanceCanvas');
         const context = canvas.getContext('2d');
         
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
-        context.drawImage(video, 0, 0, canvas.width, canvas.height);
+        // Limit max width/height to avoid massive POST payloads (fix server 500 error on high-res camera)
+        const MAX_WIDTH = 1080;
+        const MAX_HEIGHT = 1080;
+        let pWidth = video.videoWidth;
+        let pHeight = video.videoHeight;
+
+        if (pWidth > pHeight) {
+            if (pWidth > MAX_WIDTH) {
+                pHeight = Math.round(pHeight * (MAX_WIDTH / pWidth));
+                pWidth = MAX_WIDTH;
+            }
+        } else {
+            if (pHeight > MAX_HEIGHT) {
+                pWidth = Math.round(pWidth * (MAX_HEIGHT / pHeight));
+                pHeight = MAX_HEIGHT;
+            }
+        }
+
+        canvas.width = pWidth;
+        canvas.height = pHeight;
+        context.drawImage(video, 0, 0, pWidth, pHeight);
         
         capturedData = canvas.toDataURL('image/jpeg', 0.8);
         $('#capturedImageData').val(capturedData);
