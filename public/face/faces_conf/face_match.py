@@ -272,7 +272,7 @@ def main() -> None:
     parser.add_argument(
         "--strict-margin",
         type=float,
-        default=0.03,
+        default=0.15,
         help="Extra safety margin below DeepFace threshold to reduce false-accepts (0.0-0.2).",
     )
     parser.add_argument(

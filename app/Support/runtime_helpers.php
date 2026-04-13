@@ -111,7 +111,7 @@ if (!defined('FACE_MATCH_TIMEOUT_SECONDS')) {
     define('FACE_MATCH_TIMEOUT_SECONDS', (int) runtime_env('FACE_MATCH_TIMEOUT_SECONDS', 60));
 }
 if (!defined('FACE_MATCH_STRICT_MARGIN')) {
-    define('FACE_MATCH_STRICT_MARGIN', (float) runtime_env('FACE_MATCH_STRICT_MARGIN', 0.03));
+    define('FACE_MATCH_STRICT_MARGIN', (float) runtime_env('FACE_MATCH_STRICT_MARGIN', 0.15));
 }
 
 $deepfaceVenvPythonWindows = public_path('face/.venv/Scripts/python.exe');

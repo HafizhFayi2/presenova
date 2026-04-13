@@ -25,7 +25,7 @@ class FaceMatcherService
     private $deepfaceBackupMaxReferences = 5;
     private $deepfaceDetectorFallbacks = false;
     private $pythonTimeoutSeconds = 60;
-    private $deepfaceStrictMargin = 0.03;
+    private $deepfaceStrictMargin = 0.15;
     private const REFERENCE_CACHE_TTL_SECONDS = 120;
     private static array $referenceCandidatesCache = [];
     private static ?string $verifiedPythonBin = null;
