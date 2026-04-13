@@ -582,6 +582,7 @@ class FaceMatcherService
         }
 
         $candidates = $this->pythonBinCandidates();
+        $debugLogs = [];
         foreach ($candidates as $candidate) {
             $envPrefix = $this->deepfaceEnvPrefix();
             $probeCmd = $envPrefix
@@ -590,6 +591,8 @@ class FaceMatcherService
                 . escapeshellarg('from deepface import DeepFace; print("deepface-ok")');
 
             $probe = $this->runPythonCommand($probeCmd, 45);
+            $debugLogs[] = "[TEST $candidate] Exit: " . ($probe['exit_code'] ?? 'null') . " | Out/Err: " . trim($probe['output'] ?? '');
+            
             $output = strtolower(trim((string) ($probe['output'] ?? '')));
             if (($probe['exit_code'] ?? 1) === 0 && str_contains($output, 'deepface-ok')) {
                 self::$verifiedPythonBin = $candidate;
@@ -597,6 +600,7 @@ class FaceMatcherService
             }
         }
 
+        \Illuminate\Support\Facades\Log::error("DeepFace Probe Failed Log:\n" . implode("\n", $debugLogs));
         return null;
     }
 
