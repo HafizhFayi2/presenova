@@ -589,7 +589,7 @@ class FaceMatcherService
                 . ' -c '
                 . escapeshellarg('from deepface import DeepFace; print("deepface-ok")');
 
-            $probe = $this->runPythonCommand($probeCmd, 20);
+            $probe = $this->runPythonCommand($probeCmd, 45);
             $output = strtolower(trim((string) ($probe['output'] ?? '')));
             if (($probe['exit_code'] ?? 1) === 0 && str_contains($output, 'deepface-ok')) {
                 self::$verifiedPythonBin = $candidate;
