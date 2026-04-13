@@ -1693,11 +1693,36 @@ document.addEventListener('DOMContentLoaded', function() {
             page.classList.add('mode-' + absenceMode);
         }
         if (absenceMode !== 'hadir') {
-            locationAllowed = true;
-            locationReady = true;
-            setStatus(`Mode ${getModeLabel(absenceMode)} aktif. Verifikasi wajah tetap diperlukan.`);
+            // Sakit/Izin: GPS tetap WAJIB aktif, tapi tidak perlu validasi radius
             if (gpsEnabled) {
-                setLocationLock(false);
+                const hasGeoCoords = Number.isFinite(currentLat) && Number.isFinite(currentLng);
+                if (hasGeoCoords) {
+                    // Sudah punya koordinat, boleh lanjut
+                    locationAllowed = true;
+                    locationReady = true;
+                    setLocationLock(false);
+                    setStatus(`Mode ${getModeLabel(absenceMode)} aktif. Lokasi tercatat. Verifikasi wajah tetap diperlukan.`);
+                } else {
+                    // Belum punya koordinat, wajib tunggu GPS
+                    locationAllowed = false;
+                    locationReady = false;
+                    setLocationLock(true, `Mode ${getModeLabel(absenceMode)}: Menunggu lokasi GPS. Aktifkan GPS untuk melanjutkan.`);
+                    setStatus(`Mode ${getModeLabel(absenceMode)} aktif. Menunggu lokasi GPS...`);
+                    // Mulai watch GPS
+                    if (navigator.geolocation) {
+                        if (locationWatchId !== null) {
+                            navigator.geolocation.clearWatch(locationWatchId);
+                            locationWatchId = null;
+                        }
+                        const geoOpts = { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 };
+                        navigator.geolocation.getCurrentPosition(handleLocationSuccess, handleLocationError, geoOpts);
+                        locationWatchId = navigator.geolocation.watchPosition(handleLocationSuccess, handleLocationError, geoOpts);
+                    }
+                }
+            } else {
+                locationAllowed = true;
+                locationReady = true;
+                setStatus(`Mode ${getModeLabel(absenceMode)} aktif. Verifikasi wajah tetap diperlukan.`);
             }
         } else {
             setStatus('Mode hadir aktif. Pastikan berada di dalam radius lokasi.');
@@ -2658,13 +2683,21 @@ document.addEventListener('DOMContentLoaded', function() {
 
     function handleLocationError(error) {
         if (locationOverride) {
-            locationAllowed = true;
+            // Sakit/Izin: GPS wajib aktif, jangan bypass
+            locationAllowed = false;
             locationReady = true;
             locationVerified = false;
-            setLocationLock(false);
-            setCameraStatus(`Mode ${getModeLabel(absenceMode)} aktif`);
+            const modeLabel = getModeLabel(absenceMode);
+            let geoErrMsg = `Mode ${modeLabel}: GPS wajib aktif. Aktifkan lokasi untuk melanjutkan.`;
+            if (error && error.code === 1) {
+                geoErrMsg = `Mode ${modeLabel}: Izin lokasi ditolak. Aktifkan GPS di pengaturan browser.`;
+            } else if (error && error.code === 3) {
+                geoErrMsg = `Mode ${modeLabel}: Permintaan lokasi timeout. Coba lagi.`;
+            }
+            setLocationLock(true, geoErrMsg);
+            setCameraStatus('GPS diperlukan');
             if (!stream) {
-                setStatus(`Mode ${getModeLabel(absenceMode)} aktif. Kamera tetap bisa digunakan tanpa validasi radius.`);
+                setStatus(geoErrMsg);
             }
             updateStartButtonState();
             finishRetryLoading();
@@ -2712,12 +2745,25 @@ document.addEventListener('DOMContentLoaded', function() {
         }
 
         if (locationOverride) {
-            locationAllowed = true;
-            locationReady = true;
-            setLocationLock(false);
-            setCameraStatus(`Mode ${getModeLabel(absenceMode)} aktif`);
-            if (!stream) {
-                setStatus(`Mode ${getModeLabel(absenceMode)} aktif. Kamera dapat langsung digunakan.`);
+            // Sakit/Izin: GPS wajib aktif, tunggu koordinat
+            const hasGeoCoords = Number.isFinite(currentLat) && Number.isFinite(currentLng);
+            if (hasGeoCoords) {
+                locationAllowed = true;
+                locationReady = true;
+                setLocationLock(false);
+                setCameraStatus(`Mode ${getModeLabel(absenceMode)} aktif`);
+                if (!stream) {
+                    setStatus(`Mode ${getModeLabel(absenceMode)} aktif. Lokasi tercatat.`);
+                }
+            } else {
+                locationAllowed = false;
+                locationReady = false;
+                const modeLabel = getModeLabel(absenceMode);
+                setLocationLock(true, `Mode ${modeLabel}: Menunggu lokasi GPS...`);
+                setCameraStatus('Menunggu GPS');
+                if (!stream) {
+                    setStatus(`Mode ${modeLabel}: Aktifkan GPS untuk melanjutkan.`);
+                }
             }
             updateStartButtonState();
 
@@ -2726,20 +2772,20 @@ document.addEventListener('DOMContentLoaded', function() {
                     navigator.geolocation.clearWatch(locationWatchId);
                     locationWatchId = null;
                 }
-                const relaxedOptions = {
+                const geoOpts = {
                     enableHighAccuracy: true,
-                    timeout: 12000,
-                    maximumAge: 5000
+                    timeout: 20000,
+                    maximumAge: 0
                 };
                 navigator.geolocation.getCurrentPosition(
                     handleLocationSuccess,
-                    () => {},
-                    relaxedOptions
+                    handleLocationError,
+                    geoOpts
                 );
                 locationWatchId = navigator.geolocation.watchPosition(
                     handleLocationSuccess,
-                    () => {},
-                    relaxedOptions
+                    handleLocationError,
+                    geoOpts
                 );
             }
 
@@ -2786,8 +2832,8 @@ document.addEventListener('DOMContentLoaded', function() {
 
         const geoOptions = {
             enableHighAccuracy: true,
-            timeout: 12000,
-            maximumAge: 2000
+            timeout: 20000,
+            maximumAge: 0
         };
 
         navigator.geolocation.getCurrentPosition(
@@ -3523,10 +3569,15 @@ document.addEventListener('DOMContentLoaded', function() {
             setStatus('Foto referensi belum tersedia.');
             return;
         }
-        if (gpsEnabled && absenceMode === 'hadir' && !locationAllowed) {
-            const msg = locationReady
-                ? 'Anda berada di luar radius. Kamera tidak dapat diaktifkan.'
-                : 'Menunggu lokasi. Aktifkan GPS untuk melanjutkan.';
+        if (gpsEnabled && !locationAllowed) {
+            let msg;
+            if (absenceMode === 'hadir') {
+                msg = locationReady
+                    ? 'Anda berada di luar radius. Kamera tidak dapat diaktifkan.'
+                    : 'Menunggu lokasi. Aktifkan GPS untuk melanjutkan.';
+            } else {
+                msg = `Mode ${getModeLabel(absenceMode)}: GPS wajib aktif. Aktifkan lokasi untuk melanjutkan.`;
+            }
             setLocationLock(true, msg);
             setStatus(msg);
             return;
@@ -3696,9 +3747,10 @@ document.addEventListener('DOMContentLoaded', function() {
         const distanceValue = Number.isFinite(currentDistance) ? currentDistance : lastDistance;
         const geoVerified = !gpsEnabled ? true : isWithinRadius(distanceValue, currentAccuracy);
         const requiresRadius = activeMode === 'hadir';
-        const requiresGeo = gpsEnabled && requiresRadius;
+        // GPS wajib untuk SEMUA mode (hadir/sakit/izin)
+        const requiresGeo = gpsEnabled;
         if (requiresGeo && !hasGeo) {
-            setStatus('Lokasi belum tersedia. Pastikan GPS aktif.');
+            setStatus('Lokasi belum tersedia. Pastikan GPS aktif untuk semua mode absensi.');
             return;
         }
         if (requiresRadius && !geoVerified) {
@@ -3812,9 +3864,10 @@ document.addEventListener('DOMContentLoaded', function() {
         const distanceValue = Number.isFinite(currentDistance) ? currentDistance : lastDistance;
         const geoVerified = !gpsEnabled ? true : isWithinRadius(distanceValue, currentAccuracy);
         const requiresRadius = activeMode === 'hadir';
-        const requiresGeo = gpsEnabled && requiresRadius;
+        // GPS wajib untuk SEMUA mode (hadir/sakit/izin)
+        const requiresGeo = gpsEnabled;
         if (requiresGeo && !hasGeo) {
-            setAttendanceModalMessage('Lokasi belum tersedia. Pastikan GPS aktif.', 'danger');
+            setAttendanceModalMessage('Lokasi belum tersedia. Pastikan GPS aktif untuk semua mode absensi.', 'danger');
             return;
         }
         if (requiresRadius && !geoVerified) {
