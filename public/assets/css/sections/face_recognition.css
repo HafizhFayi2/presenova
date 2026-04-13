@@ -1546,6 +1546,10 @@ body.scroll-locked {
 }
 
 .modal-backdrop {
+    pointer-events: none;
+}
+
+.modal-backdrop.show {
     pointer-events: auto;
 }
 

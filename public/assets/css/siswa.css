@@ -869,6 +869,17 @@
             box-shadow: 0 8px 18px rgba(53, 121, 246, 0.25);
             transition: all 0.3s ease;
         }
+
+        /* Prevent hidden Bootstrap backdrops from intercepting taps on mobile/PWA */
+        .modal-backdrop,
+        .offcanvas-backdrop {
+            pointer-events: none;
+        }
+
+        .modal-backdrop.show,
+        .offcanvas-backdrop.show {
+            pointer-events: auto;
+        }
         
         /* Cards */
         .dashboard-card {

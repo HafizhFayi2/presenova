@@ -444,7 +444,7 @@ if ($active_siswa_section_css !== null) {
     </div>
     
     <!-- Attendance Modal (for dashboard) -->
-    <div class="modal fade" id="attendanceModal" tabindex="-1" aria-hidden="true">
+    <div class="modal fade" id="legacyAttendanceModal" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog modal-lg">
             <div class="modal-content">
                 <div class="modal-header">
@@ -546,6 +546,9 @@ if ($active_siswa_section_css !== null) {
         if (shouldPreserveFaceScrollLock()) {
             return;
         }
+        document.querySelectorAll('.modal-backdrop:not(.show), .offcanvas-backdrop:not(.show)').forEach((backdrop) => {
+            backdrop.remove();
+        });
         const hasOverlay = document.querySelector('.modal.show, .offcanvas.show');
         if (hasOverlay) {
             return;
@@ -808,7 +811,7 @@ if ($active_siswa_section_css !== null) {
         });
         
         // Close mobile sidebar when clicking outside
-        $(document).click(function(event) {
+        $(document).off('click.siswaNav touchstart.siswaNav').on('click.siswaNav touchstart.siswaNav', function(event) {
             if ($(window).width() <= 992) {
                 const navShell = $('#navShell');
                 const toggle = $('#mobileMenuToggle');
@@ -820,7 +823,7 @@ if ($active_siswa_section_css !== null) {
         });
         
         // Attendance modal handler (from original code)
-        const attendanceModal = document.getElementById('attendanceModal');
+        const attendanceModal = document.getElementById('legacyAttendanceModal');
         if (attendanceModal) {
             attendanceModal.addEventListener('show.bs.modal', function(event) {
                 const button = event.relatedTarget;

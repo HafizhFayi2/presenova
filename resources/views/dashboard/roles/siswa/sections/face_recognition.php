@@ -3955,10 +3955,9 @@ document.addEventListener('DOMContentLoaded', function() {
         attendanceModalEl.style.display = 'none';
         attendanceModalEl.setAttribute('aria-hidden', 'true');
         document.body.classList.remove('modal-open');
-        const backdrop = document.querySelector('.modal-backdrop');
-        if (backdrop) {
+        document.querySelectorAll('.modal-backdrop, .offcanvas-backdrop').forEach((backdrop) => {
             backdrop.remove();
-        }
+        });
     }
     if (attendanceCancelBtn) {
         attendanceCancelBtn.addEventListener('click', hideAttendanceModal);
@@ -4007,6 +4006,7 @@ document.addEventListener('DOMContentLoaded', function() {
         if (modalEl && window.bootstrap) {
             referenceModal = new bootstrap.Modal(modalEl, { backdrop: true, keyboard: true });
             let outsideClickHandler = null;
+            const outsideDownEvent = window.PointerEvent ? 'pointerdown' : 'mousedown';
 
             if (modalImg) {
                 modalImg.addEventListener('error', function() {
@@ -4027,7 +4027,7 @@ document.addEventListener('DOMContentLoaded', function() {
                         referenceModal.hide();
                     }
                 };
-                document.addEventListener('mousedown', outsideClickHandler);
+                document.addEventListener(outsideDownEvent, outsideClickHandler);
             });
 
             modalEl.addEventListener('hidden.bs.modal', function() {
@@ -4035,7 +4035,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     modalImg.removeAttribute('src');
                 }
                 if (outsideClickHandler) {
-                    document.removeEventListener('mousedown', outsideClickHandler);
+                    document.removeEventListener(outsideDownEvent, outsideClickHandler);
                     outsideClickHandler = null;
                 }
             });
