@@ -721,6 +721,7 @@ class FaceMatcherService
         $stderr = '';
         $timedOut = false;
         $started = microtime(true);
+        $realExitCode = -1;
 
         while (true) {
             $status = proc_get_status($process);
@@ -728,6 +729,7 @@ class FaceMatcherService
             $stderr .= stream_get_contents($pipes[2]);
 
             if (!$status['running']) {
+                $realExitCode = $status['exitcode'];
                 break;
             }
 
@@ -735,8 +737,7 @@ class FaceMatcherService
                 $timedOut = true;
                 // On Windows, proc_terminate doesn't kill child processes.
                 // Use taskkill /T /F to kill the entire process tree.
-                $procStatus = proc_get_status($process);
-                $pid = $procStatus['pid'] ?? 0;
+                $pid = $status['pid'] ?? 0;
                 if ($pid > 0 && PHP_OS_FAMILY === 'Windows') {
                     @exec("taskkill /T /F /PID {$pid} 2>NUL");
                 } else {
@@ -756,6 +757,10 @@ class FaceMatcherService
         }
 
         $exitCode = proc_close($process);
+        if ($realExitCode !== -1) {
+            $exitCode = $realExitCode;
+        }
+
         if ($timedOut && $exitCode === 0) {
             $exitCode = 124;
         }
