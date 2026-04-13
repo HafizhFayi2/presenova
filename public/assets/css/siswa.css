@@ -147,7 +147,7 @@
             background-attachment: fixed;
             color: var(--text-color);
             line-height: 1.6;
-            overflow-x: hidden;
+            overflow-x: clip;
             position: relative;
         }
 
@@ -2010,7 +2010,7 @@
         html,
         body {
                 max-width: 100%;
-                overflow-x: hidden;
+                overflow-x: clip;
                 overflow-y: auto;
                 height: auto;
                 -webkit-overflow-scrolling: touch;
@@ -2048,7 +2048,7 @@
 
         .main-content,
         #content {
-                overflow-x: hidden;
+                overflow-x: clip;
         }
 
         #content .row {

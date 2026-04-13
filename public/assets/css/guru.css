@@ -79,7 +79,7 @@
                 radial-gradient(circle at 70% 65%, rgba(20, 184, 166, 0.12), transparent 28%);
             color: var(--text-color);
             line-height: 1.6;
-            overflow-x: hidden;
+            overflow-x: clip;
             min-height: 100vh;
         }
         
