@@ -1159,3 +1159,23 @@ h6 {
 .step-card:nth-child(4) {
   animation-delay: 0.4s;
 }
+
+
+/* =========================================================
+   GLOBAL MOBILE SCROLL FIX
+   ========================================================= */
+@media (max-width: 992px) {
+    html, body {
+        overflow-y: auto !important;
+        overflow-x: clip !important;
+        overscroll-behavior-y: auto !important;
+        touch-action: pan-y pinch-zoom !important;
+    }
+    /* Fix Safari 100vh bug */
+    @supports (-webkit-touch-callout: none) {
+        html, body {
+            height: -webkit-fill-available !important;
+            -webkit-overflow-scrolling: touch !important;
+        }
+    }
+}
