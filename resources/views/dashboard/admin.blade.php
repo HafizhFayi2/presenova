@@ -104,10 +104,9 @@ if (!function_exists('calculateJpTimeRange')) {
         $time_out_obj = clone $time_in_obj;
         $time_out_obj->modify('+' . $duration_minutes . ' minutes');
 
-        $tolerance_minutes = max(0, (int) $tolerance_minutes);
-        if ($tolerance_minutes > 0) {
-            $time_out_obj->modify('+' . $tolerance_minutes . ' minutes');
-        }
+        // NOTE: tolerance_minutes is intentionally NOT added here.
+        // Tolerance is only for attendance window checking (buildScheduleWindow),
+        // not for stored shift/schedule times. JP = 45 min, istirahat = 15 min.
 
         return [
             $time_in_obj->format('H:i:s'),
@@ -225,50 +224,89 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             exit();
         }
 
-        $backupResult = backupStudentData($db, $studentId, $reason);
+        // Backup student data before deletion (non-fatal if backup fails)
+        $backupResult = ['success' => false];
+        try {
+            $backupResult = backupStudentData($db, $studentId, $reason);
+        } catch (Throwable $e) {
+            // Backup failure should not block deletion - log and continue
+            error_log('Presenova: backupStudentData failed for student #' . $studentId . ': ' . $e->getMessage());
+            $backupResult = ['success' => false, 'error' => $e->getMessage()];
+        }
+
+        // If backup partially succeeded or failed, still proceed with deletion
+        // but warn admin if backup failed completely
+        $backupWarning = '';
         if (empty($backupResult['success'])) {
-            $error = $backupResult['error'] ?? 'Gagal melakukan backup data siswa.';
-            header("Location: admin.php?table=student&error=" . urlencode($error));
-            exit();
+            $backupWarning = ' (Peringatan: backup data gagal disimpan)';
         }
 
         $db->beginTransaction();
-        $ok = true;
-        $ok = $ok && $db->query("DELETE FROM presence WHERE student_id = ?", [$studentId]);
-        $ok = $ok && $db->query("DELETE FROM student_schedule WHERE student_id = ?", [$studentId]);
-        $ok = $ok && $db->query("DELETE FROM activity_logs WHERE user_type = 'student' AND user_id = ?", [$studentId]);
-        $ok = $ok && $db->query("DELETE FROM student WHERE id = ?", [$studentId]);
+        try {
+            // Delete all related records first to avoid FK constraint errors
+            $db->query("DELETE FROM presence WHERE student_id = ?", [$studentId]);
+            $db->query("DELETE FROM student_schedule WHERE student_id = ?", [$studentId]);
+            $db->query("DELETE FROM activity_logs WHERE user_type = 'student' AND user_id = ?", [$studentId]);
 
-        if ($ok) {
+            // Safely try to delete from optional tables (may not exist on all deployments)
+            $optionalTables = [
+                "DELETE FROM push_subscriptions WHERE student_id = ?",
+                "DELETE FROM notification_queue WHERE student_id = ?",
+                "DELETE FROM master_data_audit_logs WHERE entity_type = 'student' AND entity_id = ?",
+            ];
+            foreach ($optionalTables as $optionalSql) {
+                try {
+                    $db->query($optionalSql, [$studentId]);
+                } catch (Throwable $e) {
+                    // Table might not exist - ignore
+                }
+            }
+
+            // Finally delete the student record
+            $deleteOk = $db->query("DELETE FROM student WHERE id = ?", [$studentId]);
+            if (!$deleteOk) {
+                throw new RuntimeException('Gagal menghapus record siswa dari database.');
+            }
+
             $db->commit();
-        } else {
+        } catch (Throwable $e) {
             $db->rollBack();
-            $error = "Gagal menghapus data siswa.";
+            $error = "Gagal menghapus data siswa: " . $e->getMessage();
             header("Location: admin.php?table=student&error=" . urlencode($error));
             exit();
         }
 
-        resetAutoIncrementIfEmpty($db, ['presence', 'student_schedule', 'activity_logs', 'student'], 0);
+        // Reset auto-increment for emptied tables (non-fatal)
+        try {
+            resetAutoIncrementIfEmpty($db, ['presence', 'student_schedule', 'activity_logs', 'student'], 0);
+        } catch (Throwable $e) {
+            // Non-fatal, ignore
+        }
 
-        $filesToDelete = array_merge(
-            $backupResult['copied_references'] ?? [],
-            $backupResult['copied_attendance'] ?? [],
-            $backupResult['match_log_files'] ?? []
-        );
-        $filesToDelete = array_unique($filesToDelete);
-        foreach ($filesToDelete as $filePath) {
-            if ($filePath && is_file($filePath)) {
-                @unlink($filePath);
+        // Clean up original face/attendance files (non-fatal)
+        try {
+            $filesToDelete = array_merge(
+                $backupResult['copied_references'] ?? [],
+                $backupResult['copied_attendance'] ?? [],
+                $backupResult['match_log_files'] ?? []
+            );
+            $filesToDelete = array_unique($filesToDelete);
+            foreach ($filesToDelete as $filePath) {
+                if ($filePath && is_file($filePath)) {
+                    @unlink($filePath);
+                }
             }
+
+            $facesRoot = BASE_PATH . DIRECTORY_SEPARATOR . 'uploads' . DIRECTORY_SEPARATOR . 'faces';
+            $faceDirectories = array_unique(array_filter($backupResult['face_directories'] ?? []));
+            foreach ($faceDirectories as $faceDirectory) {
+                pruneEmptyDirectoryTree($faceDirectory, $facesRoot);
+            }
+        } catch (Throwable $e) {
+            // File cleanup is non-fatal
         }
 
-        $facesRoot = BASE_PATH . DIRECTORY_SEPARATOR . 'uploads' . DIRECTORY_SEPARATOR . 'faces';
-        $faceDirectories = array_unique(array_filter($backupResult['face_directories'] ?? []));
-        foreach ($faceDirectories as $faceDirectory) {
-            pruneEmptyDirectoryTree($faceDirectory, $facesRoot);
-        }
-
-        $success = "Siswa berhasil dihapus dan backup tersimpan.";
+        $success = "Siswa berhasil dihapus." . $backupWarning;
         header("Location: admin.php?table=student&success=" . urlencode($success));
         exit();
     }
@@ -1417,12 +1455,41 @@ if ($action == 'delete') {
                 header("Location: admin.php?table=teacher&error=" . urlencode($error));
                 exit();
             }
-            $id = $_GET['id'];
-            $sql = "DELETE FROM teacher WHERE id = ?";
-            $db->query($sql, [$id]);
-            resetAutoIncrementIfEmpty($db, 'teacher', 0);
-            $success = "Guru berhasil dihapus!";
-            header("Location: admin.php?table=teacher&success=" . urlencode($success));
+            $id = isset($_GET['id']) ? (int) $_GET['id'] : 0;
+            if ($id <= 0) {
+                $error = "ID guru tidak valid.";
+                header("Location: admin.php?table=teacher&error=" . urlencode($error));
+                exit();
+            }
+            $db->beginTransaction();
+            try {
+                // Delete related student_schedule records via teacher_schedule
+                $scheduleIds = $db->query(
+                    "SELECT schedule_id FROM teacher_schedule WHERE teacher_id = ?", [$id]
+                );
+                if ($scheduleIds) {
+                    $rows = $scheduleIds->fetchAll();
+                    foreach ($rows as $row) {
+                        $db->query("DELETE FROM student_schedule WHERE teacher_schedule_id = ?", [$row['schedule_id']]);
+                    }
+                }
+                // Delete teacher_schedule records
+                $db->query("DELETE FROM teacher_schedule WHERE teacher_id = ?", [$id]);
+                // Delete the teacher
+                $deleteOk = $db->query("DELETE FROM teacher WHERE id = ?", [$id]);
+                if (!$deleteOk) {
+                    throw new RuntimeException('Gagal menghapus data guru.');
+                }
+                $db->commit();
+                try {
+                    resetAutoIncrementIfEmpty($db, ['teacher_schedule', 'student_schedule', 'teacher'], 0);
+                } catch (Throwable $e) {}
+                $success = "Guru berhasil dihapus!";
+            } catch (Throwable $e) {
+                $db->rollBack();
+                $error = "Gagal menghapus guru: " . $e->getMessage();
+            }
+            header("Location: admin.php?table=teacher&" . (isset($success) ? "success=" . urlencode($success) : "error=" . urlencode($error)));
             exit();
             break;
             
@@ -1432,14 +1499,28 @@ if ($action == 'delete') {
                 header("Location: admin.php?table=schedule&error=" . urlencode($error));
                 exit();
             }
-            $id = $_GET['id'];
+            $id = isset($_GET['id']) ? (int) $_GET['id'] : 0;
+            if ($id <= 0) {
+                $error = "ID jadwal tidak valid.";
+                header("Location: admin.php?table=schedule&error=" . urlencode($error));
+                exit();
+            }
             $db->beginTransaction();
-            $db->query("DELETE FROM student_schedule WHERE teacher_schedule_id = ?", [$id]);
-            $db->query("DELETE FROM teacher_schedule WHERE schedule_id = ?", [$id]);
-            $db->commit();
-            resetAutoIncrementIfEmpty($db, 'teacher_schedule', 0);
-            $success = "Jadwal berhasil dihapus!";
-            header("Location: admin.php?table=schedule&success=" . urlencode($success));
+            try {
+                // Delete presence records that reference student_schedules of this teacher_schedule
+                $db->query("DELETE FROM presence WHERE student_schedule_id IN (SELECT student_schedule_id FROM student_schedule WHERE teacher_schedule_id = ?)", [$id]);
+                $db->query("DELETE FROM student_schedule WHERE teacher_schedule_id = ?", [$id]);
+                $db->query("DELETE FROM teacher_schedule WHERE schedule_id = ?", [$id]);
+                $db->commit();
+                try {
+                    resetAutoIncrementIfEmpty($db, ['teacher_schedule', 'student_schedule'], 0);
+                } catch (Throwable $e) {}
+                $success = "Jadwal berhasil dihapus!";
+            } catch (Throwable $e) {
+                $db->rollBack();
+                $error = "Gagal menghapus jadwal: " . $e->getMessage();
+            }
+            header("Location: admin.php?table=schedule&" . (isset($success) ? "success=" . urlencode($success) : "error=" . urlencode($error)));
             exit();
             break;
 
@@ -1491,7 +1572,8 @@ if ($action == 'delete') {
                 exit();
             }
 
-            [$start_dt, $end_dt] = buildScheduleWindow($schedule_date, $time_in, $time_out, $tz, 0);
+            $tolerance_minutes = getTimeToleranceMinutesFromSite($db);
+            [$start_dt, $end_dt] = buildScheduleWindow($schedule_date, $time_in, $time_out, $tz, $tolerance_minutes);
             if ($now < $start_dt || $now > $end_dt) {
                 $error = "Hapus hanya diizinkan saat jam pelajaran masih berlangsung.";
                 header("Location: admin.php?table=attendance&error=" . urlencode($error));

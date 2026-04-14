@@ -1045,10 +1045,10 @@ if (!function_exists('calculateJpTimeRange')) {
         $time_out_obj = clone $time_in_obj;
         $time_out_obj->modify('+' . $duration_minutes . ' minutes');
 
-        $tolerance_minutes = max(0, (int) $tolerance_minutes);
-        if ($tolerance_minutes > 0) {
-            $time_out_obj->modify('+' . $tolerance_minutes . ' minutes');
-        }
+        // NOTE: tolerance_minutes is intentionally NOT added to time_out here.
+        // Tolerance is only applied in buildScheduleWindow() when checking
+        // attendance validity, not baked into stored shift/schedule times.
+        // Each JP = 45 minutes, istirahat (JP5/JP9) = 15 minutes.
 
         return [$time_in_obj->format('H:i:s'), $time_out_obj->format('H:i:s')];
     }
