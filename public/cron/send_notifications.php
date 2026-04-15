@@ -476,17 +476,15 @@ foreach ($schedules as $schedule) {
     }
 
     $hasAttendance = $scheduleId > 0 && isset($presenceBySchedule[$scheduleId]);
-    $reminderDt = $timeInDt->modify('-2 minutes');
     $reminderFiveDt = $timeInDt->modify('-5 minutes');
-    $lastTenDt = $timeOutDt->modify('-10 minutes');
+    $lastFiveDt = $timeOutDt->modify('-5 minutes');
     $toleranceStartDt = $timeOutDt->modify('-' . $toleranceMinutes . ' minutes');
     $overdueStartDt = $timeOutDt;
 
     $events = [
         ['type' => 'reminder_5min', 'time' => $reminderFiveDt, 'title' => 'Pengingat Jadwal', 'body' => "5 menit lagi jadwal {$subjectName} dimulai. Siapkan absensi wajah.", 'url' => '/dashboard/siswa.php?page=face_recognition'],
-        ['type' => 'reminder_2min', 'time' => $reminderDt, 'title' => 'Pengingat Jadwal', 'body' => "2 menit lagi jadwal {$subjectName} dimulai. Siapkan absensi wajah.", 'url' => '/dashboard/siswa.php?page=face_recognition'],
         ['type' => 'schedule_start', 'time' => $timeInDt, 'title' => 'Jadwal Dimulai', 'body' => "Jadwal {$subjectName} sudah dimulai. Anda sudah bisa absen wajah.", 'url' => '/dashboard/siswa.php?page=face_recognition'],
-        ['type' => 'last_10_min', 'time' => $lastTenDt, 'title' => 'Sisa 10 Menit', 'body' => "Sisa 10 menit sebelum jadwal {$subjectName} berakhir. Segera absensi.", 'url' => '/dashboard/siswa.php?page=face_recognition'],
+        ['type' => 'last_5_min', 'time' => $lastFiveDt, 'title' => 'Sisa 5 Menit', 'body' => "Sisa 5 menit sebelum jadwal {$subjectName} berakhir. Segera absensi.", 'url' => '/dashboard/siswa.php?page=face_recognition'],
     ];
 
     if ($toleranceMinutes > 0) {
@@ -530,60 +528,22 @@ foreach ($schedules as $schedule) {
         updateNotificationLog($logId, 'FAILED', $errorMessage);
     }
 
-    if (!$hasAttendance && $now >= $reminderFiveDt && $now < $timeInDt) {
-        $remainingSeconds = max(0, $timeInDt->getTimestamp() - $now->getTimestamp());
-        $remainingMinutes = (int) ceil(max(0, $remainingSeconds) / 60);
-        if ($remainingMinutes >= 0 && $remainingMinutes <= 5) {
-            $countdownTitle = 'Countdown Absensi Berjalan';
-            $countdownBody = $remainingMinutes > 0
-                ? "Countdown jadwal {$subjectName}: {$remainingMinutes} menit menuju waktu mulai."
-                : "Countdown jadwal {$subjectName}: waktu mulai sudah tiba, segera lakukan absensi.";
-            $countdownLogId = insertNotificationLog(
-                $studentId,
-                $scheduleId > 0 ? $scheduleId : null,
-                'countdown_running',
-                $now->format('Y-m-d H:i:s')
-            );
-
-            if ($countdownLogId !== null) {
-                $countdownResult = sendPushToStudent(
-                    $studentId,
-                    ['title' => $countdownTitle, 'body' => $countdownBody, 'url' => '/dashboard/siswa.php?page=face_recognition'],
-                    $nodeBin,
-                    $sendScript,
-                    $publicKey,
-                    $privateKey,
-                    $subject,
-                    $pushTtlSeconds
-                );
-
-                if (($countdownResult['failed'] ?? 0) === 0) {
-                    updateNotificationLog($countdownLogId, 'SENT');
-                } else {
-                    $countdownErrors = $countdownResult['errors'] ?? [];
-                    $countdownErrorMessage = is_array($countdownErrors) && $countdownErrors !== [] ? implode(' | ', $countdownErrors) : 'Push failed';
-                    updateNotificationLog($countdownLogId, 'FAILED', $countdownErrorMessage);
-                }
-            }
-        }
-    }
-
     if (!$hasAttendance && $now >= $timeInDt && $now <= $timeOutDt) {
-        $minuteNumber = (int) $now->format('i');
-        if (($minuteNumber % 10) === 0) {
-            $tenMinuteLogId = insertNotificationLog(
+        $elapsedMinutes = (int) round(($now->getTimestamp() - $timeInDt->getTimestamp()) / 60);
+        if ($elapsedMinutes > 0 && ($elapsedMinutes % 25) === 0) {
+            $periodicLogId = insertNotificationLog(
                 $studentId,
                 $scheduleId > 0 ? $scheduleId : null,
-                'reminder_every_10min',
+                'reminder_every_25min',
                 $now->format('Y-m-d H:i:s')
             );
 
-            if ($tenMinuteLogId !== null) {
-                $tenMinuteResult = sendPushToStudent(
+            if ($periodicLogId !== null) {
+                $periodicResult = sendPushToStudent(
                     $studentId,
                     [
                         'title' => 'Pengingat Absensi',
-                        'body' => "Anda belum absensi pada jadwal {$subjectName}. Pengingat otomatis tiap 10 menit selama jadwal masih aktif.",
+                        'body' => "Anda belum absensi pada jadwal {$subjectName}. Pengingat otomatis tiap 25 menit selama jadwal masih aktif.",
                         'url' => '/dashboard/siswa.php?page=face_recognition',
                     ],
                     $nodeBin,
@@ -594,12 +554,12 @@ foreach ($schedules as $schedule) {
                     $pushTtlSeconds
                 );
 
-                if (($tenMinuteResult['failed'] ?? 0) === 0) {
-                    updateNotificationLog($tenMinuteLogId, 'SENT');
+                if (($periodicResult['failed'] ?? 0) === 0) {
+                    updateNotificationLog($periodicLogId, 'SENT');
                 } else {
-                    $tenMinuteErrors = $tenMinuteResult['errors'] ?? [];
-                    $tenMinuteErrorMessage = is_array($tenMinuteErrors) && $tenMinuteErrors !== [] ? implode(' | ', $tenMinuteErrors) : 'Push failed';
-                    updateNotificationLog($tenMinuteLogId, 'FAILED', $tenMinuteErrorMessage);
+                    $periodicErrors = $periodicResult['errors'] ?? [];
+                    $periodicErrorMessage = is_array($periodicErrors) && $periodicErrors !== [] ? implode(' | ', $periodicErrors) : 'Push failed';
+                    updateNotificationLog($periodicLogId, 'FAILED', $periodicErrorMessage);
                 }
             }
         }
