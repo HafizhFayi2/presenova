@@ -1546,6 +1546,10 @@ body.scroll-locked {
 }
 
 .modal-backdrop {
+    pointer-events: none;
+}
+
+.modal-backdrop.show {
     pointer-events: auto;
 }
 
@@ -1770,34 +1774,177 @@ body.attendance-modal-open .modal-backdrop {
 
 @media (max-width: 768px) {
     #attendanceModal .attendance-photo-wrap {
-        min-height: 210px;
-        max-height: 46vh;
+        aspect-ratio: unset;
+        min-height: unset;
+        max-height: none;
+        overflow: visible;
+        display: flex;
+        flex-direction: column;
+        background: #0a0f1e;
+        border-radius: 10px;
+    }
+
+    #attendanceModal .attendance-photo-wrap img {
+        width: 100%;
+        height: auto;
+        max-height: 35vh;
+        object-fit: contain;
+        object-position: center;
+        display: block;
+        border-radius: 10px 10px 0 0;
+        background: #0a0f1e;
     }
 
     #attendanceModal .attendance-photo-overlay {
-        left: 10px;
-        right: 10px;
-        max-height: calc(100% - 20px);
-        padding: 8px 9px;
+        position: relative !important;
+        left: auto !important;
+        right: auto !important;
+        bottom: auto !important;
+        top: auto !important;
+        max-height: none !important;
+        overflow-y: visible;
+        padding: 8px 10px;
+        margin: 0;
+        border: none;
+        border-radius: 0 0 10px 10px;
+        background: linear-gradient(160deg, rgba(12, 18, 35, 0.95), rgba(6, 11, 27, 0.98));
+        box-shadow: none;
+        font-size: 0.72rem;
     }
 
-    #attendanceModal .attendance-photo-overlay .overlay-body,
+    #attendanceModal .attendance-photo-overlay .overlay-header {
+        margin-bottom: 4px;
+        font-size: 0.72rem;
+        gap: 4px;
+    }
+
+    #attendanceModal .attendance-photo-overlay .overlay-header .overlay-title {
+        font-size: 0.72rem;
+    }
+
+    #attendanceModal .attendance-photo-overlay .overlay-badges {
+        gap: 3px;
+        justify-content: flex-end;
+    }
+
+    #attendanceModal .attendance-photo-overlay .match-badge {
+        font-size: 0.6rem;
+        padding: 2px 6px;
+    }
+
+    #attendanceModal .attendance-photo-overlay .overlay-body {
+        grid-template-columns: 1fr;
+        gap: 6px;
+    }
+
     #attendanceModal .attendance-photo-overlay .overlay-geo-grid {
         grid-template-columns: 1fr;
+        gap: 4px;
+    }
+
+    #attendanceModal .attendance-photo-overlay .geo-main strong {
+        font-size: 0.76rem;
+    }
+
+    #attendanceModal .attendance-photo-overlay .geo-main span {
+        font-size: 0.6rem;
     }
 
     #attendanceModal .attendance-photo-overlay .geo-map {
         width: 100%;
-        height: 120px;
+        height: 80px;
+        border-radius: 6px;
     }
 
-    #attendanceModal .attendance-photo-overlay .overlay-info-grid,
     #attendanceModal .attendance-photo-overlay .geo-detail-grid {
-        grid-template-columns: 1fr;
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 4px;
+        font-size: 0.65rem;
     }
 
-    #attendanceModal .attendance-photo-overlay .overlay-badges {
-        justify-content: flex-start;
+    #attendanceModal .attendance-photo-overlay .geo-detail-grid span {
+        font-size: 0.55rem;
+    }
+
+    #attendanceModal .attendance-photo-overlay .geo-detail-grid strong {
+        font-size: 0.7rem;
+        white-space: nowrap;
+    }
+
+    #attendanceModal .attendance-photo-overlay .geo-time {
+        font-size: 0.58rem;
+    }
+
+    #attendanceModal .attendance-photo-overlay .overlay-subtitle {
+        font-size: 0.68rem;
+        margin-bottom: 2px;
+    }
+
+    #attendanceModal .attendance-photo-overlay .overlay-info-grid {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 3px 8px;
+        font-size: 0.62rem;
+    }
+
+    #attendanceModal .attendance-photo-overlay .overlay-info-grid span {
+        font-size: 0.55rem;
+    }
+
+    #attendanceModal .attendance-photo-overlay .overlay-info-grid strong {
+        font-size: 0.68rem;
+        white-space: normal;
+        overflow: visible;
+        text-overflow: unset;
+    }
+
+    #attendanceModal .attendance-photo-overlay .overlay-divider {
+        margin: 3px 0;
+    }
+
+    #attendanceModal .attendance-photo-overlay .overlay-metrics {
+        grid-template-columns: repeat(3, 1fr);
+        gap: 3px;
+        font-size: 0.62rem;
+    }
+
+    #attendanceModal .attendance-photo-overlay .overlay-metrics strong {
+        font-size: 0.72rem;
+    }
+
+    #attendanceModal .attendance-photo-overlay .overlay-metrics span {
+        font-size: 0.55rem;
+    }
+
+    /* Modal dialog compact */
+    #attendanceModal .attendance-modal-dialog {
+        margin: 0.5vh auto;
+        width: 98vw;
+        max-width: 98vw;
+    }
+
+    #attendanceModal .attendance-modal .modal-body {
+        padding: 10px;
+        max-height: 80vh;
+        overflow-y: auto;
+    }
+
+    #attendanceModal .attendance-modal-grid {
+        gap: 8px;
+    }
+
+    #attendanceModal .attendance-photo-card {
+        padding: 8px;
+    }
+
+    #attendanceModal .attendance-photo-header h6 {
+        font-size: 0.85rem;
+    }
+
+    #attendanceModal .attendance-modal-note {
+        font-size: 0.8rem;
+        padding: 8px 10px;
+        margin-top: 6px;
     }
 }
 

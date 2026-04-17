@@ -24,6 +24,35 @@ DEFAULT_BACKUP_DETECTOR = "mtcnn"
 DEFAULT_BACKUP_MAX_REFERENCES = 5
 
 
+def configure_runtime_cache_dirs() -> None:
+    """
+    Force DeepFace/TensorFlow cache dirs into project storage so web-server users
+    (e.g. www-data) don't fail on unwritable HOME directories.
+    """
+    try:
+        project_root = Path(__file__).resolve().parents[3]
+    except Exception:
+        project_root = Path.cwd()
+
+    base_cache = Path(
+        os.environ.get("PRESENOVA_DEEPFACE_HOME", str(project_root / "storage" / "app" / "deepface"))
+    ).expanduser()
+    base_cache.mkdir(parents=True, exist_ok=True)
+
+    mpl_cache = base_cache / "matplotlib"
+    tfhub_cache = base_cache / "tfhub"
+    xdg_cache = base_cache / "xdg"
+
+    mpl_cache.mkdir(parents=True, exist_ok=True)
+    tfhub_cache.mkdir(parents=True, exist_ok=True)
+    xdg_cache.mkdir(parents=True, exist_ok=True)
+
+    os.environ.setdefault("DEEPFACE_HOME", str(base_cache))
+    os.environ.setdefault("MPLCONFIGDIR", str(mpl_cache))
+    os.environ.setdefault("TFHUB_CACHE_DIR", str(tfhub_cache))
+    os.environ.setdefault("XDG_CACHE_HOME", str(xdg_cache))
+
+
 def emit(payload: Dict, code: int = 0) -> None:
     print(json.dumps(payload, ensure_ascii=False))
     sys.exit(code)
@@ -213,6 +242,7 @@ def build_detector_candidates(primary_detector: str, stage: str, include_fallbac
 
 def main() -> None:
     os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "2")
+    configure_runtime_cache_dirs()
 
     parser = argparse.ArgumentParser(description="DeepFace-based face matcher")
     parser.add_argument("--reference", required=True, help="Path to reference image or folder")
@@ -242,7 +272,7 @@ def main() -> None:
     parser.add_argument(
         "--strict-margin",
         type=float,
-        default=0.03,
+        default=0.15,
         help="Extra safety margin below DeepFace threshold to reduce false-accepts (0.0-0.2).",
     )
     parser.add_argument(

@@ -161,6 +161,8 @@ $siswa_section_css = [
 $active_siswa_section_css = $siswa_section_css[$page] ?? null;
 $siswa_core_css_version = @filemtime(public_path('assets/css/siswa.css')) ?: time();
 $siswa_dialog_css_version = @filemtime(public_path('assets/css/app-dialog.css')) ?: time();
+$siswa_pwa_css_version = @filemtime(public_path('assets/css/pwa.css')) ?: time();
+$siswa_pwa_js_version = @filemtime(public_path('assets/js/pwa.js')) ?: time();
 $siswa_section_css_version = null;
 if ($active_siswa_section_css !== null) {
     $sectionCssPath = public_path('assets/css/sections/' . $active_siswa_section_css);
@@ -224,18 +226,43 @@ if ($active_siswa_section_css !== null) {
             if (themeColorMeta) {
                 themeColorMeta.setAttribute('content', theme === 'dark' ? '#0f141c' : '#f7f8fc');
             }
+
+            const isStandaloneMode =
+                (window.matchMedia && (
+                    window.matchMedia('(display-mode: standalone)').matches ||
+                    window.matchMedia('(display-mode: fullscreen)').matches
+                )) ||
+                window.navigator.standalone === true;
+            if (isStandaloneMode) {
+                document.documentElement.setAttribute('data-pwa-launch', '1');
+            }
         })();
     </script>
     
     
 <link rel="stylesheet" href="../assets/css/siswa.css?v=<?php echo $siswa_core_css_version; ?>" data-inline-style="extracted">
     <link rel="stylesheet" href="../assets/css/app-dialog.css?v=<?php echo $siswa_dialog_css_version; ?>">
+    <link rel="stylesheet" href="../assets/css/pwa.css?v=<?php echo $siswa_pwa_css_version; ?>">
     <?php if ($active_siswa_section_css !== null): ?>
     <link rel="stylesheet" href="../assets/css/sections/<?php echo $active_siswa_section_css; ?>?v=<?php echo $siswa_section_css_version; ?>">
     <?php endif; ?>
 
 </head>
-<body data-enable-push="1">
+<body data-enable-push="1" data-launch-splash="1">
+    <div class="splash-screen" id="appLaunchSplash" aria-hidden="true">
+        <span class="splash-backdrop"></span>
+        <div class="splash-content">
+            <div class="splash-logo-wrap">
+                <span class="splash-logo-glow"></span>
+                <img src="../assets/images/logo-512.png" class="splash-logo" alt="" loading="eager" decoding="async">
+            </div>
+            <div class="splash-text">Presenova</div>
+            <span class="splash-progress" role="presentation">
+                <span class="splash-progress-bar"></span>
+            </span>
+        </div>
+    </div>
+    <noscript><style>#appLaunchSplash { display: none !important; }</style></noscript>
     <div class="bg-orbs" aria-hidden="true">
         <span class="orb orb-1"></span>
         <span class="orb orb-2"></span>
@@ -417,7 +444,7 @@ if ($active_siswa_section_css !== null) {
     </div>
     
     <!-- Attendance Modal (for dashboard) -->
-    <div class="modal fade" id="attendanceModal" tabindex="-1" aria-hidden="true">
+    <div class="modal fade" id="legacyAttendanceModal" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog modal-lg">
             <div class="modal-content">
                 <div class="modal-header">
@@ -449,11 +476,11 @@ if ($active_siswa_section_css !== null) {
     <!-- JavaScript -->
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    <script src="../assets/js/app-dialog.js"></script>
+    <script src="../assets/js/app-dialog.js?v=20260410b"></script>
     <script src="../assets/js/schedule-print-dialog.js"></script>
     <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
     <script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap5.min.js"></script>
-    <script src="../assets/js/pwa.js"></script>
+    <script src="../assets/js/pwa.js?v=<?php echo $siswa_pwa_js_version; ?>"></script>
     
     <script>
     const siswaPage = <?php echo json_encode((string) $page); ?>;
@@ -473,23 +500,26 @@ if ($active_siswa_section_css !== null) {
         return theme === 'dark' ? 'dark' : 'light';
     }
 
-    function ensureStudentPageUnlocked() {
-        if (siswaPage === 'face_recognition') {
-            return;
-        }
-
+    function ensureStudentPageUnlocked(force = false) {
         const html = document.documentElement;
         const body = document.body;
         html.classList.remove('scroll-locked');
         html.style.overflow = '';
+        html.style.height = '';
         html.style.paddingRight = '';
-        body.classList.remove('scroll-locked', 'modal-open', 'attendance-modal-open');
+        body.classList.remove('scroll-locked', 'modal-open', 'attendance-modal-open', 'riwayat-modal-open');
         body.style.position = '';
         body.style.top = '';
         body.style.width = '';
         body.style.overflow = '';
+        body.style.height = '';
         body.style.paddingRight = '';
         body.style.touchAction = '';
+
+        const navShell = document.getElementById('navShell');
+        if (navShell) {
+            navShell.classList.remove('show');
+        }
 
         document.querySelectorAll('.modal-backdrop, .offcanvas-backdrop').forEach((backdrop) => {
             backdrop.remove();
@@ -502,6 +532,28 @@ if ($active_siswa_section_css !== null) {
             modal.removeAttribute('aria-modal');
             modal.removeAttribute('role');
         });
+    }
+
+    function shouldPreserveFaceScrollLock() {
+        if (siswaPage !== 'face_recognition') {
+            return false;
+        }
+        const activeLocationLayer = document.querySelector('.location-lock-layer.show:not(.modal-suspended)');
+        return !!activeLocationLayer;
+    }
+
+    function releaseScrollLockIfSafe() {
+        if (shouldPreserveFaceScrollLock()) {
+            return;
+        }
+        document.querySelectorAll('.modal-backdrop:not(.show), .offcanvas-backdrop:not(.show)').forEach((backdrop) => {
+            backdrop.remove();
+        });
+        const hasOverlay = document.querySelector('.modal.show, .offcanvas.show');
+        if (hasOverlay) {
+            return;
+        }
+        ensureStudentPageUnlocked(true);
     }
 
     function updateSiswaBranding(theme) {
@@ -644,6 +696,9 @@ if ($active_siswa_section_css !== null) {
             }
 
             queuedUrls.push(normalized);
+            link.addEventListener('click', () => {
+                ensureStudentPageUnlocked(true);
+            });
             link.addEventListener('mouseenter', () => prefetchSectionUrl(normalized), { passive: true });
             link.addEventListener('focus', () => prefetchSectionUrl(normalized), { passive: true });
             link.addEventListener('touchstart', () => prefetchSectionUrl(normalized), { passive: true, once: true });
@@ -680,7 +735,8 @@ if ($active_siswa_section_css !== null) {
             document.documentElement.setAttribute('data-theme', currentTheme);
         }
         updateSiswaBranding(currentTheme);
-        ensureStudentPageUnlocked();
+        ensureStudentPageUnlocked(true);
+        window.setTimeout(releaseScrollLockIfSafe, 120);
         initStudentSectionPrefetch();
 
         if (typeof window.jQuery === 'undefined') {
@@ -755,7 +811,7 @@ if ($active_siswa_section_css !== null) {
         });
         
         // Close mobile sidebar when clicking outside
-        $(document).click(function(event) {
+        $(document).off('click.siswaNav touchstart.siswaNav').on('click.siswaNav touchstart.siswaNav', function(event) {
             if ($(window).width() <= 992) {
                 const navShell = $('#navShell');
                 const toggle = $('#mobileMenuToggle');
@@ -767,7 +823,7 @@ if ($active_siswa_section_css !== null) {
         });
         
         // Attendance modal handler (from original code)
-        const attendanceModal = document.getElementById('attendanceModal');
+        const attendanceModal = document.getElementById('legacyAttendanceModal');
         if (attendanceModal) {
             attendanceModal.addEventListener('show.bs.modal', function(event) {
                 const button = event.relatedTarget;
@@ -781,7 +837,26 @@ if ($active_siswa_section_css !== null) {
     }
 
     window.addEventListener('pageshow', function() {
-        ensureStudentPageUnlocked();
+        releaseScrollLockIfSafe();
+        window.setTimeout(releaseScrollLockIfSafe, 120);
+    });
+
+    document.addEventListener('hidden.bs.modal', function() {
+        releaseScrollLockIfSafe();
+    });
+
+    document.addEventListener('hidden.bs.offcanvas', function() {
+        releaseScrollLockIfSafe();
+    });
+
+    document.addEventListener('visibilitychange', function() {
+        if (!document.hidden) {
+            window.setTimeout(releaseScrollLockIfSafe, 80);
+        }
+    });
+
+    window.addEventListener('focus', function() {
+        window.setTimeout(releaseScrollLockIfSafe, 80);
     });
 
     if (document.readyState === 'loading') {

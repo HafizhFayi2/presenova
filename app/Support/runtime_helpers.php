@@ -111,7 +111,7 @@ if (!defined('FACE_MATCH_TIMEOUT_SECONDS')) {
     define('FACE_MATCH_TIMEOUT_SECONDS', (int) runtime_env('FACE_MATCH_TIMEOUT_SECONDS', 60));
 }
 if (!defined('FACE_MATCH_STRICT_MARGIN')) {
-    define('FACE_MATCH_STRICT_MARGIN', (float) runtime_env('FACE_MATCH_STRICT_MARGIN', 0.03));
+    define('FACE_MATCH_STRICT_MARGIN', (float) runtime_env('FACE_MATCH_STRICT_MARGIN', 0.15));
 }
 
 $deepfaceVenvPythonWindows = public_path('face/.venv/Scripts/python.exe');
@@ -612,6 +612,13 @@ if (!function_exists('presenova_media_sign_ttl_minutes')) {
     }
 }
 
+if (!function_exists('presenova_media_include_version_param')) {
+    function presenova_media_include_version_param(): bool
+    {
+        return filter_var((string) runtime_env('MEDIA_SIGN_INCLUDE_VERSION', 'false'), FILTER_VALIDATE_BOOLEAN);
+    }
+}
+
 if (!function_exists('face_reference_secure_url')) {
     function face_reference_secure_url($photoReference, $appendVersion = true): string
     {
@@ -626,22 +633,22 @@ if (!function_exists('face_reference_secure_url')) {
         }
 
         $encodedRef = presenova_media_ref_encode($relativePath);
+        $routeParams = ['ref' => $encodedRef];
+        if ($appendVersion && presenova_media_include_version_param()) {
+            $version = @filemtime($absolutePath);
+            if ($version) {
+                $routeParams['v'] = (string) $version;
+            }
+        }
         try {
             $url = \Illuminate\Support\Facades\URL::temporarySignedRoute(
                 'media.face',
                 now()->addMinutes(presenova_media_sign_ttl_minutes()),
-                ['ref' => $encodedRef],
+                $routeParams,
                 false
             );
         } catch (\Throwable) {
             return '';
-        }
-
-        if ($appendVersion) {
-            $version = @filemtime($absolutePath);
-            if ($version) {
-                $url .= (str_contains($url, '?') ? '&' : '?') . 'v=' . $version;
-            }
         }
 
         return $url;
@@ -662,22 +669,22 @@ if (!function_exists('attendance_photo_secure_url')) {
         }
 
         $encodedRef = presenova_media_ref_encode($relativePath);
+        $routeParams = ['ref' => $encodedRef];
+        if ($appendVersion && presenova_media_include_version_param()) {
+            $version = @filemtime($absolutePath);
+            if ($version) {
+                $routeParams['v'] = (string) $version;
+            }
+        }
         try {
             $url = \Illuminate\Support\Facades\URL::temporarySignedRoute(
                 'media.attendance',
                 now()->addMinutes(presenova_media_sign_ttl_minutes()),
-                ['ref' => $encodedRef],
+                $routeParams,
                 false
             );
         } catch (\Throwable) {
             return '';
-        }
-
-        if ($appendVersion) {
-            $version = @filemtime($absolutePath);
-            if ($version) {
-                $url .= (str_contains($url, '?') ? '&' : '?') . 'v=' . $version;
-            }
         }
 
         return $url;
@@ -1038,10 +1045,10 @@ if (!function_exists('calculateJpTimeRange')) {
         $time_out_obj = clone $time_in_obj;
         $time_out_obj->modify('+' . $duration_minutes . ' minutes');
 
-        $tolerance_minutes = max(0, (int) $tolerance_minutes);
-        if ($tolerance_minutes > 0) {
-            $time_out_obj->modify('+' . $tolerance_minutes . ' minutes');
-        }
+        // NOTE: tolerance_minutes is intentionally NOT added to time_out here.
+        // Tolerance is only applied in buildScheduleWindow() when checking
+        // attendance validity, not baked into stored shift/schedule times.
+        // Each JP = 45 minutes, istirahat (JP5/JP9) = 15 minutes.
 
         return [$time_in_obj->format('H:i:s'), $time_out_obj->format('H:i:s')];
     }

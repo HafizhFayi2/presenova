@@ -11,10 +11,6 @@ if (isset($student) && is_array($student) && !empty($student['photo_reference'])
 $studentKey = $nisn ?: ($_SESSION['student_id'] ?? '');
 $referencePath = ($nisn || $photoReference) ? $faceMatcher->getReferencePath($nisn, $photoReference) : null;
 $referenceUrl = $referencePath ? $faceMatcher->toPublicUrl($referencePath, '..') : '';
-$referenceVersion = $referencePath && is_file($referencePath) ? (@filemtime($referencePath) ?: time()) : null;
-if ($referenceUrl !== '' && $referenceVersion !== null) {
-    $referenceUrl .= (str_contains($referenceUrl, '?') ? '&' : '?') . 'v=' . $referenceVersion;
-}
 $referenceFile = $referencePath ? basename($referencePath) : '';
 
 $scheduleInfo = null;
@@ -354,7 +350,7 @@ if (isset($db)) {
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
-                <img id="referenceModalImg" src="" alt="Foto Referensi Full" loading="eager" decoding="async" fetchpriority="high">
+                <img id="referenceModalImg" alt="Foto Referensi Full" loading="eager" decoding="async" fetchpriority="high">
             </div>
         </div>
     </div>
@@ -657,12 +653,15 @@ document.addEventListener('DOMContentLoaded', function() {
     const stableWithinThreshold = 1;
     const stableOutsideThreshold = 2;
     const memoryMonitorIntervalMs = isMobileFr ? 3200 : 1500;
-    const memoryBudgetBytes = 4 * 1024 * 1024 * 1024; // Budget runtime tetap 4GB
+    const memoryServerBaselineBytes = 4 * 1024 * 1024 * 1024; // Baseline kompatibilitas server: 4GB
+    const memoryBudgetBytes = memoryServerBaselineBytes;
     const memoryTurboPercent = 70;
     const memoryTurboStartBytes = 10 * 1024 * 1024; // Mode maksimal dipicu sejak 0-10MB
     const memoryWarningPercent = 93;
     const memoryCriticalPercent = 97;
     const memoryRecoverPercent = 90;
+    const memoryDeviceWarningPercent = 90;
+    const memoryDeviceCriticalPercent = 96;
     const memoryTurboLagMs = 190;
     const memoryWarningLagMs = 460;
     const memoryCriticalLagMs = 980;
@@ -1694,11 +1693,36 @@ document.addEventListener('DOMContentLoaded', function() {
             page.classList.add('mode-' + absenceMode);
         }
         if (absenceMode !== 'hadir') {
-            locationAllowed = true;
-            locationReady = true;
-            setStatus(`Mode ${getModeLabel(absenceMode)} aktif. Verifikasi wajah tetap diperlukan.`);
+            // Sakit/Izin: GPS tetap WAJIB aktif, tapi tidak perlu validasi radius
             if (gpsEnabled) {
-                setLocationLock(false);
+                const hasGeoCoords = Number.isFinite(currentLat) && Number.isFinite(currentLng);
+                if (hasGeoCoords) {
+                    // Sudah punya koordinat, boleh lanjut
+                    locationAllowed = true;
+                    locationReady = true;
+                    setLocationLock(false);
+                    setStatus(`Mode ${getModeLabel(absenceMode)} aktif. Lokasi tercatat. Verifikasi wajah tetap diperlukan.`);
+                } else {
+                    // Belum punya koordinat, wajib tunggu GPS
+                    locationAllowed = false;
+                    locationReady = false;
+                    setLocationLock(true, `Mode ${getModeLabel(absenceMode)}: Menunggu lokasi GPS. Aktifkan GPS untuk melanjutkan.`);
+                    setStatus(`Mode ${getModeLabel(absenceMode)} aktif. Menunggu lokasi GPS...`);
+                    // Mulai watch GPS
+                    if (navigator.geolocation) {
+                        if (locationWatchId !== null) {
+                            navigator.geolocation.clearWatch(locationWatchId);
+                            locationWatchId = null;
+                        }
+                        const geoOpts = { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 };
+                        navigator.geolocation.getCurrentPosition(handleLocationSuccess, handleLocationError, geoOpts);
+                        locationWatchId = navigator.geolocation.watchPosition(handleLocationSuccess, handleLocationError, geoOpts);
+                    }
+                }
+            } else {
+                locationAllowed = true;
+                locationReady = true;
+                setStatus(`Mode ${getModeLabel(absenceMode)} aktif. Verifikasi wajah tetap diperlukan.`);
             }
         } else {
             setStatus('Mode hadir aktif. Pastikan berada di dalam radius lokasi.');
@@ -1776,33 +1800,37 @@ document.addEventListener('DOMContentLoaded', function() {
         const perfMemory = (typeof performance !== 'undefined' && performance && performance.memory) ? performance.memory : null;
         const rawUsed = perfMemory?.usedJSHeapSize || 0;
         const limit = perfMemory?.jsHeapSizeLimit || 0;
-        const total = perfMemory?.totalJSHeapSize || 0;
         const supportsHeap = Number.isFinite(limit) && limit > 0;
-        const effectiveLimit = supportsHeap
+        const effectiveLimit = memoryBudgetBytes;
+        const guardLimit = supportsHeap
             ? Math.max(1, Math.min(limit, memoryBudgetBytes))
             : 0;
         const used = supportsHeap ? Math.min(rawUsed, memoryBudgetBytes) : 0;
         const percent = supportsHeap ? Math.min(100, (used / effectiveLimit) * 100) : 0;
+        const guardPercent = supportsHeap ? Math.min(100, (Math.min(rawUsed, guardLimit) / guardLimit) * 100) : 0;
+        const pressurePercent = supportsHeap ? Math.max(percent, guardPercent) : 0;
 
         memoryUsedText.textContent = supportsHeap ? formatMB(used) : '-';
-        memoryLimitText.textContent = supportsHeap
-            ? formatMB(effectiveLimit)
-            : ((Number.isFinite(total) && total > 0) ? formatMB(total) : '-');
+        memoryLimitText.textContent = formatMB(effectiveLimit);
         memoryBarFill.style.width = supportsHeap
             ? (percent.toFixed(1) + '%')
             : (Math.min(100, lagMs / 10).toFixed(1) + '%');
 
         let nextState = 'normal';
         if (supportsHeap) {
-            if (percent > memoryCriticalPercent || (percent > memoryWarningPercent && lagMs >= memoryCriticalLagMs)) {
+            if (
+                pressurePercent > memoryCriticalPercent
+                || guardPercent > memoryDeviceCriticalPercent
+                || (pressurePercent > memoryWarningPercent && lagMs >= memoryCriticalLagMs)
+            ) {
                 nextState = 'critical';
                 memoryGuardHoldUntil = Math.max(memoryGuardHoldUntil, now + memoryCriticalHoldMs);
                 memoryRecoverStableTicks = 0;
-            } else if (percent > memoryWarningPercent) {
+            } else if (pressurePercent > memoryWarningPercent || guardPercent > memoryDeviceWarningPercent) {
                 nextState = 'warning';
                 memoryRecoverStableTicks = 0;
             } else {
-                const safeByHeap = percent <= memoryRecoverPercent;
+                const safeByHeap = pressurePercent <= memoryRecoverPercent && guardPercent <= memoryDeviceWarningPercent;
                 const safeByLag = lagMs <= memoryRecoverLagMs;
                 if (safeByHeap && safeByLag) {
                     memoryRecoverStableTicks += 1;
@@ -1846,15 +1874,15 @@ document.addEventListener('DOMContentLoaded', function() {
             ? 'critical'
             : (nextState === 'warning'
                 ? 'throttle'
-                : ((supportsHeap && percent < memoryTurboPercent && lagMs <= memoryTurboLagMs) ? 'turbo' : 'normal'));
+                : ((supportsHeap && pressurePercent < memoryTurboPercent && lagMs <= memoryTurboLagMs) ? 'turbo' : 'normal'));
 
-        memoryLastPercent = supportsHeap ? percent : 0;
+        memoryLastPercent = supportsHeap ? pressurePercent : 0;
         memoryLastLagMs = lagMs;
         memoryLastUsedBytes = supportsHeap ? used : 0;
         memoryLastSupportsHeap = supportsHeap;
         setMemoryPressureState(nextState, {
             supportsHeap,
-            percent,
+            percent: pressurePercent,
             lagMs,
             profile
         });
@@ -2655,13 +2683,21 @@ document.addEventListener('DOMContentLoaded', function() {
 
     function handleLocationError(error) {
         if (locationOverride) {
-            locationAllowed = true;
+            // Sakit/Izin: GPS wajib aktif, jangan bypass
+            locationAllowed = false;
             locationReady = true;
             locationVerified = false;
-            setLocationLock(false);
-            setCameraStatus(`Mode ${getModeLabel(absenceMode)} aktif`);
+            const modeLabel = getModeLabel(absenceMode);
+            let geoErrMsg = `Mode ${modeLabel}: GPS wajib aktif. Aktifkan lokasi untuk melanjutkan.`;
+            if (error && error.code === 1) {
+                geoErrMsg = `Mode ${modeLabel}: Izin lokasi ditolak. Aktifkan GPS di pengaturan browser.`;
+            } else if (error && error.code === 3) {
+                geoErrMsg = `Mode ${modeLabel}: Permintaan lokasi timeout. Coba lagi.`;
+            }
+            setLocationLock(true, geoErrMsg);
+            setCameraStatus('GPS diperlukan');
             if (!stream) {
-                setStatus(`Mode ${getModeLabel(absenceMode)} aktif. Kamera tetap bisa digunakan tanpa validasi radius.`);
+                setStatus(geoErrMsg);
             }
             updateStartButtonState();
             finishRetryLoading();
@@ -2709,12 +2745,25 @@ document.addEventListener('DOMContentLoaded', function() {
         }
 
         if (locationOverride) {
-            locationAllowed = true;
-            locationReady = true;
-            setLocationLock(false);
-            setCameraStatus(`Mode ${getModeLabel(absenceMode)} aktif`);
-            if (!stream) {
-                setStatus(`Mode ${getModeLabel(absenceMode)} aktif. Kamera dapat langsung digunakan.`);
+            // Sakit/Izin: GPS wajib aktif, tunggu koordinat
+            const hasGeoCoords = Number.isFinite(currentLat) && Number.isFinite(currentLng);
+            if (hasGeoCoords) {
+                locationAllowed = true;
+                locationReady = true;
+                setLocationLock(false);
+                setCameraStatus(`Mode ${getModeLabel(absenceMode)} aktif`);
+                if (!stream) {
+                    setStatus(`Mode ${getModeLabel(absenceMode)} aktif. Lokasi tercatat.`);
+                }
+            } else {
+                locationAllowed = false;
+                locationReady = false;
+                const modeLabel = getModeLabel(absenceMode);
+                setLocationLock(true, `Mode ${modeLabel}: Menunggu lokasi GPS...`);
+                setCameraStatus('Menunggu GPS');
+                if (!stream) {
+                    setStatus(`Mode ${modeLabel}: Aktifkan GPS untuk melanjutkan.`);
+                }
             }
             updateStartButtonState();
 
@@ -2723,20 +2772,20 @@ document.addEventListener('DOMContentLoaded', function() {
                     navigator.geolocation.clearWatch(locationWatchId);
                     locationWatchId = null;
                 }
-                const relaxedOptions = {
+                const geoOpts = {
                     enableHighAccuracy: true,
-                    timeout: 12000,
-                    maximumAge: 5000
+                    timeout: 20000,
+                    maximumAge: 0
                 };
                 navigator.geolocation.getCurrentPosition(
                     handleLocationSuccess,
-                    () => {},
-                    relaxedOptions
+                    handleLocationError,
+                    geoOpts
                 );
                 locationWatchId = navigator.geolocation.watchPosition(
                     handleLocationSuccess,
-                    () => {},
-                    relaxedOptions
+                    handleLocationError,
+                    geoOpts
                 );
             }
 
@@ -2783,8 +2832,8 @@ document.addEventListener('DOMContentLoaded', function() {
 
         const geoOptions = {
             enableHighAccuracy: true,
-            timeout: 12000,
-            maximumAge: 2000
+            timeout: 20000,
+            maximumAge: 0
         };
 
         navigator.geolocation.getCurrentPosition(
@@ -3520,10 +3569,15 @@ document.addEventListener('DOMContentLoaded', function() {
             setStatus('Foto referensi belum tersedia.');
             return;
         }
-        if (gpsEnabled && absenceMode === 'hadir' && !locationAllowed) {
-            const msg = locationReady
-                ? 'Anda berada di luar radius. Kamera tidak dapat diaktifkan.'
-                : 'Menunggu lokasi. Aktifkan GPS untuk melanjutkan.';
+        if (gpsEnabled && !locationAllowed) {
+            let msg;
+            if (absenceMode === 'hadir') {
+                msg = locationReady
+                    ? 'Anda berada di luar radius. Kamera tidak dapat diaktifkan.'
+                    : 'Menunggu lokasi. Aktifkan GPS untuk melanjutkan.';
+            } else {
+                msg = `Mode ${getModeLabel(absenceMode)}: GPS wajib aktif. Aktifkan lokasi untuk melanjutkan.`;
+            }
             setLocationLock(true, msg);
             setStatus(msg);
             return;
@@ -3693,9 +3747,10 @@ document.addEventListener('DOMContentLoaded', function() {
         const distanceValue = Number.isFinite(currentDistance) ? currentDistance : lastDistance;
         const geoVerified = !gpsEnabled ? true : isWithinRadius(distanceValue, currentAccuracy);
         const requiresRadius = activeMode === 'hadir';
-        const requiresGeo = gpsEnabled && requiresRadius;
+        // GPS wajib untuk SEMUA mode (hadir/sakit/izin)
+        const requiresGeo = gpsEnabled;
         if (requiresGeo && !hasGeo) {
-            setStatus('Lokasi belum tersedia. Pastikan GPS aktif.');
+            setStatus('Lokasi belum tersedia. Pastikan GPS aktif untuk semua mode absensi.');
             return;
         }
         if (requiresRadius && !geoVerified) {
@@ -3809,9 +3864,10 @@ document.addEventListener('DOMContentLoaded', function() {
         const distanceValue = Number.isFinite(currentDistance) ? currentDistance : lastDistance;
         const geoVerified = !gpsEnabled ? true : isWithinRadius(distanceValue, currentAccuracy);
         const requiresRadius = activeMode === 'hadir';
-        const requiresGeo = gpsEnabled && requiresRadius;
+        // GPS wajib untuk SEMUA mode (hadir/sakit/izin)
+        const requiresGeo = gpsEnabled;
         if (requiresGeo && !hasGeo) {
-            setAttendanceModalMessage('Lokasi belum tersedia. Pastikan GPS aktif.', 'danger');
+            setAttendanceModalMessage('Lokasi belum tersedia. Pastikan GPS aktif untuk semua mode absensi.', 'danger');
             return;
         }
         if (requiresRadius && !geoVerified) {
@@ -3952,10 +4008,9 @@ document.addEventListener('DOMContentLoaded', function() {
         attendanceModalEl.style.display = 'none';
         attendanceModalEl.setAttribute('aria-hidden', 'true');
         document.body.classList.remove('modal-open');
-        const backdrop = document.querySelector('.modal-backdrop');
-        if (backdrop) {
+        document.querySelectorAll('.modal-backdrop, .offcanvas-backdrop').forEach((backdrop) => {
             backdrop.remove();
-        }
+        });
     }
     if (attendanceCancelBtn) {
         attendanceCancelBtn.addEventListener('click', hideAttendanceModal);
@@ -4001,16 +4056,15 @@ document.addEventListener('DOMContentLoaded', function() {
     if (referencePreview && referenceUrl) {
         const modalEl = document.getElementById('referenceModal');
         const modalImg = document.getElementById('referenceModalImg');
-        const referenceUrlWithoutQuery = referenceUrl.split('?')[0];
         if (modalEl && window.bootstrap) {
             referenceModal = new bootstrap.Modal(modalEl, { backdrop: true, keyboard: true });
             let outsideClickHandler = null;
+            const outsideDownEvent = window.PointerEvent ? 'pointerdown' : 'mousedown';
 
             if (modalImg) {
                 modalImg.addEventListener('error', function() {
-                    if (!modalImg.dataset.retried && referenceUrlWithoutQuery && referenceUrlWithoutQuery !== referenceUrl) {
-                        modalImg.dataset.retried = '1';
-                        modalImg.src = referenceUrlWithoutQuery;
+                    const currentSrc = (modalImg.getAttribute('src') || '').trim();
+                    if (!currentSrc) {
                         return;
                     }
                     setStatus('Foto referensi gagal dimuat. Muat ulang halaman atau hubungi admin.');
@@ -4026,22 +4080,21 @@ document.addEventListener('DOMContentLoaded', function() {
                         referenceModal.hide();
                     }
                 };
-                document.addEventListener('mousedown', outsideClickHandler);
+                document.addEventListener(outsideDownEvent, outsideClickHandler);
             });
 
             modalEl.addEventListener('hidden.bs.modal', function() {
                 if (modalImg) {
-                    modalImg.src = '';
+                    modalImg.removeAttribute('src');
                 }
                 if (outsideClickHandler) {
-                    document.removeEventListener('mousedown', outsideClickHandler);
+                    document.removeEventListener(outsideDownEvent, outsideClickHandler);
                     outsideClickHandler = null;
                 }
             });
         }
         referencePreview.addEventListener('click', function() {
             if (modalImg) {
-                delete modalImg.dataset.retried;
                 modalImg.src = referenceUrl;
             }
             if (referenceModal) {

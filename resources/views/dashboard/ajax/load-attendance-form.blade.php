@@ -292,7 +292,7 @@ $(document).ready(function() {
                 },
                 {
                     enableHighAccuracy: true,
-                    timeout: 10000,
+                    timeout: 20000,
                     maximumAge: 0
                 }
             );
@@ -836,9 +836,27 @@ $(document).ready(function() {
         const canvas = document.getElementById('attendanceCanvas');
         const context = canvas.getContext('2d');
         
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
-        context.drawImage(video, 0, 0, canvas.width, canvas.height);
+        // Limit max width/height to avoid massive POST payloads (fix server 500 error on high-res camera)
+        const MAX_WIDTH = 1080;
+        const MAX_HEIGHT = 1080;
+        let pWidth = video.videoWidth;
+        let pHeight = video.videoHeight;
+
+        if (pWidth > pHeight) {
+            if (pWidth > MAX_WIDTH) {
+                pHeight = Math.round(pHeight * (MAX_WIDTH / pWidth));
+                pWidth = MAX_WIDTH;
+            }
+        } else {
+            if (pHeight > MAX_HEIGHT) {
+                pWidth = Math.round(pWidth * (MAX_HEIGHT / pHeight));
+                pHeight = MAX_HEIGHT;
+            }
+        }
+
+        canvas.width = pWidth;
+        canvas.height = pHeight;
+        context.drawImage(video, 0, 0, pWidth, pHeight);
         
         capturedData = canvas.toDataURL('image/jpeg', 0.8);
         $('#capturedImageData').val(capturedData);
@@ -1078,66 +1096,72 @@ $(document).ready(function() {
 }
 
 .result-grid {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr);
-    gap: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
 }
 
 .result-face {
     background: rgba(53, 121, 246, 0.08);
     border-radius: 16px;
-    padding: 16px;
+    padding: 12px;
     border: 1px solid rgba(53, 121, 246, 0.18);
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: 10px;
     text-align: center;
 }
 
 .result-face-title {
     font-weight: 600;
     color: var(--text-color, #1f2937);
+    font-size: 1rem;
 }
 
 .result-face-image {
     width: 100%;
-    border-radius: 14px;
-    object-fit: cover;
-    box-shadow: 0 12px 30px rgba(15, 23, 42, 0.2);
+    height: auto;
+    max-height: 250px;
+    border-radius: 12px;
+    object-fit: contain;
+    background-color: #000;
+    box-shadow: 0 8px 24px rgba(15, 23, 42, 0.15);
 }
 
 .result-face-meta {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 8px 12px;
-    border-radius: 12px;
-    background: rgba(255, 255, 255, 0.7);
+    padding: 6px 12px;
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.85);
     border: 1px solid rgba(148, 163, 184, 0.2);
-    font-size: 0.9rem;
+    font-size: 0.85rem;
 }
 
 .geo-card {
     background: rgba(255, 255, 255, 0.7);
-    border-radius: 16px;
-    padding: 16px;
+    border-radius: 12px;
+    padding: 12px;
     border: 1px solid rgba(148, 163, 184, 0.2);
-    box-shadow: 0 10px 24px rgba(15, 23, 42, 0.12);
-    display: grid;
-    gap: 8px;
+    box-shadow: 0 4px 12px rgba(15, 23, 42, 0.08);
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
 }
 
 .geo-card-title {
     font-weight: 600;
     color: var(--text-color, #1f2937);
-    margin-bottom: 4px;
+    margin-bottom: 2px;
+    font-size: 0.9rem;
 }
 
 .geo-row {
     display: flex;
     justify-content: space-between;
-    gap: 12px;
-    font-size: 0.85rem;
+    gap: 8px;
+    font-size: 0.8rem;
 }
 
 .geo-row span {
@@ -1148,10 +1172,15 @@ $(document).ready(function() {
     font-weight: 600;
     color: var(--text-color, #1f2937);
     text-align: right;
+    word-break: break-word;
 }
 
 .geo-attendance {
-    margin-top: 16px;
+    margin-top: 12px;
+}
+
+.geo-attendance h6 {
+    font-size: 0.95rem;
 }
 
 .attendance-result-footer {
@@ -1160,13 +1189,24 @@ $(document).ready(function() {
     gap: 12px;
 }
 
-@media (max-width: 768px) {
+@media (min-width: 768px) {
     .result-grid {
-        grid-template-columns: 1fr;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr);
+        gap: 16px;
     }
+    
+    .result-face-image {
+        max-height: 300px;
+    }
+}
 
+@media (max-width: 767px) {
     .attendance-result-footer {
         flex-direction: column-reverse;
+    }
+    .attendance-result-footer button {
+        width: 100%;
     }
 }
 </style>

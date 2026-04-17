@@ -79,7 +79,7 @@
                 radial-gradient(circle at 70% 65%, rgba(20, 184, 166, 0.12), transparent 28%);
             color: var(--text-color);
             line-height: 1.6;
-            overflow-x: hidden;
+            overflow-x: clip;
             min-height: 100vh;
         }
         
@@ -1285,7 +1285,6 @@
 
         @media (max-width: 992px) {
         /* Force standard table layout on mobile + horizontal scroll */
-        .data-table-container,
         .table-responsive,
         .dataTables_wrapper,
         .dataTables_scroll,
@@ -1296,6 +1295,12 @@
         }
 
         .data-table-container,
+        .main-content,
+        #content {
+                overflow-y: visible;
+                touch-action: auto;
+        }
+
         .dataTables_wrapper {
                 touch-action: pan-y pinch-zoom;
         }

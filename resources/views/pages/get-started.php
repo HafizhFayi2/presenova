@@ -27,6 +27,38 @@
     <link rel="preload" as="style" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" onload="this.onload=null;this.rel='stylesheet'">
     <noscript><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"></noscript>
 
+    <script>
+        (function () {
+            var isStandalone = false;
+            var prefersReducedMotion = false;
+
+            try {
+                isStandalone = (
+                    (window.matchMedia && (
+                        window.matchMedia('(display-mode: standalone)').matches ||
+                        window.matchMedia('(display-mode: fullscreen)').matches
+                    )) ||
+                    window.navigator.standalone === true
+                );
+            } catch (error) {
+                isStandalone = false;
+            }
+
+            try {
+                prefersReducedMotion = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+            } catch (error) {
+                prefersReducedMotion = false;
+            }
+
+            if (isStandalone && !prefersReducedMotion) {
+                document.documentElement.setAttribute('data-entry-door', 'pending');
+                window.__presenovaEntryDoorFailsafe = window.setTimeout(function () {
+                    document.documentElement.removeAttribute('data-entry-door');
+                }, 3600);
+            }
+        })();
+    </script>
+
     <style>
         :root {
             --bg-1: #02060f;
@@ -2207,9 +2239,198 @@
                 min-height: 30px;
             }
         }
+        .entry-door-overlay {
+            position: fixed;
+            inset: 0;
+            z-index: 10050;
+            pointer-events: none;
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.18s ease;
+        }
+
+        html[data-entry-door="pending"] .entry-door-overlay,
+        html[data-entry-door="opening"] .entry-door-overlay,
+        .entry-door-overlay.is-visible {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        html[data-entry-door="pending"] .page-shell {
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        html[data-entry-door="opening"] .page-shell {
+            opacity: 1;
+            transition: opacity 0.24s ease;
+        }
+
+        .entry-door-backdrop {
+            position: absolute;
+            inset: 0;
+            background:
+                radial-gradient(circle at 50% 16%, rgba(52, 140, 255, 0.2), transparent 48%),
+                linear-gradient(135deg, #020816 0%, #04102b 45%, #030915 100%);
+        }
+
+        .entry-door-panel {
+            position: absolute;
+            top: -18%;
+            bottom: -18%;
+            width: 64%;
+            background: linear-gradient(155deg, rgba(4, 16, 36, 0.98) 10%, rgba(6, 30, 74, 0.96) 52%, rgba(3, 14, 38, 0.98) 100%);
+            box-shadow: inset 0 0 0 1px rgba(126, 208, 255, 0.15), 0 0 38px rgba(3, 24, 60, 0.35);
+            transition: transform 0.96s cubic-bezier(0.2, 0.92, 0.18, 1), opacity 0.62s ease;
+            will-change: transform, opacity;
+        }
+
+        .entry-door-left {
+            left: -18%;
+            clip-path: polygon(0 0, 84% 0, 100% 50%, 84% 100%, 0 100%);
+            transform: translate3d(0, 0, 0) rotate(0deg);
+            transform-origin: 12% 50%;
+        }
+
+        .entry-door-right {
+            right: -18%;
+            clip-path: polygon(16% 0, 100% 0, 100% 100%, 16% 100%, 0 50%);
+            transform: translate3d(0, 0, 0) rotate(0deg);
+            transform-origin: 88% 50%;
+        }
+
+        .entry-door-seam {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 4px;
+            height: 76vh;
+            transform: translate(-50%, -50%) rotate(15deg);
+            border-radius: 999px;
+            background: linear-gradient(180deg, rgba(156, 238, 255, 0), rgba(156, 238, 255, 0.95), rgba(156, 238, 255, 0));
+            box-shadow: 0 0 20px rgba(105, 227, 255, 0.75);
+            transition: transform 0.62s ease, opacity 0.42s ease;
+        }
+
+        .entry-door-core {
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            transform: translate(-50%, -50%);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+            transition: opacity 0.4s ease, transform 0.52s ease;
+        }
+
+        .entry-door-core img {
+            width: clamp(86px, 22vw, 124px);
+            height: auto;
+            filter: drop-shadow(0 0 24px rgba(96, 224, 255, 0.48));
+        }
+
+        .entry-door-core span {
+            font-family: 'Sora', sans-serif;
+            font-weight: 700;
+            font-size: clamp(1.1rem, 2.6vw, 1.5rem);
+            letter-spacing: 0.06em;
+            color: #e6f7ff;
+            text-shadow: 0 8px 20px rgba(0, 0, 0, 0.4);
+        }
+
+        .entry-door-overlay.is-opening .entry-door-left {
+            transform: translate3d(-124%, 0, 0) rotate(-9deg);
+            opacity: 0.97;
+        }
+
+        .entry-door-overlay.is-opening .entry-door-right {
+            transform: translate3d(124%, 0, 0) rotate(9deg);
+            opacity: 0.97;
+        }
+
+        .entry-door-overlay.is-opening .entry-door-seam {
+            opacity: 0;
+            transform: translate(-50%, -50%) rotate(15deg) scaleY(0.3);
+        }
+
+        .entry-door-overlay.is-opening .entry-door-core {
+            opacity: 0;
+            transform: translate(-50%, -50%) scale(0.86);
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            .entry-door-overlay {
+                display: none !important;
+            }
+        }
     </style>
 </head>
 <body>
+    <div class="entry-door-overlay" id="entryDoorOverlay" aria-hidden="true">
+        <div class="entry-door-backdrop"></div>
+        <div class="entry-door-panel entry-door-left"></div>
+        <div class="entry-door-panel entry-door-right"></div>
+        <div class="entry-door-seam"></div>
+        <div class="entry-door-core">
+            <img src="<?php echo htmlspecialchars($assetBaseUrl, ENT_QUOTES, 'UTF-8'); ?>assets/images/logo-512.png" alt="">
+            <span>Presenova</span>
+        </div>
+    </div>
+    <script>
+        (function () {
+            const overlay = document.getElementById('entryDoorOverlay');
+            const html = document.documentElement;
+            const state = html.getAttribute('data-entry-door');
+
+            if (!overlay || state !== 'pending') {
+                if (overlay) {
+                    overlay.remove();
+                }
+                return;
+            }
+
+            const finish = function () {
+                if (overlay.dataset.closed === '1') {
+                    return;
+                }
+                overlay.dataset.closed = '1';
+                if (window.__presenovaEntryDoorFailsafe) {
+                    window.clearTimeout(window.__presenovaEntryDoorFailsafe);
+                    window.__presenovaEntryDoorFailsafe = null;
+                }
+                html.removeAttribute('data-entry-door');
+                overlay.remove();
+            };
+
+            const startOpen = function () {
+                if (overlay.dataset.opening === '1') {
+                    return;
+                }
+                overlay.dataset.opening = '1';
+                html.setAttribute('data-entry-door', 'opening');
+                overlay.classList.add('is-opening');
+            };
+
+            window.requestAnimationFrame(function () {
+                window.requestAnimationFrame(function () {
+                    window.setTimeout(startOpen, 80);
+                });
+            });
+
+            const rightDoor = overlay.querySelector('.entry-door-right');
+            if (rightDoor) {
+                rightDoor.addEventListener('transitionend', function (event) {
+                    if (event.propertyName === 'transform') {
+                        finish();
+                    }
+                }, { once: true });
+            }
+
+            window.setTimeout(startOpen, 260);
+            window.setTimeout(finish, 1800);
+        })();
+    </script>
     <div class="page-shell">
         <main class="hero-wrapper">
             <section class="hero-stage">

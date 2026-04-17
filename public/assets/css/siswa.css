@@ -147,7 +147,7 @@
             background-attachment: fixed;
             color: var(--text-color);
             line-height: 1.6;
-            overflow-x: hidden;
+            overflow-x: clip;
             position: relative;
         }
 
@@ -868,6 +868,17 @@
             font-size: 1.1rem;
             box-shadow: 0 8px 18px rgba(53, 121, 246, 0.25);
             transition: all 0.3s ease;
+        }
+
+        /* Prevent hidden Bootstrap backdrops from intercepting taps on mobile/PWA */
+        .modal-backdrop,
+        .offcanvas-backdrop {
+            pointer-events: none;
+        }
+
+        .modal-backdrop.show,
+        .offcanvas-backdrop.show {
+            pointer-events: auto;
         }
         
         /* Cards */
@@ -1999,7 +2010,20 @@
         html,
         body {
                 max-width: 100%;
-                overflow-x: hidden;
+                overflow-x: clip;
+                overflow-y: auto;
+                height: auto;
+                -webkit-overflow-scrolling: touch;
+                touch-action: pan-y pinch-zoom;
+        }
+
+        html.scroll-locked,
+        body.scroll-locked,
+        body.modal-open,
+        body.attendance-modal-open,
+        body.riwayat-modal-open {
+                overflow: hidden !important;
+                touch-action: none !important;
         }
 
         .student-shell,
@@ -2024,7 +2048,7 @@
 
         .main-content,
         #content {
-                overflow-x: hidden;
+                overflow-x: clip;
         }
 
         #content .row {
@@ -2043,7 +2067,6 @@
         }
 
         /* Keep horizontal scroll only for actual table wrappers */
-        .data-table-container,
         .table-responsive,
         .dataTables_scroll,
         .dataTables_scrollBody {
@@ -2054,6 +2077,15 @@
         }
 
         .data-table-container,
+        .liquidGlass-wrapper,
+        .section-shell,
+        .dashboard-card,
+        .main-content,
+        #content {
+                overflow-y: visible;
+                touch-action: auto;
+        }
+
         .dataTables_wrapper {
                 touch-action: pan-y pinch-zoom;
         }

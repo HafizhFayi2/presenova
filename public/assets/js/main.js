@@ -279,11 +279,6 @@ document
     observer.observe(el);
   });
 
-// Prevent form resubmission on page refresh
-if (window.history.replaceState) {
-  window.history.replaceState(null, null, window.location.href);
-}
-
 // Add keyboard shortcuts
 document.addEventListener("keydown", function (e) {
   // Ctrl/Cmd + K to focus search

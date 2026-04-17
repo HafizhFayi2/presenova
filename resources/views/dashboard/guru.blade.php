@@ -105,6 +105,11 @@ $guru_section_css = [
 ];
 $active_guru_section_css = $guru_section_css[$page] ?? null;
 $guru_core_css_version = @filemtime(public_path('assets/css/guru.css')) ?: time();
+$guru_section_css_version = null;
+if ($active_guru_section_css !== null) {
+    $guru_section_css_file = public_path('assets/css/sections/' . $active_guru_section_css);
+    $guru_section_css_version = @filemtime($guru_section_css_file) ?: time();
+}
 ?>
 <!DOCTYPE html>
 <html lang="id" data-theme="<?php echo $theme; ?>">
@@ -176,7 +181,7 @@ $guru_core_css_version = @filemtime(public_path('assets/css/guru.css')) ?: time(
 <link rel="stylesheet" href="../assets/css/guru.css?v=<?php echo $guru_core_css_version; ?>" data-inline-style="extracted">
     <link rel="stylesheet" href="../assets/css/app-dialog.css">
     <?php if ($active_guru_section_css !== null): ?>
-    <link rel="stylesheet" href="../assets/css/sections/<?php echo $active_guru_section_css; ?>">
+    <link rel="stylesheet" href="../assets/css/sections/<?php echo $active_guru_section_css; ?>?v=<?php echo rawurlencode((string) $guru_section_css_version); ?>">
     <?php endif; ?>
 
 </head>
@@ -350,7 +355,7 @@ $guru_core_css_version = @filemtime(public_path('assets/css/guru.css')) ?: time(
     <!-- JavaScript Libraries -->
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    <script src="../assets/js/app-dialog.js"></script>
+    <script src="../assets/js/app-dialog.js?v=20260410b"></script>
     <script src="../assets/js/schedule-print-dialog.js"></script>
     <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
     <script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap5.min.js"></script>
@@ -399,6 +404,49 @@ $guru_core_css_version = @filemtime(public_path('assets/css/guru.css')) ?: time(
             themeColorMeta.setAttribute('content', theme === 'dark' ? '#0b1220' : '#f6f8fb');
         }
     }
+
+    function clearGuruTransientState(options = {}) {
+        const ignoreVisibleModal = options.ignoreVisibleModal === true;
+        const hasVisibleModal = !!document.querySelector('.modal.show, .offcanvas.show');
+
+        if (ignoreVisibleModal || !hasVisibleModal) {
+            document.documentElement.classList.remove('scroll-locked');
+            document.documentElement.style.overflow = '';
+            document.documentElement.style.paddingRight = '';
+
+            document.body.classList.remove('scroll-locked', 'modal-open', 'attendance-modal-open', 'riwayat-modal-open');
+            document.body.style.overflow = '';
+            document.body.style.paddingRight = '';
+            document.body.style.position = '';
+            document.body.style.top = '';
+            document.body.style.width = '';
+            document.body.style.touchAction = '';
+
+            document.querySelectorAll('.modal-backdrop, .offcanvas-backdrop').forEach((backdrop) => {
+                backdrop.remove();
+            });
+        }
+
+        const topNavEl = document.getElementById('topNav');
+        if (topNavEl) {
+            topNavEl.classList.remove('nav-open');
+            topNavEl.classList.remove('nav-hidden');
+        }
+
+        const navToggleEl = document.getElementById('navToggle');
+        if (navToggleEl) {
+            navToggleEl.setAttribute('aria-expanded', 'false');
+            const icon = navToggleEl.querySelector('i');
+            if (icon) {
+                icon.classList.add('fa-bars');
+                icon.classList.remove('fa-times');
+            }
+        }
+    }
+
+    window.addEventListener('pageshow', function() {
+        clearGuruTransientState();
+    });
     
     // Real-time clock
     function updateClock() {
@@ -972,6 +1020,7 @@ $guru_core_css_version = @filemtime(public_path('assets/css/guru.css')) ?: time(
     }
     
 $(document).ready(function() {
+        clearGuruTransientState();
         initGuruSectionPrefetch();
         $(document).on('init.dt', function(event, settings) {
             const $table = $(settings.nTable);
@@ -1102,6 +1151,7 @@ $(document).ready(function() {
 
         // Close mobile navigation on link click
         $('#topNav .nav-links a').on('click', function() {
+            clearGuruTransientState({ ignoreVisibleModal: true });
             setGuruMobileNavOpen(false);
         });
 

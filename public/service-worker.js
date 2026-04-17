@@ -1,6 +1,6 @@
 // Service Worker for PWA
-const STATIC_CACHE_NAME = "attendance-static-v20260220-1";
-const RUNTIME_CACHE_NAME = "attendance-runtime-v20260220-1";
+const STATIC_CACHE_NAME = "attendance-static-v20260410-2";
+const RUNTIME_CACHE_NAME = "attendance-runtime-v20260410-2";
 
 function resolveAppUrl(path) {
   const scopePath = new URL(self.registration.scope).pathname.replace(/\/+$/, "");

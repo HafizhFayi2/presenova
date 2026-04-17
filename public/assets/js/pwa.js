@@ -66,6 +66,90 @@ function resolvePresenovaUrl(path) {
     : `${APP_BASE_PATH}/${normalizedPath}`;
 }
 
+function isStandaloneDisplayMode() {
+  return (
+    window.matchMedia("(display-mode: standalone)").matches ||
+    window.matchMedia("(display-mode: fullscreen)").matches ||
+    window.navigator.standalone === true
+  );
+}
+
+class LaunchSplashController {
+  constructor() {
+    this.element = document.getElementById("appLaunchSplash");
+    this.minDuration = 900;
+    this.maxDuration = 2600;
+    this.fadeDuration = 420;
+    this.dismissTimer = null;
+    this.hideTimer = null;
+    this.isHidden = false;
+  }
+
+  shouldShow() {
+    if (!this.element || !document.body) {
+      return false;
+    }
+    if (document.body.dataset.launchSplash === "0") {
+      return false;
+    }
+    return isStandaloneDisplayMode();
+  }
+
+  init() {
+    if (!this.element) {
+      return;
+    }
+
+    if (!this.shouldShow()) {
+      this.destroy();
+      return;
+    }
+
+    const startTime = Date.now();
+    this.element.classList.add("splash-screen--visible");
+
+    const scheduleHide = () => {
+      const elapsed = Date.now() - startTime;
+      const delay = Math.max(this.minDuration - elapsed, 0);
+      window.clearTimeout(this.hideTimer);
+      this.hideTimer = window.setTimeout(() => this.hide(), delay);
+    };
+
+    if (document.readyState === "complete") {
+      scheduleHide();
+    } else {
+      window.addEventListener("load", scheduleHide, { once: true });
+    }
+
+    window.clearTimeout(this.dismissTimer);
+    this.dismissTimer = window.setTimeout(() => this.hide(), this.maxDuration);
+  }
+
+  hide() {
+    if (!this.element || this.isHidden) {
+      return;
+    }
+
+    this.isHidden = true;
+    this.element.classList.add("is-hiding");
+
+    window.clearTimeout(this.hideTimer);
+    window.clearTimeout(this.dismissTimer);
+
+    window.setTimeout(() => this.destroy(), this.fadeDuration);
+  }
+
+  destroy() {
+    window.clearTimeout(this.hideTimer);
+    window.clearTimeout(this.dismissTimer);
+    if (!this.element) {
+      return;
+    }
+    this.element.remove();
+    this.element = null;
+  }
+}
+
 class PWAInstaller {
   constructor() {
     this.deferredPrompt = null;
@@ -478,6 +562,9 @@ class PushNotificationManager {
 
 // Initialize PWA features
 document.addEventListener("DOMContentLoaded", () => {
+  window.launchSplash = new LaunchSplashController();
+  window.launchSplash.init();
+
   // Initialize PWA installer
   window.pwaInstaller = new PWAInstaller();
 

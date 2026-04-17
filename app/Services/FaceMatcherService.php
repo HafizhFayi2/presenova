@@ -25,9 +25,11 @@ class FaceMatcherService
     private $deepfaceBackupMaxReferences = 5;
     private $deepfaceDetectorFallbacks = false;
     private $pythonTimeoutSeconds = 60;
-    private $deepfaceStrictMargin = 0.03;
+    private $deepfaceStrictMargin = 0.15;
     private const REFERENCE_CACHE_TTL_SECONDS = 120;
     private static array $referenceCandidatesCache = [];
+    private static ?string $verifiedPythonBin = null;
+    private static ?string $deepfaceEnvPrefix = null;
     
     public function __construct() {
         $uploadsBase = public_path('uploads');
@@ -247,10 +249,17 @@ class FaceMatcherService
                     if (!$fileInfo->isFile()) {
                         continue;
                     }
-                    $filename = $fileInfo->getFilename();
-                    if (stripos($filename, $nisn) === false) {
+                    $filename = strtolower($fileInfo->getFilename());
+                    $nisnLower = strtolower($nisn);
+                    
+                    // FIXED: Only match exact basename or if it explicitly starts with nisn and a delimiter
+                    // to prevent "1" from matching "alex_1001.jpg"
+                    if ($filename !== $nisnLower . '.' . strtolower($fileInfo->getExtension()) &&
+                        !str_starts_with($filename, $nisnLower . '-') &&
+                        !str_starts_with($filename, $nisnLower . '_')) {
                         continue;
                     }
+                    
                     $ext = strtolower($fileInfo->getExtension());
                     if (!in_array($ext, ['jpg', 'jpeg', 'png', 'webp', 'bmp'], true)) {
                         continue;
@@ -473,6 +482,14 @@ class FaceMatcherService
             return ['success' => false, 'error' => 'Python matcher tidak tersedia'];
         }
 
+        $pythonBin = $this->resolveWorkingPythonBin();
+        if ($pythonBin === null) {
+            return [
+                'success' => false,
+                'error' => 'Runtime Python DeepFace tidak siap. Pastikan DeepFace terpasang pada PYTHON_BIN atau venv public/face/.venv.'
+            ];
+        }
+
         $threshold = $this->threshold;
         if (isset($options['threshold'])) {
             $threshold = max(0, min(100, (float) $options['threshold']));
@@ -487,7 +504,9 @@ class FaceMatcherService
         $referencePath = realpath($referencePath) ?: $referencePath;
         $selfiePath = realpath($selfiePath) ?: $selfiePath;
 
-        $cmd = escapeshellarg($this->pythonBin)
+        $envPrefix = $this->deepfaceEnvPrefix();
+        $cmd = $envPrefix
+            . escapeshellarg($pythonBin)
             . ' -u'
             . ' ' . escapeshellarg($this->pythonScript)
             . ' --reference ' . escapeshellarg($referencePath)
@@ -563,6 +582,107 @@ class FaceMatcherService
         return $result;
     }
 
+    private function resolveWorkingPythonBin(): ?string
+    {
+        if (is_string(self::$verifiedPythonBin) && self::$verifiedPythonBin !== '') {
+            return self::$verifiedPythonBin;
+        }
+
+        $candidates = $this->pythonBinCandidates();
+        $debugLogs = [];
+        foreach ($candidates as $candidate) {
+            $envPrefix = $this->deepfaceEnvPrefix();
+            $probeCmd = $envPrefix
+                . escapeshellarg($candidate)
+                . ' -c '
+                . escapeshellarg('from deepface import DeepFace; print("deepface-ok")');
+
+            $probe = $this->runPythonCommand($probeCmd, 45);
+            $debugLogs[] = "[TEST $candidate] Exit: " . ($probe['exit_code'] ?? 'null') . " | Out/Err: " . trim($probe['output'] ?? '');
+            
+            $output = strtolower(trim((string) ($probe['output'] ?? '')));
+            if (($probe['exit_code'] ?? 1) === 0 && str_contains($output, 'deepface-ok')) {
+                self::$verifiedPythonBin = $candidate;
+                return $candidate;
+            }
+        }
+
+        \Illuminate\Support\Facades\Log::error("DeepFace Probe Failed Log:\n" . implode("\n", $debugLogs));
+        return null;
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private function pythonBinCandidates(): array
+    {
+        $candidates = [];
+        $pushCandidate = static function (array &$bucket, string $candidate): void {
+            $candidate = trim($candidate);
+            if ($candidate === '') {
+                return;
+            }
+            if (preg_match('/^[A-Za-z]:[\\\\\\/]|^\\//', $candidate) === 1 && !is_file($candidate)) {
+                return;
+            }
+            if (!in_array($candidate, $bucket, true)) {
+                $bucket[] = $candidate;
+            }
+        };
+
+        $pushCandidate($candidates, (string) $this->pythonBin);
+        $pushCandidate($candidates, public_path('face/.venv/bin/python'));
+        $pushCandidate($candidates, public_path('face/.venv/Scripts/python.exe'));
+        $pushCandidate($candidates, 'python3');
+        $pushCandidate($candidates, 'python');
+
+        return $candidates;
+    }
+
+    private function deepfaceEnvPrefix(): string
+    {
+        if (is_string(self::$deepfaceEnvPrefix)) {
+            return self::$deepfaceEnvPrefix;
+        }
+
+        $cacheBase = trim((string) env('DEEPFACE_HOME', ''));
+        if ($cacheBase === '') {
+            $cacheBase = storage_path('app/deepface');
+        }
+        $cacheBase = rtrim($cacheBase, '/\\');
+        $mplCache = $cacheBase . DIRECTORY_SEPARATOR . 'matplotlib';
+        $tfhubCache = $cacheBase . DIRECTORY_SEPARATOR . 'tfhub';
+        $xdgCache = $cacheBase . DIRECTORY_SEPARATOR . 'xdg';
+
+        foreach ([$cacheBase, $mplCache, $tfhubCache, $xdgCache] as $dir) {
+            if (!is_dir($dir)) {
+                @mkdir($dir, 0775, true);
+            }
+        }
+
+        if (PHP_OS_FAMILY === 'Windows') {
+            $prefix = 'set DEEPFACE_HOME=' . $this->escapeShellValue($cacheBase)
+                . '&& set MPLCONFIGDIR=' . $this->escapeShellValue($mplCache)
+                . '&& set TFHUB_CACHE_DIR=' . $this->escapeShellValue($tfhubCache)
+                . '&& set XDG_CACHE_HOME=' . $this->escapeShellValue($xdgCache)
+                . '&& ';
+        } else {
+            $prefix = 'DEEPFACE_HOME=' . escapeshellarg($cacheBase)
+                . ' MPLCONFIGDIR=' . escapeshellarg($mplCache)
+                . ' TFHUB_CACHE_DIR=' . escapeshellarg($tfhubCache)
+                . ' XDG_CACHE_HOME=' . escapeshellarg($xdgCache)
+                . ' ';
+        }
+
+        self::$deepfaceEnvPrefix = $prefix;
+        return $prefix;
+    }
+
+    private function escapeShellValue(string $value): string
+    {
+        return '"' . str_replace('"', '\"', $value) . '"';
+    }
+
     private function runPythonCommand($command, $timeoutSeconds = 60) {
         $timeoutSeconds = max(5, (int) $timeoutSeconds);
         $command = trim((string) $command);
@@ -608,6 +728,7 @@ class FaceMatcherService
         $stderr = '';
         $timedOut = false;
         $started = microtime(true);
+        $realExitCode = -1;
 
         while (true) {
             $status = proc_get_status($process);
@@ -615,6 +736,7 @@ class FaceMatcherService
             $stderr .= stream_get_contents($pipes[2]);
 
             if (!$status['running']) {
+                $realExitCode = $status['exitcode'];
                 break;
             }
 
@@ -622,8 +744,7 @@ class FaceMatcherService
                 $timedOut = true;
                 // On Windows, proc_terminate doesn't kill child processes.
                 // Use taskkill /T /F to kill the entire process tree.
-                $procStatus = proc_get_status($process);
-                $pid = $procStatus['pid'] ?? 0;
+                $pid = $status['pid'] ?? 0;
                 if ($pid > 0 && PHP_OS_FAMILY === 'Windows') {
                     @exec("taskkill /T /F /PID {$pid} 2>NUL");
                 } else {
@@ -643,6 +764,10 @@ class FaceMatcherService
         }
 
         $exitCode = proc_close($process);
+        if ($realExitCode !== -1) {
+            $exitCode = $realExitCode;
+        }
+
         if ($timedOut && $exitCode === 0) {
             $exitCode = 124;
         }
