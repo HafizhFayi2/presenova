@@ -3033,8 +3033,15 @@
                     return null;
                 }
 
-                const text = typeof row.text === 'string' ? row.text.trim().slice(0, 280) : '';
-                const nameRaw = typeof row.name === 'string' ? row.name : '';
+                const rawText = typeof row.text === 'string'
+                    ? row.text
+                    : (typeof row.improvement_suggestion === 'string'
+                        ? row.improvement_suggestion
+                        : (typeof row.review_text === 'string' ? row.review_text : ''));
+                const text = rawText.trim().slice(0, 280);
+                const nameRaw = typeof row.name === 'string'
+                    ? row.name
+                    : (typeof row.reviewer_name === 'string' ? row.reviewer_name : '');
                 const name = nameRaw.trim().slice(0, 80) || 'Anonim';
                 const timestampCandidate = Number(row.createdAt ?? Date.parse(row.created_at ?? row.time ?? ''));
                 const createdAt = Number.isFinite(timestampCandidate) && timestampCandidate > 0 ? timestampCandidate : Date.now();

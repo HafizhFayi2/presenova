@@ -104,25 +104,21 @@
                 linear-gradient(90deg, rgba(0, 255, 136, 0.03) 1px, transparent 1px);
             background-size: 50px 50px;
             z-index: -2;
-            animation: grid-move 20s linear infinite;
+            /* Removed grid-move animation — static grid is visually identical but GPU-free */
+            contain: strict;
         }
 
-        @keyframes grid-move {
-            0% { transform: translateY(0); }
-            100% { transform: translateY(50px); }
-        }
-
-        /* Glowing Orbs */
+        /* Glowing Orbs — blur reduced from 80px→30px for massive GPU savings */
         .glow-orb {
             position: fixed;
             border-radius: 50%;
-            filter: blur(80px);
-            opacity: 0.3;
+            filter: blur(30px);
+            opacity: 0.25;
             pointer-events: none;
             z-index: -1;
-            animation-duration: 20s;
-            animation-timing-function: ease-in-out;
-            animation-iteration-count: infinite;
+            will-change: transform;
+            contain: layout style;
+            /* Static orbs — no animation needed, they're decorative blurred blobs */
         }
 
         .orb-1 {
@@ -131,7 +127,6 @@
             background: radial-gradient(circle, var(--neon-green) 0%, transparent 70%);
             top: -20%;
             left: -10%;
-            animation: float-orb-1 25s ease-in-out infinite;
         }
 
         .orb-2 {
@@ -140,7 +135,6 @@
             background: radial-gradient(circle, var(--neon-blue) 0%, transparent 70%);
             top: 60%;
             right: -8%;
-            animation: float-orb-2 22s ease-in-out infinite 2s;
         }
 
         .orb-3 {
@@ -149,39 +143,14 @@
             background: radial-gradient(circle, var(--neon-purple) 0%, transparent 70%);
             bottom: -10%;
             left: 30%;
-            animation: float-orb-3 28s ease-in-out infinite 4s;
         }
 
-        @keyframes float-orb-1 {
-            0%, 100% { transform: translate(0, 0) scale(1); }
-            25% { transform: translate(40px, -40px) scale(1.1); }
-            50% { transform: translate(-30px, 30px) scale(0.9); }
-            75% { transform: translate(30px, 40px) scale(1.05); }
-        }
-
-        @keyframes float-orb-2 {
-            0%, 100% { transform: translate(0, 0) rotate(0deg); }
-            25% { transform: translate(-30px, 30px) rotate(90deg); }
-            50% { transform: translate(20px, -20px) rotate(180deg); }
-            75% { transform: translate(-20px, -30px) rotate(270deg); }
-        }
-
-        @keyframes float-orb-3 {
-            0%, 100% { transform: translate(0, 0) scale(1); }
-            25% { transform: translate(25px, -25px) scale(1.15); }
-            50% { transform: translate(-35px, 15px) scale(0.85); }
-            75% { transform: translate(15px, 35px) scale(1.05); }
-        }
-
-        /* Floating Shapes */
+        /* Floating Shapes — reduced from 8 to 4, removed blur filter */
         .floating-shape {
             position: absolute;
             z-index: 1;
-            opacity: 0.1;
-            filter: blur(1px);
-            animation-duration: 30s;
-            animation-timing-function: linear;
-            animation-iteration-count: infinite;
+            opacity: 0.08;
+            will-change: transform;
         }
 
         .shape1 {
@@ -202,74 +171,40 @@
             bottom: 15%;
             left: 10%;
             width: 80px;
-            animation: float-rotate-3 38s linear infinite;
+            animation: float-rotate-1 38s linear infinite;
         }
 
         .shape4 {
             top: 50%;
             right: 5%;
             width: 65px;
-            animation: float-rotate-4 42s linear infinite reverse;
-        }
-
-        .shape5 {
-            bottom: 25%;
-            right: 15%;
-            width: 55px;
-            animation: float-rotate-1 36s linear infinite;
-        }
-
-        .shape6 {
-            top: 35%;
-            left: 20%;
-            width: 75px;
-            animation: float-rotate-2 44s linear infinite reverse;
-        }
-
-        .shape7 {
-            bottom: 35%;
-            left: 8%;
-            width: 60px;
-            animation: float-rotate-3 39s linear infinite;
-        }
-
-        .shape8 {
-            top: 60%;
-            right: 20%;
-            width: 70px;
-            animation: float-rotate-4 41s linear infinite reverse;
+            animation: float-rotate-2 42s linear infinite reverse;
         }
 
         @keyframes float-rotate-1 {
-            0% { transform: translate(0, 0) rotate(0deg) scale(1); }
-            25% { transform: translate(20px, -20px) rotate(90deg) scale(1.1); }
-            50% { transform: translate(-15px, 15px) rotate(180deg) scale(0.9); }
-            75% { transform: translate(15px, 25px) rotate(270deg) scale(1.05); }
-            100% { transform: translate(0, 0) rotate(360deg) scale(1); }
+            0% { transform: translate(0, 0) rotate(0deg); }
+            50% { transform: translate(20px, -20px) rotate(180deg); }
+            100% { transform: translate(0, 0) rotate(360deg); }
         }
 
         @keyframes float-rotate-2 {
-            0% { transform: translate(0, 0) rotate(0deg) scale(1); }
-            25% { transform: translate(-25px, 15px) rotate(90deg) scale(1.15); }
-            50% { transform: translate(20px, -10px) rotate(180deg) scale(0.85); }
-            75% { transform: translate(-15px, -20px) rotate(270deg) scale(1.1); }
-            100% { transform: translate(0, 0) rotate(360deg) scale(1); }
+            0% { transform: translate(0, 0) rotate(0deg); }
+            50% { transform: translate(-25px, 15px) rotate(180deg); }
+            100% { transform: translate(0, 0) rotate(360deg); }
         }
 
-        @keyframes float-rotate-3 {
-            0% { transform: translate(0, 0) rotate(0deg) scale(1); }
-            25% { transform: translate(30px, -10px) rotate(90deg) scale(1.2); }
-            50% { transform: translate(-20px, 25px) rotate(180deg) scale(0.8); }
-            75% { transform: translate(10px, 30px) rotate(270deg) scale(1.15); }
-            100% { transform: translate(0, 0) rotate(360deg) scale(1); }
-        }
-
-        @keyframes float-rotate-4 {
-            0% { transform: translate(0, 0) rotate(0deg) scale(1); }
-            25% { transform: translate(-15px, -25px) rotate(90deg) scale(1.05); }
-            50% { transform: translate(25px, 10px) rotate(180deg) scale(0.95); }
-            75% { transform: translate(-10px, 20px) rotate(270deg) scale(1.1); }
-            100% { transform: translate(0, 0) rotate(360deg) scale(1); }
+        /* Respect user preference for reduced motion */
+        @media (prefers-reduced-motion: reduce) {
+            .floating-shape,
+            .glow-orb,
+            .grid-background,
+            .scan-animation,
+            .hero-tag,
+            .hero-title,
+            .pwa-icon-large,
+            .app-logo {
+                animation: none !important;
+            }
         }
 
         /* ==================== NAVIGATION ==================== */
@@ -451,8 +386,7 @@
             text-transform: uppercase;
             letter-spacing: 2px;
             margin-bottom: 2rem;
-            backdrop-filter: blur(10px);
-            animation: pulse-tag 2s ease-in-out infinite;
+            animation: pulse-tag 3s ease-in-out infinite;
         }
 
         @keyframes pulse-tag {
@@ -1166,7 +1100,7 @@
     <div class="glow-orb orb-2"></div>
     <div class="glow-orb orb-3"></div>
 
-    <!-- Floating Shapes -->
+    <!-- Floating Shapes (reduced from 8 to 4 for performance) -->
     <div class="floating-shape shape1">
         <i class="fas fa-code" style="font-size: 2rem; color: var(--neon-green);"></i>
     </div>
@@ -1178,18 +1112,6 @@
     </div>
     <div class="floating-shape shape4">
         <i class="fas fa-cube" style="font-size: 2rem; color: var(--neon-green);"></i>
-    </div>
-    <div class="floating-shape shape5">
-        <i class="fas fa-circle" style="font-size: 1.5rem; color: var(--neon-blue);"></i>
-    </div>
-    <div class="floating-shape shape6">
-        <i class="fas fa-hexagon" style="font-size: 2rem; color: var(--neon-purple);"></i>
-    </div>
-    <div class="floating-shape shape7">
-        <i class="fas fa-diamond" style="font-size: 1.8rem; color: var(--neon-green);"></i>
-    </div>
-    <div class="floating-shape shape8">
-        <i class="fas fa-cog" style="font-size: 2.2rem; color: var(--neon-blue);"></i>
     </div>
 
     <!-- Navigation -->
@@ -1679,41 +1601,9 @@
             });
         }
         
-        // Add floating shapes dynamically
-        function createFloatingShape() {
-            const shape = document.createElement('div');
-            shape.className = 'floating-shape';
-            shape.style.left = Math.random() * 100 + '%';
-            shape.style.top = Math.random() * 100 + '%';
-            
-            const icons = ['fa-code', 'fa-bolt', 'fa-star', 'fa-circle', 'fa-heart', 'fa-diamond', 'fa-cog', 'fa-rocket'];
-            const colors = ['var(--neon-green)', 'var(--neon-blue)', 'var(--neon-purple)', 'var(--neon-pink)'];
-            
-            const icon = icons[Math.floor(Math.random() * icons.length)];
-            const color = colors[Math.floor(Math.random() * colors.length)];
-            const size = Math.random() * 2 + 1 + 'rem';
-            
-            shape.innerHTML = `<i class="fas ${icon}" style="font-size: ${size}; color: ${color};"></i>`;
-            shape.style.animationDuration = (Math.random() * 20 + 20) + 's';
-            shape.style.opacity = Math.random() * 0.1 + 0.05;
-            
-            document.body.appendChild(shape);
-            
-            // Remove shape after animation completes
-            setTimeout(() => {
-                shape.remove();
-            }, parseFloat(shape.style.animationDuration) * 1000);
-        }
-        
-        // Create initial floating shapes
-        for (let i = 0; i < 15; i++) {
-            setTimeout(() => createFloatingShape(), i * 300);
-        }
-        
-        // Continue creating shapes periodically
-        setInterval(() => {
-            createFloatingShape();
-        }, 5000);
+        // Dynamic floating shapes REMOVED — was the #1 cause of lag
+        // Previously created 15 shapes on load + 1 every 5s, each with 20-40s animations
+        // The 4 static CSS-animated shapes above provide the same visual effect
         
         // Device mockup hover effect enhancement
         const deviceMockup = document.querySelector('.device-mockup');

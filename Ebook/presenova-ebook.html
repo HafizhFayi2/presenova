@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="id">
 <head>
 <meta charset="UTF-8">
@@ -1068,7 +1068,7 @@ section.active .section-title {
 }
 .rating-sync-note strong { color: var(--gold2); }
 
-.reviews-list {
+#rating .reviews-list {
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -1077,12 +1077,20 @@ section.active .section-title {
   overflow-y: auto;
   padding-right: 4px;
 }
-.reviews-list::-webkit-scrollbar { width: 4px; }
-.reviews-list::-webkit-scrollbar-track { background: transparent; }
-.reviews-list::-webkit-scrollbar-thumb { background: var(--gold); border-radius: 4px; }
+#rating .reviews-list::-webkit-scrollbar { width: 4px; }
+#rating .reviews-list::-webkit-scrollbar-track { background: transparent; }
+#rating .reviews-list::-webkit-scrollbar-thumb { background: var(--gold); border-radius: 4px; }
 
-.review-item {
+#rating .review-item {
   position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0;
+  flex-shrink: 0;
+  height: auto !important;
+  max-height: none !important;
+  min-height: 0;
   overflow: hidden;
   background: rgba(232,160,18,.05);
   border: none;
@@ -1092,21 +1100,43 @@ section.active .section-title {
   animation: slideUp .4s ease;
   transition: transform .3s ease, box-shadow .3s ease;
 }
-.review-item::before {
+#rating .review-item::before {
   display: none;
 }
-.review-item:hover {
+#rating .review-item:hover {
   transform: translateY(-3px);
   box-shadow: 0 12px 22px rgba(0,0,0,.2);
 }
-.review-item-stars { font-size: 1rem; margin-bottom: 6px; }
-.review-item-author {
+#rating .review-item-stars {
+  display: block;
+  position: static !important;
+  font-size: 1rem;
+  margin-bottom: 6px;
+}
+#rating .review-item-author {
+  display: block;
+  position: static !important;
   font-size: .76rem;
   color: rgba(245,237,214,.58);
   margin-bottom: 6px;
 }
-.review-item-text { font-size: .85rem; color: rgba(245,237,214,.7); line-height: 1.6; }
-.review-item-time { font-size: .7rem; color: rgba(245,237,214,.3); margin-top: 6px; }
+#rating .review-item-text {
+  display: block;
+  position: static !important;
+  font-size: .85rem;
+  color: rgba(245,237,214,.7);
+  line-height: 1.6;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+#rating .review-item-time {
+  display: block;
+  position: static !important;
+  font-size: .7rem;
+  color: rgba(245,237,214,.3);
+  margin-top: 6px;
+}
 
 .success-toast {
   position: fixed;
@@ -1870,7 +1900,12 @@ function normalizeRatingRecord(record){
     : (typeof record.reviewer_name === 'string' ? record.reviewer_name : '');
   const name = rawName.trim().slice(0, MAX_NAME_LENGTH) || 'Anonim';
 
-  const text = typeof record.text === 'string' ? record.text.trim().slice(0, MAX_REVIEW_LENGTH) : '';
+  const rawText = typeof record.text === 'string'
+    ? record.text
+    : (typeof record.improvement_suggestion === 'string'
+      ? record.improvement_suggestion
+      : (typeof record.review_text === 'string' ? record.review_text : ''));
+  const text = rawText.trim().slice(0, MAX_REVIEW_LENGTH);
   const createdAtCandidate = Number(record.createdAt ?? Date.parse(record.created_at ?? record.time ?? ''));
   const createdAt = Number.isFinite(createdAtCandidate) && createdAtCandidate > 0 ? createdAtCandidate : Date.now();
   const time = typeof record.time === 'string' && record.time.trim()
