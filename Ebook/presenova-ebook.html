@@ -1870,7 +1870,12 @@ function normalizeRatingRecord(record){
     : (typeof record.reviewer_name === 'string' ? record.reviewer_name : '');
   const name = rawName.trim().slice(0, MAX_NAME_LENGTH) || 'Anonim';
 
-  const text = typeof record.text === 'string' ? record.text.trim().slice(0, MAX_REVIEW_LENGTH) : '';
+  const rawText = typeof record.text === 'string'
+    ? record.text
+    : (typeof record.improvement_suggestion === 'string'
+      ? record.improvement_suggestion
+      : (typeof record.review_text === 'string' ? record.review_text : ''));
+  const text = rawText.trim().slice(0, MAX_REVIEW_LENGTH);
   const createdAtCandidate = Number(record.createdAt ?? Date.parse(record.created_at ?? record.time ?? ''));
   const createdAt = Number.isFinite(createdAtCandidate) && createdAtCandidate > 0 ? createdAtCandidate : Date.now();
   const time = typeof record.time === 'string' && record.time.trim()
