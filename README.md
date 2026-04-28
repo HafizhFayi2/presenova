@@ -2,6 +2,8 @@
 
 Dokumen ini merupakan penggabungan seluruh file `*.md` utama proyek ke satu file `README.md`.
 
+<img width="1619" height="969" alt="Screenshot 2026-04-22 123456" src="https://github.com/user-attachments/assets/5327f596-4362-482e-8772-74b62774c0e4" />
+
 ## Daftar Sumber
 - `README.md`
 - `mockup.md`
